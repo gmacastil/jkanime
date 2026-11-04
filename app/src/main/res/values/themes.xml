@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Jk" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/jk_background</item>
+        <item name="android:colorBackground">@color/jk_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Jk.Player" parent="Theme.Jk">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
+</resources>
