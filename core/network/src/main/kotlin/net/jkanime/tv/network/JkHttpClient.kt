@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit
 class JkHttpClient(
     private val userAgent: String = Jk.USER_AGENT,
     minIntervalMs: Long = 700L,
-    private val baseUrl: String = Jk.BASE_URL,
 ) {
 
     private val cookieJar = MemoryCookieJar()
