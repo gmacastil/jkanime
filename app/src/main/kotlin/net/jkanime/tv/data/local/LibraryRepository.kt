@@ -17,6 +17,9 @@ class LibraryRepository(private val db: JkDatabase) {
 
     fun progressFor(slug: String): Flow<List<ProgressEntity>> = db.progress().observeFor(slug)
 
+    /** Instantánea de favoritos para el worker de sync (no es un Flow). */
+    suspend fun favoritesSnapshot(): List<FavoriteEntity> = db.favorites().all()
+
     suspend fun lastProgress(slug: String): ProgressEntity? = db.progress().lastFor(slug)
 
     suspend fun episodeProgress(slug: String, episode: Int): ProgressEntity? =

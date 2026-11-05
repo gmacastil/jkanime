@@ -190,3 +190,28 @@ Verificado en emulador:
 Pendiente para F5: el badge `+N` depende de `last_aired_episode`, que hoy se
 escribe al marcar el favorito; el sync periódico de WorkManager lo refrescará
 para todos los favoritos.
+
+## F5 — Sync periódico y badges de episodios pendientes — verificado
+
+WorkManager 2.10.5 (2.12 exige minSdk 24 y el proyecto es minSdk 23).
+
+- `FavoritesSyncWorker` (CoroutineWorker) recorre los favoritos y pide
+  `repository.detail(slug, force = true)` de cada uno, actualizando
+  `last_aired_episode`, `total_episodes` y `status_label` en Room. Un fallo
+  individual no aborta el resto; solo se devuelve `Result.retry()` si fallan
+  todos.
+- Programación: `PeriodicWorkRequestBuilder(6, HOURS)` con constraint
+  `NetworkType.CONNECTED` y `ExistingPeriodicWorkPolicy.KEEP` (si no se
+  reiniciara el intervalo en cada arranque, un equipo que abre la app a diario
+  nunca llegaría a ejecutarlo).
+- Se programa desde `JkApp.onCreate()` (`android:name=".JkApp"` en el
+  manifest).
+
+Verificado en emulador:
+
+- `dumpsys jobscheduler` muestra el job de WorkManager con
+  `TIME=+5h59m55s` → intervalo de 6 h correcto.
+- Ejecución forzada del worker: `JkSync: favoritos=1 fallos=0`,
+  `Worker result SUCCESS`, y `favorites.synced_at` actualizado en Room.
+- Badge `+N` en la grilla de favoritos = `last_aired_episode -
+  last_watched_episode` (observado `+5` con el favorito de prueba).
