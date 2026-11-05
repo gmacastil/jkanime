@@ -18,6 +18,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -28,6 +29,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
+import net.jkanime.tv.data.local.FavoriteEntity
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.ProgramacionSection
 import net.jkanime.tv.ui.component.ErrorState
@@ -44,11 +46,15 @@ import net.jkanime.tv.ui.theme.JkTextSecondary
  */
 @Composable
 fun HomeScreen(onOpenAnime: (String) -> Unit) {
+    val context = LocalContext.current
+    val library = remember(context) { Graph.library(context) }
     val viewModel: HomeViewModel = viewModel(
-        factory = HomeViewModel.factory(Graph.repository),
+        factory = HomeViewModel.factory(Graph.repository, library),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val section by viewModel.section.collectAsStateWithLifecycle()
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val showFavorites by viewModel.showFavorites.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -57,8 +63,18 @@ fun HomeScreen(onOpenAnime: (String) -> Unit) {
     ) {
         Header(
             selected = section,
+            showFavorites = showFavorites,
             onSelect = viewModel::selectSection,
+            onToggleFavorites = viewModel::toggleFavorites,
         )
+
+        if (showFavorites) {
+            FavoritesGrid(
+                favorites = favorites,
+                onOpenAnime = onOpenAnime,
+            )
+            return@Column
+        }
 
         when (val current = state) {
             is HomeUiState.Loading -> LoadingState()
@@ -78,7 +94,9 @@ fun HomeScreen(onOpenAnime: (String) -> Unit) {
 @Composable
 private fun Header(
     selected: ProgramacionSection,
+    showFavorites: Boolean,
     onSelect: (ProgramacionSection) -> Unit,
+    onToggleFavorites: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -102,6 +120,14 @@ private fun Header(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.width(18.dp))
+
+        TvActionButton(
+            text = "★ Favoritos",
+            primary = showFavorites,
+            onClick = onToggleFavorites,
+        )
 
         Spacer(modifier = Modifier.weight(1f))
 
@@ -162,6 +188,51 @@ private fun ProgramacionGrid(
                 width = null,
                 focusRequester = if (card === cards.first()) firstCardFocus else null,
                 onClick = { onOpenAnime(card.slug) },
+            )
+        }
+    }
+}
+
+/**
+ * Favoritos en tarjetas. El badge "N pend." sale de comparar el último
+ * episodio emitido (refrescado por el sync de F5) con el último visto.
+ */
+@Composable
+private fun FavoritesGrid(
+    favorites: List<FavoriteEntity>,
+    onOpenAnime: (String) -> Unit,
+) {
+    if (favorites.isEmpty()) {
+        LoadingState(message = "Aún no tienes favoritos")
+        return
+    }
+
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(favorites.first().slug) {
+        repeat(10) {
+            withFrameNanos { }
+            if (firstFocus.requestFocus()) return@LaunchedEffect
+        }
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(6),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 36.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(favorites, key = { it.slug }) { fav ->
+            val pending = fav.pendingEpisodes
+            PosterCard(
+                title = fav.title,
+                posterUrl = fav.posterUrl,
+                badge = pending?.takeIf { it > 0 }?.let { "+$it" }
+                    ?: fav.lastWatchedEpisode?.let { "Ep $it" },
+                subtitle = fav.statusLabel,
+                width = null,
+                focusRequester = if (fav === favorites.first()) firstFocus else null,
+                onClick = { onOpenAnime(fav.slug) },
             )
         }
     }

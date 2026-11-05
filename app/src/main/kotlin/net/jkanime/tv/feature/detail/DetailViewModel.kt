@@ -5,10 +5,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.jkanime.tv.catalog.JkanimeRepository
+import net.jkanime.tv.data.local.LibraryRepository
+import net.jkanime.tv.data.local.ProgressEntity
 import net.jkanime.tv.model.AnimeDetail
 import net.jkanime.tv.model.Episode
 import net.jkanime.tv.util.friendlyMessage
@@ -31,11 +36,37 @@ sealed interface DetailUiState {
 
 class DetailViewModel(
     private val repository: JkanimeRepository,
+    private val library: LibraryRepository,
     private val slug: String,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val state: StateFlow<DetailUiState> = _state.asStateFlow()
+
+    /** Requerimiento 4: el corazón del favorito vive en Room, no en el server. */
+    val isFavorite: StateFlow<Boolean> = library.isFavorite(slug)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Último episodio con progreso, para el botón "Continuar". */
+    val lastProgress: StateFlow<ProgressEntity?> = library.progressFor(slug)
+        .map { list -> list.maxByOrNull { it.updatedAt } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun toggleFavorite() {
+        val current = _state.value as? DetailUiState.Success ?: return
+        val detail = current.detail
+        viewModelScope.launch {
+            library.toggleFavorite(
+                slug = detail.slug,
+                animeId = detail.animeId,
+                title = detail.title,
+                posterUrl = detail.posterUrl,
+                totalEpisodes = detail.totalEpisodes?.takeIf { it > 0 },
+                statusLabel = detail.statusLabel ?: detail.status.label,
+                lastAiredEpisode = detail.lastEpisodeNumber,
+            )
+        }
+    }
 
     init {
         load()
@@ -87,8 +118,12 @@ class DetailViewModel(
     }
 
     companion object {
-        fun factory(repository: JkanimeRepository, slug: String) = viewModelFactory {
-            initializer { DetailViewModel(repository, slug) }
+        fun factory(
+            repository: JkanimeRepository,
+            library: LibraryRepository,
+            slug: String,
+        ) = viewModelFactory {
+            initializer { DetailViewModel(repository, library, slug) }
         }
     }
 }

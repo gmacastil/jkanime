@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,12 +27,14 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
 import net.jkanime.tv.model.ServerKind
 import net.jkanime.tv.ui.component.ErrorState
@@ -58,6 +61,35 @@ fun PlayerScreen(
     val controller = remember { WebPlayerController() }
     val rootFocus = remember { FocusRequester() }
     var overlayVisible by remember { mutableStateOf(true) }
+
+    // F4: progreso persistente. Se guarda cada ~5 s de avance real (no en cada
+    // `timeupdate`, que dispara ~4 veces por segundo y machacaría Room).
+    val context = LocalContext.current
+    val library = remember(context) { Graph.library(context) }
+    val scope = rememberCoroutineScope()
+    var lastSavedMs by remember { mutableStateOf(-1L) }
+    var durationMs by remember { mutableStateOf(0L) }
+    var resumeFromMs by remember { mutableStateOf<Long?>(null) }
+    var playerReady by remember { mutableStateOf(false) }
+
+    // Reanudar donde quedó el usuario la última vez.
+    LaunchedEffect(episodeUrl) {
+        if (episodeNumber <= 0) return@LaunchedEffect
+        val saved = library.episodeProgress(slug, episodeNumber)
+        if (saved != null && !saved.completed && saved.positionMs > 15_000) {
+            resumeFromMs = saved.positionMs
+        }
+    }
+
+    // El seek se aplica cuando ya se cumplen las dos condiciones (posición
+    // leída de Room + <video> enganchado por el hook), sin importar el orden.
+    LaunchedEffect(resumeFromMs, playerReady) {
+        val target = resumeFromMs ?: return@LaunchedEffect
+        if (!playerReady) return@LaunchedEffect
+        controller.seekTo(target)
+        lastSavedMs = target
+        resumeFromMs = null
+    }
 
     LaunchedEffect(Unit) {
         runCatching { rootFocus.requestFocus() }
@@ -129,9 +161,37 @@ fun PlayerScreen(
                 WebPlayer(
                     url = current.selected.url,
                     controller = controller,
-                    onProgress = { _, _ -> },
-                    onEnded = { overlayVisible = true },
-                    onReady = { },
+                    onProgress = { positionMs, dur ->
+                        if (dur > 0) durationMs = dur
+                        // "Casi al final" cuenta como visto (evita que el
+                        // último 1% de créditos deje el episodio pendiente).
+                        val almostDone = dur > 0 && positionMs >= dur - 5_000
+                        if (almostDone || positionMs - lastSavedMs >= 5_000) {
+                            lastSavedMs = positionMs
+                            scope.launch {
+                                library.saveProgress(
+                                    slug = slug,
+                                    episode = episodeNumber,
+                                    positionMs = positionMs,
+                                    durationMs = dur,
+                                    completed = almostDone,
+                                )
+                            }
+                        }
+                    },
+                    onEnded = {
+                        overlayVisible = true
+                        scope.launch {
+                            library.saveProgress(
+                                slug = slug,
+                                episode = episodeNumber,
+                                positionMs = durationMs,
+                                durationMs = durationMs,
+                                completed = true,
+                            )
+                        }
+                    },
+                    onReady = { playerReady = true },
                 )
 
                 if (overlayVisible) {

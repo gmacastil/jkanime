@@ -35,6 +35,12 @@ class WebPlayerController {
             "if(v){v.currentTime=Math.max(0,(v.currentTime||0)+($seconds));}})()",
     )
 
+    /** Salta a una posición absoluta (usado para reanudar donde quedó). */
+    fun seekTo(positionMs: Long) = evaluate(
+        "(()=>{const v=document.querySelector('video');" +
+            "if(v){v.currentTime=$positionMs/1000;}})()",
+    )
+
     fun togglePlayPause() = evaluate(
         "(()=>{const v=document.querySelector('video');" +
             "if(v){v.paused?v.play():v.pause();}})()",

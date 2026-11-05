@@ -166,3 +166,27 @@ emulador pero **no commiteado** (último commit: `a0ef603`):
   `subduepaler.cyou`. Código de diagnóstico temporal (heartbeat, `JKDUMP`,
   `JKHIT`, logging de `imagen vista:`) ya removido — solo queda lógica de
   producción.
+
+## F4 — Favoritos y progreso (Room) — verificado
+
+Room 2.8.5 + KSP, DB `jk-tv.db` (tablas `favorites` y `progress`).
+
+Verificado en emulador:
+
+- Favorito desde el detalle: botón `☆ Añadir a favoritos` → `★ En favoritos`;
+  fila insertada en `favorites` con `slug`, `title`, `last_aired_episode`,
+  `status_label`.
+- Progreso desde el reproductor: `JkBridge.onProgress` se persiste cada ~5 s
+  de avance real (no en cada `timeupdate`) y `onEnded` marca `completed`.
+  Fila observada: `(sasaki-to-pii-chan-season-2, 4, 50638 ms, 1420001 ms)`.
+- Reanudación: al reabrir el episodio el `<video>` salta a la posición
+  guardada (`WebPlayerController.seekTo`), gateado a que `onReady` ya haya
+  enganchado el `<video>`. Verificado: al reabrir, el progreso siguió desde
+  50 s → 56 s en vez de empezar en 0.
+- Home: botón `★ Favoritos` en la cabecera muestra la grilla de favoritos con
+  badge `+N` de episodios pendientes (`last_aired_episode - last_watched_episode`).
+- Detalle: botón `Continuar Ep N` cuando el último progreso no está completado.
+
+Pendiente para F5: el badge `+N` depende de `last_aired_episode`, que hoy se
+escribe al marcar el favorito; el sync periódico de WorkManager lo refrescará
+para todos los favoritos.

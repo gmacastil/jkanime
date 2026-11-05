@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,11 +61,15 @@ fun DetailScreen(
     onBack: () -> Unit,
     onPlay: (slug: String, episodeNumber: Int?, episodeUrl: String, title: String) -> Unit,
 ) {
+    val context = LocalContext.current
+    val library = remember(context) { Graph.library(context) }
     val viewModel: DetailViewModel = viewModel(
         key = slug,
-        factory = DetailViewModel.factory(Graph.repository, slug),
+        factory = DetailViewModel.factory(Graph.repository, library, slug),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
+    val lastProgress by viewModel.lastProgress.collectAsStateWithLifecycle()
 
     BackHandler(onBack = onBack)
 
@@ -92,6 +97,13 @@ fun DetailScreen(
                     latest = current.latest,
                     first = current.first,
                     focusRequester = firstActionFocus,
+                    isFavorite = isFavorite,
+                    resumeEpisode = lastProgress
+                        ?.takeIf { !it.completed }
+                        ?.let { p ->
+                            current.episodes.firstOrNull { it.number.toInt() == p.episode }
+                        },
+                    onToggleFavorite = viewModel::toggleFavorite,
                     onPlay = onPlay,
                 )
                 SectionTitle(text = "Capítulos (${current.episodes.size})")
@@ -115,6 +127,9 @@ private fun Header(
     latest: Episode?,
     first: Episode?,
     focusRequester: FocusRequester,
+    isFavorite: Boolean,
+    resumeEpisode: Episode?,
+    onToggleFavorite: () -> Unit,
     onPlay: (String, Int?, String, String) -> Unit,
 ) {
     Row(
@@ -197,6 +212,24 @@ private fun Header(
                         },
                     )
                 }
+                TvActionButton(
+                    text = if (isFavorite) "★ En favoritos" else "☆ Añadir a favoritos",
+                    primary = false,
+                    onClick = onToggleFavorite,
+                )
+            }
+
+            // "Continuar": reanuda el episodio donde quedó. Si el último visto
+            // ya terminó, no se muestra (no hay nada que continuar).
+            resumeEpisode?.let { episode ->
+                Spacer(modifier = Modifier.height(10.dp))
+                TvActionButton(
+                    text = "Continuar Ep ${episode.numberLabel}",
+                    primary = true,
+                    onClick = {
+                        onPlay(detail.slug, episode.number.toInt(), episode.url, episode.title)
+                    },
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
