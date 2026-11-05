@@ -58,6 +58,46 @@ Si el sitio cambia y los tests fallan, refresca los fixtures con
 `./tools/refresh-fixtures.sh` y compara el HTML nuevo contra los selectores
 documentados en [docs/scraping.md](docs/scraping.md).
 
+## Probar en un emulador Android TV
+
+No hace falta TV física para ver la app funcionando. Una sola vez:
+
+```bash
+sdkmanager --sdk_root=/data/codigo/android-sdk \
+  "emulator" "system-images;android-36;android-tv;x86_64"
+```
+
+Y luego, cada vez:
+
+```bash
+./tools/run-emulator.sh          # crea el AVD "jktv", arranca, instala y abre la app
+./tools/run-emulator.sh --wipe   # resetea los datos del AVD
+./tools/run-emulator.sh --headless
+```
+
+Requisitos: `/dev/kvm` accesible (`sudo usermod -aG kvm $USER`, y volver a entrar).
+Sin KVM el emulador x86_64 va a velocidad inusable.
+
+Navegar sin mando, con `adb`:
+
+```bash
+adb shell input keyevent 20   # abajo   (19=arriba, 21=izq, 22=der, 23=OK, 4=atrás)
+adb exec-out screencap -p > /tmp/jktv.png
+adb logcat -s JkBridge chromium AndroidRuntime
+```
+
+> **Ojo con el emulador y el video:** los embeds usan DRM/JS de terceros y algunos
+> hosts exigen hardware real. Si en el emulador el `<video>` se queda en negro,
+> no significa que falle en el TV: compara con `adb logcat chromium`. Arranca con
+> `-gpu host` (lo hace el script) para tener decodificación por GPU.
+
+Verificado end-to-end en este emulador (Home, tabs, navegación D-pad, Detail,
+selector de servidor del Player) con capturas reales de `adb`. Bugs
+encontrados y corregidos durante esa validación (foco inicial "muerto" en
+tarjetas/botones, "Cargar más" sin paginación real, chip "0 eps") y el
+diagnóstico en curso del captcha/interstitial que bloquea la reproducción en
+WebView: ver [docs/emulator-testing.md](docs/emulator-testing.md).
+
 `local.properties` debe apuntar al SDK:
 
 ```properties
@@ -113,3 +153,8 @@ HomeScreen ──card──▶ DetailScreen ──episodio──▶ PlayerActivi
 - Pendiente F4/F5: favoritos, progreso y detección de capítulos pendientes
   necesitan Room + WorkManager (el modelo `Episode`/`AnimeDetail` ya expone todo
   lo necesario: `animeId`, `number`, `lastEpisodeNumber`).
+- **Reproducción aún no confirmada**: los embeds probados en el WebView
+  (Streamwish, VOE) muestran un overlay de captcha ("Confirm you're not a
+  robot") que parece ser un interstitial publicitario, no un bloqueo real del
+  host. Diagnóstico y próximos pasos en
+  [docs/emulator-testing.md](docs/emulator-testing.md).

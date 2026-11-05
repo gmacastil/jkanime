@@ -24,7 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,8 +77,14 @@ fun PlayerScreen(
             .background(Color.Black)
             .focusRequester(rootFocus)
             .focusable()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            // onKeyEvent (fase "post", de hijo a padre) y no onPreviewKeyEvent
+            // (fase "pre", de padre a hijo): así, si el foco está en un botón
+            // de servidor, su propio clickable consume Enter/OK primero y
+            // dispara onClick antes de que este Box alterne el overlay. Con
+            // onPreviewKeyEvent este Box consumía el evento ANTES de que el
+            // botón lo recibiera, y seleccionar un servidor era imposible.
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
                     Key.DirectionCenter, Key.Enter -> {
                         overlayVisible = !overlayVisible

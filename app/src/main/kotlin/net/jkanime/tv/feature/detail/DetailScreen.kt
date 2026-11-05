@@ -15,8 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,10 +80,18 @@ fun DetailScreen(
                 onRetry = { viewModel.load(force = true) },
             )
             is DetailUiState.Success -> {
+                val firstActionFocus = remember { FocusRequester() }
+                LaunchedEffect(current.detail.animeId) {
+                    repeat(10) {
+                        withFrameNanos { }
+                        if (firstActionFocus.requestFocus()) return@LaunchedEffect
+                    }
+                }
                 Header(
                     detail = current.detail,
                     latest = current.latest,
                     first = current.first,
+                    focusRequester = firstActionFocus,
                     onPlay = onPlay,
                 )
                 SectionTitle(text = "Capítulos (${current.episodes.size})")
@@ -87,6 +99,8 @@ fun DetailScreen(
                     episodes = current.episodes,
                     slug = slug,
                     detailTitle = current.detail.title,
+                    hasMore = current.hasMore,
+                    loadingMore = current.loadingMore,
                     onPlay = onPlay,
                     onLoadMore = viewModel::loadMore,
                 )
@@ -100,6 +114,7 @@ private fun Header(
     detail: AnimeDetail,
     latest: Episode?,
     first: Episode?,
+    focusRequester: FocusRequester,
     onPlay: (String, Int?, String, String) -> Unit,
 ) {
     Row(
@@ -143,7 +158,7 @@ private fun Header(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 detail.statusLabel?.let { InfoChip(text = it, highlight = true) }
                 detail.type?.let { InfoChip(text = it) }
-                detail.totalEpisodes?.let { InfoChip(text = "$it eps") }
+                detail.totalEpisodes?.takeIf { it > 0 }?.let { InfoChip(text = "$it eps") }
                 detail.quality?.let { InfoChip(text = it) }
                 detail.nextEpisodeLabel?.let { InfoChip(text = "Próx: $it") }
             }
@@ -167,6 +182,7 @@ private fun Header(
                     TvActionButton(
                         text = "Ver último (Ep ${latest.numberLabel})",
                         primary = true,
+                        modifier = Modifier.focusRequester(focusRequester),
                         onClick = {
                             onPlay(detail.slug, latest.number.toInt(), latest.url, latest.title)
                         },
@@ -204,6 +220,8 @@ private fun EpisodesGrid(
     episodes: List<Episode>,
     slug: String,
     detailTitle: String,
+    hasMore: Boolean,
+    loadingMore: Boolean,
     onPlay: (String, Int?, String, String) -> Unit,
     onLoadMore: () -> Unit,
 ) {
@@ -232,11 +250,12 @@ private fun EpisodesGrid(
                 onClick = { onPlay(slug, episode.number.toInt(), episode.url, episode.title) },
             )
         }
-        if (episodes.isNotEmpty()) {
+        if (hasMore) {
             item {
                 TvActionButton(
-                    text = "Cargar más",
+                    text = if (loadingMore) "Cargando…" else "Cargar más",
                     primary = false,
+                    enabled = !loadingMore,
                     onClick = onLoadMore,
                 )
             }

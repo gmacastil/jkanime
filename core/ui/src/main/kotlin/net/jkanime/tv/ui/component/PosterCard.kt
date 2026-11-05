@@ -74,6 +74,12 @@ fun PosterCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
+                // El FocusRequester debe ir ANTES del modificador focusable
+                // (clickable): si va después, no encuentra focus target y
+                // requestFocus() devuelve false sin lanzar excepción.
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+                )
                 .scale(scale)
                 .clip(RoundedCornerShape(10.dp))
                 .background(JkSurfaceHigh)
@@ -86,9 +92,6 @@ fun PosterCard(
                     interactionSource = interactionSource,
                     indication = null,
                     onClick = onClick,
-                )
-                .then(
-                    if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
                 ),
         ) {
             AsyncImage(

@@ -13,9 +13,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -25,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
@@ -67,6 +67,7 @@ fun HomeScreen(onOpenAnime: (String) -> Unit) {
                 onRetry = { viewModel.refresh(force = true) },
             )
             is HomeUiState.Success -> ProgramacionGrid(
+                section = section,
                 cards = current.sections[section].orEmpty(),
                 onOpenAnime = onOpenAnime,
             )
@@ -114,6 +115,7 @@ private fun Header(
 
 @Composable
 private fun ProgramacionGrid(
+    section: ProgramacionSection,
     cards: List<AnimeCard>,
     onOpenAnime: (String) -> Unit,
 ) {
@@ -123,17 +125,28 @@ private fun ProgramacionGrid(
     }
 
     val firstCardFocus = remember { FocusRequester() }
-    var focusRequested by remember { mutableStateOf(false) }
-    val firstUrl = cards.first().episodeUrl
+    val gridState = rememberLazyGridState()
 
+    // Al cambiar de sección la grilla vuelve arriba: si no, el scroll de la
+    // sección anterior se arrastra y la primera fila queda cortada.
+    LaunchedEffect(section) {
+        gridState.scrollToItem(0)
+    }
+
+    // En TV el foco es obligatorio: sin él la pantalla queda muerta. Se pide
+    // DESPUÉS del primer frame (los items del LazyGrid se crean durante la
+    // medición) y se reintenta: requestFocus() devuelve false, no lanza, si el
+    // nodo aún no está listo.
     LaunchedEffect(cards) {
-        if (!focusRequested) {
-            focusRequested = true
-            runCatching { firstCardFocus.requestFocus() }
+        repeat(10) {
+            withFrameNanos { }
+            if (firstCardFocus.requestFocus()) return@LaunchedEffect
         }
+        android.util.Log.w("JkFocus", "no se pudo enfocar la primera tarjeta")
     }
 
     LazyVerticalGrid(
+        state = gridState,
         columns = GridCells.Fixed(6),
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 36.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -147,7 +160,7 @@ private fun ProgramacionGrid(
                 badge = card.episodeNumber?.let { "Ep $it" },
                 subtitle = card.dateLabel,
                 width = null,
-                focusRequester = if (card.episodeUrl == firstUrl) firstCardFocus else null,
+                focusRequester = if (card === cards.first()) firstCardFocus else null,
                 onClick = { onOpenAnime(card.slug) },
             )
         }

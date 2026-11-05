@@ -140,6 +140,16 @@ Clasificación en `VideoServerParser`:
 > El `jkplayer` devolvió **500** desde IP de datacenter durante la verificación.
 > En el dispositivo puede responder distinto; por eso no es la fuente primaria.
 
+> **Captcha/interstitial en WebView (sin resolver)**: Streamwish y VOE
+> responden `200` limpio por `curl` (sin captcha) tanto con UA de TV como de
+> escritorio, desde la IP pública de esta máquina. Pero dentro del WebView de
+> la app aparece un overlay "Confirm you're not a robot" (QR). No es bloqueo
+> por IP de datacenter (el servidor sirve HTML real). Hosts de terceros vistos
+> en la página de VOE que no son el embed en sí —probablemente ads/interstitial
+> que capturan el WebView—: `rendingdecreasehere.com`,
+> `chaliceguzzlerlandlord.com`, `periodpennavigation.com`. Detalle completo del
+> diagnóstico en [emulator-testing.md](emulator-testing.md).
+
 ## 5. Otros endpoints (para fases siguientes)
 
 | Uso | Endpoint |

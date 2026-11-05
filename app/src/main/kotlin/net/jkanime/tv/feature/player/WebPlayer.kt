@@ -64,13 +64,220 @@ private val AD_HOSTS = listOf(
     "histats.com",
     "adnium",
     "realsrv",
+    // Dominios concretos observados sirviendo el banner con imagen+cierre
+    // dentro de un iframe sandboxed; estos dominios "doorway" rotan, de
+    // ahí el patrón de ruta/query adicional en AD_URL_PATTERNS y el barrido
+    // por hit-testing en HOOK_SCRIPT como defensa principal.
+    "janitorprecisiontrio.com",
+    "subduepaler.cyou",
 )
 
+// Firma de URL (ruta + query) de la llamada de red que la red de anuncios
+// usa para inyectar el banner dentro del iframe vecino, independiente del
+// dominio "doorway" que esté rotando esa semana (ej. janitorprecisiontrio.com
+// hoy, otro dominio random.com mañana). Bloquear esta petición evita que el
+// anuncio llegue a inyectarse, en vez de tener que barrerlo del DOM después
+// (que falla cuando el iframe es same-origin opaco y contentDocument no es
+// accesible).
+private val AD_URL_PATTERNS = listOf(
+    "/sn/pr/",
+    "zoneid=",
+)
+
+// Los "captcha" tipo "Confirm you're not a robot" y los banners con imagen
+// que se ven en estos embeds NO son del host del video ni una navegación
+// nueva: son DOM inyectado por un script de publicidad por encima del
+// <video> (confirmado con dumpsys: sigue siendo la misma ventana de WebView,
+// no un popup real). Bloquear sub-recursos (shouldInterceptRequest) o
+// window.open no alcanza porque no hay navegación ni recurso nuevo.
+// El nodo visible del anuncio a veces es un <iframe> con position:static
+// (su contenido llega vía about:srcdoc), así que el filtro no mira solo el
+// estilo del propio elemento sino el de toda su cadena de ancestros, y
+// elimina además los iframes-tracker de 0-2px típicos de redes de
+// publicidad. Se barre el árbol periódicamente y con MutationObserver.
 private const val HOOK_SCRIPT = """
 (function(){
   if (window.__jkHooked) return;
   window.__jkHooked = true;
   window.open = function(){ return null; };
+
+  function isAncestorOfVideo(el, video) {
+    var n = video;
+    while (n) { if (n === el) return true; n = n.parentElement; }
+    return false;
+  }
+
+  function hasFloatingAncestor(el) {
+    var n = el;
+    while (n && n.nodeType === 1) {
+      var s;
+      try { s = window.getComputedStyle(n); } catch (e) { break; }
+      if (s && (s.position === 'fixed' || s.position === 'absolute')) return true;
+      if (n === document.body) break;
+      // Al llegar a la raíz de un shadow root, seguir subiendo por el
+      // elemento "host" que lo contiene (si no, parentElement es null y
+      // se cortaría la búsqueda justo dentro del shadow DOM del anuncio).
+      if (!n.parentElement && n.getRootNode && n.getRootNode() !== document) {
+        var root = n.getRootNode();
+        n = root.host || null;
+        continue;
+      }
+      n = n.parentElement;
+    }
+    return false;
+  }
+
+  function sweepOverlaysInDoc(doc, isTopDoc) {
+    var video = isTopDoc ? doc.querySelector('video') : null;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    // doc puede ser un Document (tiene .body) o un ShadowRoot (no tiene
+    // .body, pero sí querySelectorAll directamente sobre sí mismo).
+    var root = doc.body || doc;
+    var nodes = root.querySelectorAll ? root.querySelectorAll('*') : [];
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.tagName === 'VIDEO' || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+      if (video && isAncestorOfVideo(el, video)) continue;
+      var id = (el.id || '') + ' ' + (el.className || '');
+      // Nunca se elimina el contenedor directo del propio player (ids/clases
+      // típicas de jwplayer/plyr/vjs); solo overlays ajenos a él.
+      if (/jw-|plyr|video-js|vjs-|player/i.test(id) && !/captcha|robot|ads|popup|overlay/i.test(id)) continue;
+
+      var rect = el.getBoundingClientRect();
+
+      // Algunos anuncios se renderizan dentro de un shadow root abierto
+      // (el.shadowRoot) adjunto a un <div> normal; querySelectorAll('*') NO
+      // atraviesa esa frontera, así que hay que bajar explícitamente.
+      if (el.shadowRoot) {
+        try { sweepOverlaysInDoc(el.shadowRoot, false); } catch (e) {}
+      }
+
+      if (el.tagName === 'IFRAME') {
+        // Trackers/pixeles invisibles de publicidad (iframes de 0-2px que
+        // las redes de anuncios usan para cargar scripts sin UI visible).
+        if (rect.width <= 2 || rect.height <= 2) {
+          try { el.remove(); JkBridge.onAdRemoved('tracker-iframe'); } catch (e) {}
+          continue;
+        }
+        // Muchos anuncios (incluido el falso captcha) se renderizan dentro
+        // de un <iframe> same-origin con sandbox="allow-same-origin ...";
+        // sin bajar a su contentDocument nunca veríamos el <img>/<div> real
+        // que hay que eliminar, porque vive en otro Document.
+        try {
+          var innerDoc = el.contentDocument;
+          if (innerDoc) sweepOverlaysInDoc(innerDoc, false);
+        } catch (e) { /* cross-origin: no accesible, se ignora */ }
+      }
+
+      // El overlay publicitario (incluido el "captcha" falso y los anuncios
+      // con imagen+cierre) casi siempre cuelga de un ancestro con
+      // position:fixed/absolute aunque el propio nodo (p.ej. un <iframe>
+      // con contenido vía srcdoc) tenga position:static. Por eso se mira
+      // toda la cadena de ancestros, no solo el estilo del propio elemento.
+      if (!hasFloatingAncestor(el)) continue;
+
+      var style;
+      try { style = window.getComputedStyle(el); } catch (e) { continue; }
+      if (!style) continue;
+      var zIndex = parseInt(style.zIndex, 10) || 0;
+      // Antes exigíamos ancho Y alto >=30% (rectángulo "grande" en ambos
+      // ejes), pero el anuncio de imagen+cierre es alto y angosto (~24%
+      // ancho x 74% alto): una sola dimensión grande ya es intrusiva en
+      // pantalla, así que basta con OR, reforzado por un área mínima para
+      // no confundir con barras finas legítimas (ej. gradientes de UI).
+      var area = rect.width * rect.height;
+      var coversScreen = (rect.width >= vw * 0.25 || rect.height >= vh * 0.25) &&
+        area >= (vw * vh * 0.08);
+      var looksLikeOverlay = zIndex >= 999 || coversScreen;
+      if (!looksLikeOverlay) continue;
+
+      try {
+        el.remove();
+        JkBridge.onAdRemoved(id || el.tagName);
+      } catch (e) {}
+    }
+  }
+
+  function sweepOverlays() {
+    sweepOverlaysInDoc(document, true);
+  }
+
+  var observer = new MutationObserver(function(){ sweepOverlays(); });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  setInterval(sweepOverlays, 1000);
+
+  // Defensa principal: algunos anuncios se pintan dentro de un iframe/
+  // shadow root totalmente inaccesible por recorrido de árbol (ni
+  // querySelectorAll ni contentDocument ni shadowRoot los exponen: se
+  // comprobó con diagnóstico exhaustivo que nunca aparecen ahí pese a
+  // ocupar píxeles reales en pantalla). La única forma fiable de
+  // encontrarlos es el hit-testing: preguntar a Chromium qué elemento
+  // pinta en cada punto de una grilla sobre el viewport, igual que un
+  // toque/click real (document.elementFromPoint). "pierceElementAt" repite
+  // esa consulta dentro de shadow roots abiertos y de iframes same-origin
+  // para llegar al nodo real; si ese nodo real no coincide con el que se
+  // ve desde el documento superior (pierced == true), el contenedor de
+  // nivel superior (topEl) es el iframe/overlay inyectado por la red de
+  // anuncios y se elimina por completo.
+  function pierceElementAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    var guard = 0;
+    while (el && guard++ < 8) {
+      if (el.shadowRoot && el.shadowRoot.elementFromPoint) {
+        var inner;
+        try { inner = el.shadowRoot.elementFromPoint(x, y); } catch (e) { inner = null; }
+        if (inner && inner !== el) { el = inner; continue; }
+      }
+      if (el.tagName === 'IFRAME') {
+        var r = el.getBoundingClientRect();
+        try {
+          var innerDoc = el.contentDocument;
+          if (innerDoc && innerDoc.elementFromPoint) {
+            var child = innerDoc.elementFromPoint(x - r.left, y - r.top);
+            if (child && child !== el) { el = child; continue; }
+          }
+        } catch (e) { /* cross-origin */ }
+      }
+      break;
+    }
+    return el;
+  }
+
+  function hitTestSweep() {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var video = document.querySelector('video');
+    var cols = 14, rows = 10;
+    var seen = {};
+    var removedTopEls = [];
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var x = Math.round((c + 0.5) * vw / cols);
+        var y = Math.round((r + 0.5) * vh / rows);
+        var topEl;
+        try { topEl = document.elementFromPoint(x, y); } catch (e) { continue; }
+        if (!topEl || topEl === document.documentElement || topEl === document.body) continue;
+        if (topEl.tagName === 'VIDEO' || topEl.tagName === 'HTML' || topEl.tagName === 'BODY') continue;
+        if (video && isAncestorOfVideo(topEl, video)) continue;
+        var el;
+        try { el = pierceElementAt(x, y); } catch (e) { el = topEl; }
+        var id = (el.id || '') + ' ' + (el.className || '');
+        if (/jw-|plyr|video-js|vjs-/i.test(id) && !/captcha|robot|ads|popup|overlay|close/i.test(id)) continue;
+        var key = el.tagName + '#' + id;
+        if (seen[key]) continue;
+        seen[key] = true;
+        var pierced = el !== topEl;
+        if (pierced && removedTopEls.indexOf(topEl) === -1) {
+          try {
+            topEl.remove();
+            removedTopEls.push(topEl);
+            JkBridge.onAdRemoved('hit-pierced:' + key);
+          } catch (e) {}
+        }
+      }
+    }
+  }
+  setInterval(hitTestSweep, 1200);
+
   setInterval(function(){
     var v = document.querySelector('video');
     if (!v) return;
@@ -131,10 +338,12 @@ fun WebPlayer(
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
+                        android.util.Log.i("JkPlayer", "page start: $url")
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
+                        android.util.Log.i("JkPlayer", "page finish: $url")
                         view?.evaluateJavascript(HOOK_SCRIPT, null)
                     }
 
@@ -142,8 +351,13 @@ fun WebPlayer(
                         view: WebView?,
                         request: WebResourceRequest?,
                     ): android.webkit.WebResourceResponse? {
-                        val host = request?.url?.host?.lowercase().orEmpty()
-                        return if (AD_HOSTS.any { host.contains(it) }) {
+                        val url = request?.url
+                        val host = url?.host?.lowercase().orEmpty()
+                        val fullUrl = url?.toString()?.lowercase().orEmpty()
+                        val blocked = AD_HOSTS.any { host.contains(it) } ||
+                            AD_URL_PATTERNS.any { fullUrl.contains(it) }
+                        return if (blocked) {
+                            android.util.Log.d("JkAdBlock", "recurso bloqueado: $host -> $fullUrl")
                             android.webkit.WebResourceResponse(
                                 "text/plain",
                                 "utf-8",
@@ -194,5 +408,12 @@ private class Bridge(
     @JavascriptInterface
     fun onReady() {
         handler.post { onReady() }
+    }
+
+    @JavascriptInterface
+    fun onAdRemoved(descriptor: String?) {
+        // Solo logging: confirma en logcat qué overlays está barriendo el
+        // ad-killer de HOOK_SCRIPT, sin tocar el hilo de UI de Compose.
+        android.util.Log.d("JkAdBlock", "overlay eliminado: $descriptor")
     }
 }
