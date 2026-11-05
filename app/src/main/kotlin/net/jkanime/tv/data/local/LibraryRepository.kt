@@ -6,6 +6,10 @@ import kotlinx.coroutines.flow.Flow
  * Fachada de persistencia local (favoritos + progreso). Los ViewModels solo
  * ven esta clase, nunca los DAOs, para que un cambio de motor (Room → otra
  * cosa) no toque la UI.
+ *
+ * `merge*` son las entradas que usa el motor de sync: aplican datos remotos
+ * solo si son más nuevos, para que un dispositivo offline no pise cambios
+ * hechos en otro.
  */
 class LibraryRepository(private val db: JkDatabase) {
 
@@ -19,6 +23,11 @@ class LibraryRepository(private val db: JkDatabase) {
 
     /** Instantánea de favoritos para el worker de sync (no es un Flow). */
     suspend fun favoritesSnapshot(): List<FavoriteEntity> = db.favorites().all()
+
+    /** Incluye tombstones: es lo que se empuja al backend. */
+    suspend fun favoritesForPush(): List<FavoriteEntity> = db.favorites().allIncludingDeleted()
+
+    suspend fun allProgress(): List<ProgressEntity> = db.progress().all()
 
     suspend fun lastProgress(slug: String): ProgressEntity? = db.progress().lastFor(slug)
 
@@ -35,23 +44,30 @@ class LibraryRepository(private val db: JkDatabase) {
         lastAiredEpisode: Int?,
     ): Boolean {
         val dao = db.favorites()
-        val existing = dao.all().firstOrNull { it.slug == slug }
-        return if (existing != null) {
-            dao.delete(slug)
+        val now = System.currentTimeMillis()
+        val existing = dao.get(slug)
+        val isAlive = existing != null && existing.deletedAt == null
+        return if (isAlive) {
+            dao.softDelete(slug, now)
             false
         } else {
+            // Si existe como tombstone se reusa la fila: si se insertara otra
+            // con el mismo slug, el merge remoto la resucitaría con los datos
+            // viejos.
             dao.upsert(
                 FavoriteEntity(
                     slug = slug,
                     animeId = animeId,
                     title = title,
                     posterUrl = posterUrl,
-                    addedAt = System.currentTimeMillis(),
-                    lastWatchedEpisode = null,
+                    addedAt = existing?.addedAt ?: now,
+                    lastWatchedEpisode = existing?.lastWatchedEpisode,
                     lastAiredEpisode = lastAiredEpisode,
                     totalEpisodes = totalEpisodes,
                     statusLabel = statusLabel,
-                    syncedAt = System.currentTimeMillis(),
+                    syncedAt = now,
+                    updatedAt = now,
+                    deletedAt = null,
                 ),
             )
             true
@@ -99,7 +115,23 @@ class LibraryRepository(private val db: JkDatabase) {
             ),
         )
         if (completed) {
-            db.favorites().setLastWatched(slug, episode)
+            db.favorites().setLastWatched(slug, episode, now)
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Merge desde el backend (last-write-wins por `updatedAt`)
+    // ---------------------------------------------------------------------
+
+    suspend fun mergeFavorite(remote: FavoriteEntity) {
+        val local = db.favorites().get(remote.slug)
+        if (local != null && local.updatedAt > remote.updatedAt) return
+        db.favorites().upsert(remote)
+    }
+
+    suspend fun mergeProgress(remote: ProgressEntity) {
+        val local = db.progress().get(remote.slug, remote.episode)
+        if (local != null && local.updatedAt > remote.updatedAt) return
+        db.progress().upsert(remote)
     }
 }

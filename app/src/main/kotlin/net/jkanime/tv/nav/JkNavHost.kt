@@ -9,9 +9,11 @@ import androidx.navigation.navArgument
 import net.jkanime.tv.feature.detail.DetailScreen
 import net.jkanime.tv.feature.home.HomeScreen
 import net.jkanime.tv.feature.player.PlayerActivity
+import net.jkanime.tv.feature.sync.SyncScreen
 
 object Routes {
     const val HOME = "home"
+    const val SYNC = "sync"
     const val DETAIL = "detail/{slug}"
     fun detail(slug: String) = "detail/$slug"
 }
@@ -24,7 +26,12 @@ fun JkNavHost() {
         composable(Routes.HOME) {
             HomeScreen(
                 onOpenAnime = { slug -> navController.navigate(Routes.detail(slug)) },
+                onOpenSync = { navController.navigate(Routes.SYNC) },
             )
+        }
+
+        composable(Routes.SYNC) {
+            SyncScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

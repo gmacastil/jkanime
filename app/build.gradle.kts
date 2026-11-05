@@ -17,6 +17,15 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        // Config del backend de sync. Se lee de gradle.properties para no
+        // versionar la URL/anon key del proyecto. La anon key NO es secreta
+        // (es pública por diseño en Supabase); el secreto real es el token
+        // del sync space, que nunca vive en el APK.
+        val supabaseUrl = providers.gradleProperty("JK_SUPABASE_URL").orElse("").get()
+        val supabaseAnonKey = providers.gradleProperty("JK_SUPABASE_ANON_KEY").orElse("").get()
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
@@ -36,6 +45,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

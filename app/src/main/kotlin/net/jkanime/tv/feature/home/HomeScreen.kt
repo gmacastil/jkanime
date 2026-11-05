@@ -45,7 +45,7 @@ import net.jkanime.tv.ui.theme.JkTextSecondary
  * Requerimiento 1 y 2 del brief.
  */
 @Composable
-fun HomeScreen(onOpenAnime: (String) -> Unit) {
+fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
     val viewModel: HomeViewModel = viewModel(
@@ -66,6 +66,7 @@ fun HomeScreen(onOpenAnime: (String) -> Unit) {
             showFavorites = showFavorites,
             onSelect = viewModel::selectSection,
             onToggleFavorites = viewModel::toggleFavorites,
+            onOpenSync = onOpenSync,
         )
 
         if (showFavorites) {
@@ -97,6 +98,7 @@ private fun Header(
     showFavorites: Boolean,
     onSelect: (ProgramacionSection) -> Unit,
     onToggleFavorites: () -> Unit,
+    onOpenSync: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -127,6 +129,14 @@ private fun Header(
             text = "★ Favoritos",
             primary = showFavorites,
             onClick = onToggleFavorites,
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        TvActionButton(
+            text = "⇄ Sync",
+            primary = false,
+            onClick = onOpenSync,
         )
 
         Spacer(modifier = Modifier.weight(1f))

@@ -10,14 +10,17 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /**
  * Favoritos. Requerimiento 4 del brief.
  *
- * Se guarda lo mínimo para pintar la tarjeta sin volver a pedir el detalle:
- * título, poster y el último episodio que el usuario vio. `totalEpisodes` y
- * `lastAiredEpisode` son la base del badge de "episodios pendientes" (F5).
+ * `updatedAt` y `deletedAt` existen para la sincronización multi-dispositivo
+ * (F6): sin `updatedAt` no se puede resolver un conflicto entre dispositivos, y
+ * sin borrado lógico un dispositivo que no vio el borrado resucitaría el
+ * favorito en el siguiente push.
  */
 @Entity(tableName = "favorites")
 data class FavoriteEntity(
@@ -33,6 +36,10 @@ data class FavoriteEntity(
     @ColumnInfo(name = "total_episodes") val totalEpisodes: Int?,
     @ColumnInfo(name = "status_label") val statusLabel: String?,
     @ColumnInfo(name = "synced_at") val syncedAt: Long,
+    /** Marca de tiempo del último cambio; base del merge last-write-wins. */
+    @ColumnInfo(name = "updated_at") val updatedAt: Long = 0,
+    /** No nulo = borrado en algún dispositivo (tombstone para el merge). */
+    @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
 ) {
     /**
      * Episodios que el usuario tiene pendientes. `null` cuando todavía no hay
@@ -65,26 +72,38 @@ data class ProgressEntity(
 
 @Dao
 interface FavoriteDao {
-    @Query("SELECT * FROM favorites ORDER BY added_at DESC")
+    @Query("SELECT * FROM favorites WHERE deleted_at IS NULL ORDER BY added_at DESC")
     fun observeAll(): Flow<List<FavoriteEntity>>
 
     @Query("SELECT * FROM favorites WHERE slug = :slug")
     fun observe(slug: String): Flow<FavoriteEntity?>
 
-    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE slug = :slug)")
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM favorites WHERE slug = :slug AND deleted_at IS NULL)",
+    )
     fun observeIsFavorite(slug: String): Flow<Boolean>
 
-    @Query("SELECT * FROM favorites")
+    @Query("SELECT * FROM favorites WHERE deleted_at IS NULL")
     suspend fun all(): List<FavoriteEntity>
+
+    /** Incluye tombstones: es lo que se empuja al backend. */
+    @Query("SELECT * FROM favorites")
+    suspend fun allIncludingDeleted(): List<FavoriteEntity>
+
+    @Query("SELECT * FROM favorites WHERE slug = :slug")
+    suspend fun get(slug: String): FavoriteEntity?
 
     @Upsert
     suspend fun upsert(favorite: FavoriteEntity)
 
-    @Query("DELETE FROM favorites WHERE slug = :slug")
-    suspend fun delete(slug: String)
+    @Query("UPDATE favorites SET deleted_at = :now, updated_at = :now WHERE slug = :slug")
+    suspend fun softDelete(slug: String, now: Long)
 
-    @Query("UPDATE favorites SET last_watched_episode = :episode WHERE slug = :slug")
-    suspend fun setLastWatched(slug: String, episode: Int)
+    @Query(
+        "UPDATE favorites SET last_watched_episode = :episode, updated_at = :now " +
+            "WHERE slug = :slug",
+    )
+    suspend fun setLastWatched(slug: String, episode: Int, now: Long)
 
     @Query(
         "UPDATE favorites SET last_aired_episode = :aired, total_episodes = :total, " +
@@ -110,13 +129,16 @@ interface ProgressDao {
     @Query("SELECT * FROM progress WHERE slug = :slug ORDER BY updated_at DESC LIMIT 1")
     suspend fun lastFor(slug: String): ProgressEntity?
 
+    @Query("SELECT * FROM progress")
+    suspend fun all(): List<ProgressEntity>
+
     @Upsert
     suspend fun upsert(progress: ProgressEntity)
 }
 
 @Database(
     entities = [FavoriteEntity::class, ProgressEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class JkDatabase : RoomDatabase() {
@@ -124,6 +146,17 @@ abstract class JkDatabase : RoomDatabase() {
     abstract fun progress(): ProgressDao
 
     companion object {
+        /** v1 → v2: columnas para el merge multi-dispositivo. */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE favorites ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+                )
+                db.execSQL("ALTER TABLE favorites ADD COLUMN deleted_at INTEGER")
+                db.execSQL("UPDATE favorites SET updated_at = added_at WHERE updated_at = 0")
+            }
+        }
+
         @Volatile
         private var instance: JkDatabase? = null
 
@@ -133,7 +166,10 @@ abstract class JkDatabase : RoomDatabase() {
                     context.applicationContext,
                     JkDatabase::class.java,
                     "jk-tv.db",
-                ).build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                    .also { instance = it }
             }
     }
 }

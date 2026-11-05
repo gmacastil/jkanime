@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import net.jkanime.tv.Graph
 import net.jkanime.tv.data.local.LibraryRepository
+import net.jkanime.tv.data.sync.SyncResult
 import java.util.concurrent.TimeUnit
 
 /**
@@ -48,6 +49,16 @@ class FavoritesSyncWorker(
         }
 
         android.util.Log.i("JkSync", "favoritos=${favorites.size} fallos=$failures")
+
+        // Sync multi-dispositivo después de refrescar el catálogo: así lo que
+        // se empuja ya lleva el `last_aired_episode` recién actualizado.
+        when (val result = Graph.sync(applicationContext).syncNow()) {
+            is SyncResult.Success ->
+                android.util.Log.i("JkSync", "cloud ok: ${result.favorites} favs, ${result.progress} prog")
+            is SyncResult.Failure ->
+                android.util.Log.w("JkSync", "cloud fallo: ${result.message}")
+            SyncResult.NotPaired, SyncResult.NotConfigured -> Unit
+        }
         // Se reintenta solo si falló todo: si algo se actualizó, el resultado
         // ya es útil y no conviene reprogramar con backoff.
         return if (failures > 0 && failures == favorites.size) Result.retry() else Result.success()
