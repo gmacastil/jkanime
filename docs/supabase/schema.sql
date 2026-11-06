@@ -12,7 +12,9 @@
 --
 -- Ejecutar en el SQL Editor de Supabase.
 
-create extension if not exists pgcrypto;
+-- Sin extensiones: se usa gen_random_uuid() (nativo desde Postgres 13) en vez
+-- de pgcrypto.gen_random_bytes(), porque en Supabase pgcrypto vive en el
+-- schema `extensions` y estas funciones corren con search_path = public.
 
 -- ---------------------------------------------------------------------------
 -- Tablas
@@ -87,7 +89,9 @@ begin
         exit when not exists (select 1 from sync_spaces where code = v_code);
     end loop;
 
-    v_token := encode(gen_random_bytes(24), 'hex');
+    -- 64 hex = dos UUIDv4 concatenados: entropía de sobra para un token
+    -- bearer y sin depender de pgcrypto.
+    v_token := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
 
     insert into sync_spaces (code, token) values (v_code, v_token)
     returning id into v_id;
@@ -238,5 +242,101 @@ begin
         grant execute on function sync_create() to authenticated;
         grant execute on function sync_pull(text, text) to authenticated;
         grant execute on function sync_push(text, text, jsonb, jsonb) to authenticated;
+    end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Emparejamiento de dispositivos
+--
+-- El token del espacio NO se teclea nunca: sería un hex de 64 caracteres y en
+-- una TV no hay teclado. En su lugar, un dispositivo ya vinculado genera un
+-- código temporal de 8 dígitos (un solo uso, 15 min) y el nuevo dispositivo
+-- solo escribe ese código. `sync_join` devuelve entonces código+token.
+-- ---------------------------------------------------------------------------
+
+create table if not exists sync_pairings (
+    code       text primary key,
+    space_id   uuid not null references sync_spaces(id) on delete cascade,
+    expires_at bigint not null,
+    used       boolean not null default false,
+    created_at timestamptz not null default now()
+);
+
+alter table sync_pairings enable row level security;
+
+create or replace function sync_new_pairing(p_code text, p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_space  uuid;
+    v_pair   text;
+    v_expire bigint;
+begin
+    select id into v_space
+    from sync_spaces
+    where code = p_code and token = p_token;
+
+    if v_space is null then
+        raise exception 'invalid_credentials';
+    end if;
+
+    loop
+        v_pair := lpad((floor(random() * 100000000))::bigint::text, 8, '0');
+        exit when not exists (select 1 from sync_pairings where code = v_pair);
+    end loop;
+
+    v_expire := (extract(epoch from now()) * 1000)::bigint + (15 * 60 * 1000);
+
+    insert into sync_pairings (code, space_id, expires_at) values (v_pair, v_space, v_expire);
+
+    -- Limpieza oportunista: los códigos caducados no sirven de nada.
+    delete from sync_pairings where expires_at < (extract(epoch from now()) * 1000)::bigint;
+
+    return jsonb_build_object('pairing_code', v_pair, 'expires_at', v_expire);
+end;
+$$;
+
+create or replace function sync_join(p_pairing_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_space uuid;
+    v_code  text;
+    v_token text;
+begin
+    select s.id, s.code, s.token
+    into v_space, v_code, v_token
+    from sync_pairings p
+    join sync_spaces s on s.id = p.space_id
+    where p.code = p_pairing_code
+      and p.used = false
+      and p.expires_at > (extract(epoch from now()) * 1000)::bigint;
+
+    if v_space is null then
+        raise exception 'invalid_pairing_code';
+    end if;
+
+    -- Un solo uso: si alguien reusa el código, ya no sirve.
+    update sync_pairings set used = true where code = p_pairing_code;
+
+    return jsonb_build_object('code', v_code, 'token', v_token);
+end;
+$$;
+
+do $$
+begin
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        grant execute on function sync_new_pairing(text, text) to anon;
+        grant execute on function sync_join(text) to anon;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        grant execute on function sync_new_pairing(text, text) to authenticated;
+        grant execute on function sync_join(text) to authenticated;
     end if;
 end $$;

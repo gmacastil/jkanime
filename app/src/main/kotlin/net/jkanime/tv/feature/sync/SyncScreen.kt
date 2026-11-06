@@ -32,6 +32,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
+import net.jkanime.tv.data.sync.PairingCode
 import net.jkanime.tv.data.sync.SyncResult
 import net.jkanime.tv.ui.component.TvActionButton
 import net.jkanime.tv.ui.theme.JkBackground
@@ -59,7 +60,7 @@ fun SyncScreen(onBack: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var typedCode by remember { mutableStateOf("") }
-    var typedToken by remember { mutableStateOf("") }
+    var pairing by remember { mutableStateOf<PairingCode?>(null) }
     var mode by remember { mutableStateOf(if (engine.currentCredentials() == null) Mode.CHOOSE else Mode.PAIRED) }
 
     val firstFocus = remember { FocusRequester() }
@@ -124,16 +125,14 @@ fun SyncScreen(onBack: () -> Unit) {
 
             Mode.JOIN -> JoinForm(
                 code = typedCode,
-                token = typedToken,
                 busy = busy,
                 status = status,
                 onCodeChange = { typedCode = it },
-                onTokenChange = { typedToken = it },
                 onConfirm = {
                     busy = true
                     status = null
                     scope.launch {
-                        runCatching { engine.joinSpace(typedCode, typedToken) }
+                        runCatching { engine.joinSpace(typedCode) }
                             .onSuccess {
                                 credentials = engine.currentCredentials()
                                 mode = Mode.PAIRED
@@ -152,6 +151,7 @@ fun SyncScreen(onBack: () -> Unit) {
                 status = status,
                 focusRequester = firstFocus,
                 onSyncNow = {
+                    android.util.Log.i("JkSyncUI", "onSyncNow: click")
                     busy = true
                     status = null
                     scope.launch {
@@ -162,6 +162,24 @@ fun SyncScreen(onBack: () -> Unit) {
                             SyncResult.NotPaired -> "Este dispositivo no está vinculado"
                             SyncResult.NotConfigured -> "Backend sin configurar"
                         }
+                        busy = false
+                    }
+                },
+                pairing = pairing,
+                onGeneratePairing = {
+                    android.util.Log.i("JkSyncUI", "onGeneratePairing: click")
+                    busy = true
+                    status = null
+                    scope.launch {
+                        runCatching { engine.createPairingCode() }
+                            .onSuccess {
+                                android.util.Log.i("JkSyncUI", "pairing ok: ${it.code}")
+                                pairing = it
+                            }
+                            .onFailure {
+                                android.util.Log.w("JkSyncUI", "pairing fallo", it)
+                                status = "Error: ${it.message}"
+                            }
                         busy = false
                     }
                 },
@@ -218,6 +236,8 @@ private fun PairedView(
     busy: Boolean,
     status: String?,
     focusRequester: FocusRequester,
+    pairing: PairingCode?,
+    onGeneratePairing: () -> Unit,
     onSyncNow: () -> Unit,
     onUnlink: () -> Unit,
     onBack: () -> Unit,
@@ -234,10 +254,28 @@ private fun PairedView(
             color = JkOrange,
         )
         Text(
-            text = "Introduce este código en los demás dispositivos.",
+            text = "Este es el identificador del espacio. Para vincular un " +
+                "dispositivo nuevo necesitas un código temporal.",
             style = MaterialTheme.typography.bodySmall,
             color = JkTextSecondary,
         )
+
+        pairing?.let { current ->
+            val minutesLeft =
+                ((current.expiresAt - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Código para un dispositivo nuevo (caduca en $minutesLeft min)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = JkTextSecondary,
+                )
+                Text(
+                    text = current.code.chunked(4).joinToString("  "),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = JkTextPrimary,
+                )
+            }
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TvActionButton(
@@ -246,6 +284,12 @@ private fun PairedView(
                 enabled = !busy,
                 modifier = Modifier.focusRequester(focusRequester),
                 onClick = onSyncNow,
+            )
+            TvActionButton(
+                text = if (pairing == null) "Vincular otro dispositivo" else "Generar otro código",
+                primary = false,
+                enabled = !busy,
+                onClick = onGeneratePairing,
             )
             TvActionButton(text = "Desvincular", primary = false, onClick = onUnlink)
             TvActionButton(text = "Volver", primary = false, onClick = onBack)
@@ -264,11 +308,9 @@ private fun PairedView(
 @Composable
 private fun JoinForm(
     code: String,
-    token: String,
     busy: Boolean,
     status: String?,
     onCodeChange: (String) -> Unit,
-    onTokenChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -289,18 +331,11 @@ private fun JoinForm(
             onBackspace = { onCodeChange(code.dropLast(1)) },
         )
 
-        Text(
-            text = "Token del dispositivo original",
-            style = MaterialTheme.typography.titleSmall,
-            color = JkTextSecondary,
-        )
-        TokenField(value = token, onValueChange = onTokenChange)
-
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TvActionButton(
                 text = if (busy) "Vinculando…" else "Vincular",
                 primary = true,
-                enabled = !busy && code.length == 8 && token.isNotBlank(),
+                enabled = !busy && code.length == 8,
                 onClick = onConfirm,
             )
             TvActionButton(text = "Atrás", primary = false, onClick = onBack)
@@ -340,36 +375,6 @@ private fun Keypad(onDigit: (String) -> Unit, onBackspace: () -> Unit) {
             }
         }
     }
-}
-
-/**
- * Campo de texto mínimo. Compose TV no trae TextField, y el teclado del
- * sistema en TV es peor que un campo simple con BasicTextField: aquí basta
- * para pegar/escribir un token hexadecimal.
- */
-@Composable
-private fun TokenField(value: String, onValueChange: (String) -> Unit) {
-    androidx.compose.foundation.text.BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(color = JkTextPrimary),
-        modifier = Modifier
-            .fillMaxWidth(0.6f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(JkSurfaceHigh)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        decorationBox = { inner ->
-            if (value.isEmpty()) {
-                Text(
-                    text = "Pega aquí el token",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = JkTextSecondary,
-                )
-            }
-            inner()
-        },
-    )
 }
 
 @Composable

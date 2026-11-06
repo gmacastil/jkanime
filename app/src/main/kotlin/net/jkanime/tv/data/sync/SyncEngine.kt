@@ -31,12 +31,19 @@ class SyncEngine(
         return credentials
     }
 
-    /** Une este dispositivo a un espacio existente. */
-    suspend fun joinSpace(code: String, token: String) {
-        val credentials = SyncCredentials(code.trim(), token.trim())
-        // Se valida con un pull real: si el código/token no sirven, el
-        // servidor lanza y no se guarda basura en SharedPreferences.
-        client.pull(credentials)
+    /** Genera un código temporal para vincular otro dispositivo. */
+    suspend fun createPairingCode(): PairingCode {
+        val credentials = store.credentials
+            ?: throw IllegalStateException("Este dispositivo no está vinculado")
+        return client.newPairingCode(credentials)
+    }
+
+    /**
+     * Une este dispositivo a un espacio existente usando solo el código
+     * temporal: el token lo entrega el servidor, nunca se teclea.
+     */
+    suspend fun joinSpace(pairingCode: String) {
+        val credentials = client.joinWithCode(pairingCode)
         store.credentials = credentials
     }
 

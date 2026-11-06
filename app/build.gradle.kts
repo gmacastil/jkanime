@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,12 +19,19 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        // Config del backend de sync. Se lee de gradle.properties para no
-        // versionar la URL/anon key del proyecto. La anon key NO es secreta
-        // (es pública por diseño en Supabase); el secreto real es el token
-        // del sync space, que nunca vive en el APK.
-        val supabaseUrl = providers.gradleProperty("JK_SUPABASE_URL").orElse("").get()
-        val supabaseAnonKey = providers.gradleProperty("JK_SUPABASE_ANON_KEY").orElse("").get()
+        // Config del backend de sync. Se lee de gradle.properties o, mejor,
+        // de local.properties (ignorado por git): así la clave del proyecto
+        // no acaba versionada. La clave que debe ir aquí es la *publishable*
+        // (`sb_publishable_...`), no la `sb_secret_...`: el secreto del
+        // proyecto nunca debe viajar dentro del APK.
+        val localProps = Properties().apply {
+            val file = rootProject.file("local.properties")
+            if (file.exists()) file.inputStream().use { load(it) }
+        }
+        fun prop(name: String): String =
+            providers.gradleProperty(name).orElse(localProps.getProperty(name) ?: "").get()
+        val supabaseUrl = prop("JK_SUPABASE_URL")
+        val supabaseAnonKey = prop("JK_SUPABASE_ANON_KEY")
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }

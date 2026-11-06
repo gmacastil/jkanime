@@ -17,6 +17,9 @@ import java.util.concurrent.TimeUnit
 /** Credenciales del "sync space" compartido entre dispositivos. */
 data class SyncCredentials(val code: String, val token: String)
 
+/** Código temporal de un solo uso para vincular otro dispositivo. */
+data class PairingCode(val code: String, val expiresAt: Long)
+
 data class RemoteSnapshot(
     val favorites: List<FavoriteEntity>,
     val progress: List<ProgressEntity>,
@@ -56,6 +59,38 @@ class SupabaseSyncClient(
             token = response.getString("token"),
         )
     }
+
+    /**
+     * Genera un código temporal (8 dígitos, 15 min, un solo uso) para vincular
+     * otro dispositivo. El token nunca se teclea: sería un hex de 64
+     * caracteres y en una TV no hay teclado.
+     */
+    suspend fun newPairingCode(credentials: SyncCredentials): PairingCode =
+        withContext(Dispatchers.IO) {
+            val response = rpc(
+                "sync_new_pairing",
+                JSONObject()
+                    .put("p_code", credentials.code)
+                    .put("p_token", credentials.token),
+            )
+            PairingCode(
+                code = response.getString("pairing_code"),
+                expiresAt = response.optLong("expires_at", 0L),
+            )
+        }
+
+    /** Canjea un código de emparejamiento por las credenciales del espacio. */
+    suspend fun joinWithCode(pairingCode: String): SyncCredentials =
+        withContext(Dispatchers.IO) {
+            val response = rpc(
+                "sync_join",
+                JSONObject().put("p_pairing_code", pairingCode.trim()),
+            )
+            SyncCredentials(
+                code = response.getString("code"),
+                token = response.getString("token"),
+            )
+        }
 
     suspend fun pull(credentials: SyncCredentials): RemoteSnapshot = withContext(Dispatchers.IO) {
         val response = rpc(
@@ -123,9 +158,10 @@ class SupabaseSyncClient(
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                // Un 404 con "invalid_credentials" significa código/token mal
-                // escritos; el llamador lo distingue por el mensaje.
-                throw SyncException("HTTP ${response.code}: ${text.take(200)}")
+                // PostgREST devuelve {"code":..,"message":..}. Se muestra solo
+                // el `message` (p.ej. "invalid_credentials") en vez del JSON
+                // crudo, que en pantalla de TV es ilegible.
+                throw SyncException(friendlyError(response.code, text))
             }
             return if (text.isBlank()) JSONObject() else JSONObject(text)
         }
@@ -133,6 +169,23 @@ class SupabaseSyncClient(
 }
 
 class SyncException(message: String) : Exception(message)
+
+/**
+ * Traduce la respuesta de error de PostgREST a algo que quepa en pantalla.
+ * Si la función no existe (PGRST202) es que falta ejecutar el schema.sql.
+ */
+private fun friendlyError(httpCode: Int, body: String): String {
+    val parsed = runCatching { JSONObject(body) }.getOrNull()
+    val serverMessage = parsed?.optString("message").orEmpty()
+    val code = parsed?.optString("code").orEmpty()
+
+    return when {
+        code == "PGRST202" || (httpCode == 404 && serverMessage.contains("Could not find the function")) ->
+            "Falta ejecutar docs/supabase/schema.sql en Supabase (funcion ausente)"
+        serverMessage.isNotBlank() -> serverMessage
+        else -> "HTTP $httpCode: ${body.take(120)}"
+    }
+}
 
 private fun FavoriteEntity.toJson(): JSONObject = JSONObject()
     .put("slug", slug)

@@ -19,14 +19,15 @@ Favoritos y progreso compartidos entre todas tus TV y tu celular.
 1. Crea un proyecto en <https://supabase.com> (free tier sobra: el estado
    completo de un usuario son unos pocos KB).
 2. Abre el **SQL Editor** y ejecuta `docs/supabase/schema.sql` completo.
-3. Copia del proyecto: **Project URL** y **anon public key**
-   (Settings → API).
-4. Añádelos a `gradle.properties` (o a `~/.gradle/gradle.properties` si no
-   quieres que estén en el repo):
+3. Copia del proyecto: **Project URL** y la **publishable key**
+   (Settings → API keys). Ojo: la que empieza por `sb_publishable_`, **no** la
+   `sb_secret_` (esa salta RLS y nunca debe viajar dentro del APK).
+4. Añádelas a `local.properties` (ignorado por git) — también se aceptan en
+   `gradle.properties` o `~/.gradle/gradle.properties`:
 
    ```properties
    JK_SUPABASE_URL=https://TU-PROYECTO.supabase.co
-   JK_SUPABASE_ANON_KEY=eyJhbGciOi...
+   JK_SUPABASE_ANON_KEY=sb_publishable_...
    ```
 
 5. Recompila:
@@ -35,20 +36,22 @@ Favoritos y progreso compartidos entre todas tus TV y tu celular.
    JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:assembleDebug
    ```
 
-> La `anon key` **no es un secreto** (es pública por diseño en Supabase; lo
-> que protege los datos es RLS + el token). El token del sync space sí es
-> secreto y nunca se guarda en el APK: se genera en el servidor al crear el
-> espacio.
+> La `publishable key` **no es un secreto** (es pública por diseño en Supabase;
+> lo que protege los datos son las RPC `SECURITY DEFINER` + el token). El token
+> del sync space sí es secreto y nunca se teclea ni se muestra: lo genera el
+> servidor y viaja solo dentro del código de emparejamiento.
 
 ## Vincular dispositivos
 
-1. En el primer dispositivo: **⇄ Sync → Crear espacio de sync**. Aparece un
-   código de 8 dígitos.
-2. En los demás: **⇄ Sync → Ya tengo un código**, escribe el código con el
-   teclado en pantalla y pega el token que muestra el primero.
+1. En el primer dispositivo: **⇄ Sync → Vincular otro dispositivo**. Genera un
+   **código de emparejamiento** de 8 dígitos, de un solo uso y válido 15 min.
+2. En los demás: **⇄ Sync → Ya tengo un código**, escribe ese código con el
+   teclado en pantalla. El servidor devuelve el token del espacio y el
+   dispositivo queda vinculado.
 
-> El token se muestra junto al código en la pantalla de sync. Guárdalo: es lo
-> único que permite vincular un dispositivo nuevo.
+> El token del espacio **nunca se teclea**: sería un hex de 64 caracteres,
+> inviable con un D-pad. El código de emparejamiento es lo único que se
+> escribe, y caduca solo.
 
 ## Cómo funciona el merge
 
