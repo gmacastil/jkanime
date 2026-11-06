@@ -215,3 +215,57 @@ Verificado en emulador:
   `Worker result SUCCESS`, y `favorites.synced_at` actualizado en Room.
 - Badge `+N` en la grilla de favoritos = `last_aired_episode -
   last_watched_episode` (observado `+5` con el favorito de prueba).
+
+## F7 — Búsqueda, detalle de dos columnas y reproductor con fallback — verificado
+
+### Búsqueda en Programación
+
+Filtra en memoria `sections.values.flatten()` (animes + donghuas + ovas) con
+`searchKey()` = NFD + sin diacríticos + minúsculas, así que "majutsu" encuentra
+"Majutsushi" y "pokemon" encuentra "Pokémon". No gasta red.
+
+**Trampa:** un `BasicTextField` de una línea consume `DirectionDown` para mover
+el cursor y el foco nunca baja a la grilla. Hay que interceptarlo en el padre
+con `onPreviewKeyEvent` (fase pre, de padre a hijo) y pedir el foco del primer
+resultado a mano. Verificado: `DPAD_DOWN` → foco en la primera tarjeta.
+
+**Trampa:** con el IME en pantalla, el D-pad lo consume el teclado. En pruebas
+automatizadas: `input text` → `KEYCODE_BACK` (cierra el IME) → `DPAD_DOWN`.
+
+### Detalle
+
+- Dos columnas: póster + `Estado/Tipo/Próx. cap/Capítulos` a la izquierda,
+  lista de capítulos a la derecha (una sola columna, ordenable).
+- Vistos en verde (`JkGreen = 0xFF3DDC84`), empezados en naranja con barra.
+  Comprobado con muestreo de píxeles del `screencap`: insignia del ep. visto
+  `(61,220,132)`, ep. en curso `(255,107,53)`.
+- `Continuar Ep N` toma el último episodio **empezado y sin terminar**; si se
+  coge el último con progreso a secas, al terminar el ep. 4 el botón llevaba
+  otra vez al 4.
+
+### Reproductor: servidores ocultos y fallback
+
+- `jkplayer/um` = **Desu**, `jkplayer/umv` = **Magi** (verificado en dos
+  animes distintos: son las dos pestañas que renderiza la página). Desu es el
+  player por defecto.
+- La lista de fuentes está oculta; se abre con `Usar otro servidor` o sola si
+  el vigilante de 20 s no engancha un `<video>`.
+
+**Trampa grande:** el `WebView` pide el foco al cargar y se queda con **todo**
+el D-pad (Chromium navega su propio reproductor), dejando inalcanzables los
+botones del overlay. `isFocusable = false` no basta: Chromium llama
+`requestFocus()` por dentro. La solución es una subclase que rechaza
+`requestFocus(direction, rect)` (la sobrecarga de la que depende
+`View.requestFocus()`).
+
+**Trampa mayor:** en el puente JS→Kotlin, una propiedad y un método con el
+mismo nombre colisionan. `private val onReady: () -> Unit` + `fun onReady()`
+hacen que `handler.post { onReady() }` llame al **método** (recursión infinita
+en el hilo principal) en vez de a la lambda. Síntoma: el vídeo reproduce
+(porque `onProgress` sí resolvía a la propiedad, al no encajar `Long, Long` con
+`Double, Double`), pero `playerReady` nunca pasa a `true` y sale el aviso
+"No cargó". Los callbacks se llaman `onReadyEvent`/`onEndedEvent` a propósito.
+
+- Con el servidor caído (la web devuelve `500 Server Error` dentro del iframe)
+  el aviso aparece a los 20 s y la lista queda abierta con el foco en el primer
+  servidor; elegir Magi recarga y el aviso desaparece al enganchar el vídeo.
