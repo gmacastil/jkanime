@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.jkanime.tv.catalog.JkanimeRepository
@@ -43,14 +44,56 @@ class HomeViewModel(
 
     fun toggleFavorites() {
         _showFavorites.value = !_showFavorites.value
+        if (_showFavorites.value) _searchOpen.value = false
+    }
+
+    // ---------------------------------------------------------------------
+    // Búsqueda: filtra en memoria lo que ya está cargado en "Programación"
+    // (animes + donghuas + ovas), así que responde al instante y no gasta
+    // red. No busca en todo el catálogo del sitio, solo en lo visible.
+    // ---------------------------------------------------------------------
+
+    private val _searchOpen = MutableStateFlow(false)
+    val searchOpen: StateFlow<Boolean> = _searchOpen.asStateFlow()
+
+    private val _query = MutableStateFlow("")
+    val query: StateFlow<String> = _query.asStateFlow()
+
+    val searchResults: StateFlow<List<AnimeCard>> =
+        combine(_state, _query) { state, query ->
+            val success = state as? HomeUiState.Success ?: return@combine emptyList()
+            val needle = query.searchKey()
+            if (needle.isEmpty()) return@combine emptyList()
+            success.sections.values
+                .flatten()
+                .filter { it.title.searchKey().contains(needle) }
+                .distinctBy { it.slug }
+                .sortedBy { it.title.lowercase() }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun openSearch() {
+        _showFavorites.value = false
+        _searchOpen.value = true
+    }
+
+    fun closeSearch() {
+        _searchOpen.value = false
+        _query.value = ""
+    }
+
+    fun setQuery(value: String) {
+        _query.value = value
     }
 
     init {
         refresh()
     }
 
+    /** Elegir una sección sale de Favoritos y de la búsqueda. */
     fun selectSection(section: ProgramacionSection) {
         _section.value = section
+        _showFavorites.value = false
+        if (_searchOpen.value) closeSearch()
     }
 
     fun refresh(force: Boolean = false) {
@@ -71,3 +114,13 @@ class HomeViewModel(
             }
     }
 }
+
+/**
+ * Clave de búsqueda: minúsculas y sin acentos, para que "pii" encuentre
+ * "Sasaki to Pii-chan" y "pokemon" encuentre "Pokémon".
+ */
+private fun String.searchKey(): String =
+    java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase()
+        .trim()

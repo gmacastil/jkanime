@@ -12,6 +12,9 @@ val JkSurfaceHigh = Color(0xFF24242C)
 val JkTextPrimary = Color(0xFFF4F4F6)
 val JkTextSecondary = Color(0xFFA6A6B2)
 
+/** Capítulos ya vistos (verde) y estado "en emisión". */
+val JkGreen = Color(0xFF3DDC84)
+
 private val JkColorScheme = darkColorScheme(
     primary = JkOrange,
     onPrimary = Color(0xFF141414),

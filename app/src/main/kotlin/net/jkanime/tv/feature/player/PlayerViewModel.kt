@@ -41,8 +41,13 @@ class PlayerViewModel(
                 .fold(
                     onSuccess = { servers ->
                         val playable = servers.filter { it.kind != ServerKind.DOWNLOAD }
-                        val selected = playable.firstOrNull { it.kind == ServerKind.STREAM }
-                            ?: playable.firstOrNull()
+                        // Desu es el player propio del sitio y el más estable
+                        // (los embeds de terceros rotan de dominio cada
+                        // semana). Si no está, se cae al primer JKPlayer y
+                        // luego a cualquier stream.
+                        val selected = playable.firstOrNull { it.name == "Desu" }
+                            ?: playable.firstOrNull { it.kind == ServerKind.JKPLAYER }
+                            ?: playable.firstOrNull { it.kind == ServerKind.STREAM }
                             ?: servers.first()
                         PlayerUiState.Ready(servers = servers, selected = selected)
                     },

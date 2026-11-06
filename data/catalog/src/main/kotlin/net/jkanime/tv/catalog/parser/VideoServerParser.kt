@@ -58,7 +58,7 @@ object VideoServerParser {
             val url = match.value
             if (servers.none { it.url == url }) {
                 servers += VideoServer(
-                    name = "JKPlayer ${letter.uppercase()}",
+                    name = jkPlayerName(letter),
                     url = url,
                     kind = ServerKind.JKPLAYER,
                 )
@@ -78,6 +78,18 @@ object VideoServerParser {
                 ServerKind.DOWNLOAD -> 3
             }
         }
+    }
+
+    /**
+     * Nombre real del player propio del sitio. `jkplayer/um` es **Desu** y
+     * `jkplayer/umv` es **Magi** (verificado en varios episodios: son las dos
+     * pestañas "Desu" y "Magi" que renderiza la página). Desu es además el
+     * player por defecto del propio sitio, y el que usamos nosotros.
+     */
+    private fun jkPlayerName(letter: String): String = when (letter.lowercase()) {
+        "um" -> "Desu"
+        "umv" -> "Magi"
+        else -> "JKPlayer ${letter.uppercase()}"
     }
 
     private fun kindOf(serverName: String): ServerKind =

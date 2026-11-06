@@ -315,8 +315,19 @@ fun WebPlayer(
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
-            WebView(context).apply {
+            NonFocusableWebView(context).apply {
                 setBackgroundColor(android.graphics.Color.BLACK)
+
+                // El WebView pide el foco al cargar y se queda con TODO el
+                // D-pad: Chromium navega su propio reproductor y el overlay de
+                // Compose ("Usar otro servidor", "Salir") queda inalcanzable.
+                // Como al WebView solo le hablamos por JS (play, seek, tiempo),
+                // no necesita foco. `isFocusable = false` no basta: Chromium
+                // llama requestFocus() por dentro, así que la subclase lo
+                // rechaza explícitamente.
+                isFocusable = false
+                isFocusableInTouchMode = false
+                descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -395,25 +406,49 @@ fun WebPlayer(
     )
 }
 
+/**
+ * WebView que nunca acepta el foco.
+ *
+ * Chromium pide el foco al terminar de cargar la página y, con él, se traga
+ * todas las teclas del D-pad (navegación de sus propios controles). En TV el
+ * control lo lleva el overlay de Compose, así que el WebView solo tiene que
+ * reproducir: rechazar `requestFocus()` es la única forma fiable de evitarlo.
+ */
+private class NonFocusableWebView(context: android.content.Context) : WebView(context) {
+    // View.requestFocus() delega en esta sobrecarga, así que bloquearla cubre
+    // tanto la llamada sin argumentos como las de navegación por D-pad.
+    override fun requestFocus(direction: Int, previouslyFocusedRect: android.graphics.Rect?): Boolean = false
+}
+
+/**
+ * Puente JS -> Kotlin.
+ *
+ * OJO con los nombres: los callbacks se llaman `...Event` a propósito. Si la
+ * propiedad se llamara igual que el método `@JavascriptInterface` (por ejemplo
+ * `onReady` y `fun onReady()`), dentro del método la llamada `onReady()`
+ * resolvería al propio método y no a la lambda: recursión infinita en el hilo
+ * principal. Pasó, y el síntoma era que `playerReady` nunca se ponía a true y
+ * el reproductor avisaba "no cargó" aunque el vídeo estuviera reproduciendo.
+ */
 private class Bridge(
-    private val onProgress: (Long, Long) -> Unit,
-    private val onEnded: () -> Unit,
-    private val onReady: () -> Unit,
+    private val onProgressEvent: (Long, Long) -> Unit,
+    private val onEndedEvent: () -> Unit,
+    private val onReadyEvent: () -> Unit,
     private val handler: Handler,
 ) {
     @JavascriptInterface
     fun onProgress(positionMs: Double, durationMs: Double) {
-        handler.post { onProgress(positionMs.toLong(), durationMs.toLong()) }
+        handler.post { onProgressEvent(positionMs.toLong(), durationMs.toLong()) }
     }
 
     @JavascriptInterface
     fun onEnded() {
-        handler.post { onEnded() }
+        handler.post { onEndedEvent() }
     }
 
     @JavascriptInterface
     fun onReady() {
-        handler.post { onReady() }
+        handler.post { onReadyEvent() }
     }
 
     @JavascriptInterface

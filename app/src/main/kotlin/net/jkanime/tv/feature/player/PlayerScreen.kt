@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -60,7 +62,23 @@ fun PlayerScreen(
 
     val controller = remember { WebPlayerController() }
     val rootFocus = remember { FocusRequester() }
+    // El WebView se queda con el foco del sistema (Chromium lo pide al
+    // cargar), así que el D-pad no llega solo a los botones del overlay: hay
+    // que moverlo a mano al entrar/salir de los controles.
+    val overlayFocus = remember { FocusRequester() }
+    // Al abrir la lista de fuentes el foco va al primer servidor: la búsqueda
+    // geométrica de Compose no sube desde el botón "Usar otro servidor" a la
+    // fila de arriba (se queda atascada en el propio botón).
+    val firstServerFocus = remember { FocusRequester() }
     var overlayVisible by remember { mutableStateOf(true) }
+    // Los servidores están ocultos por defecto: se reproduce con Desu (el
+    // player propio del sitio) y solo se ofrece la lista si falla.
+    var showServers by remember { mutableStateOf(false) }
+    var fallbackSuggested by remember { mutableStateOf(false) }
+    // true cuando el foco está en un botón del overlay. Sin esta bandera el
+    // Box raíz también vería el OK (fase KeyDown) y ocultaría los controles
+    // justo antes de que el botón reciba su click (fase KeyUp).
+    var overlayHasFocus by remember { mutableStateOf(false) }
 
     // F4: progreso persistente. Se guarda cada ~5 s de avance real (no en cada
     // `timeupdate`, que dispara ~4 veces por segundo y machacaría Room).
@@ -96,10 +114,42 @@ fun PlayerScreen(
     }
 
     // El overlay se oculta solo: en TV no hay mouse para "quitar el foco".
-    LaunchedEffect(overlayVisible, state) {
-        if (overlayVisible) {
+    // Si estamos avisando de que el servidor falló, se queda visible.
+    LaunchedEffect(overlayVisible, state, fallbackSuggested, showServers, overlayHasFocus) {
+        if (overlayVisible && !fallbackSuggested && !showServers && !overlayHasFocus) {
             delay(6_000)
             overlayVisible = false
+        }
+    }
+
+    // Si el vídeo acaba cargando (a veces tarda más de 20 s), el aviso de
+    // "no cargó" deja de ser cierto y se retira.
+    LaunchedEffect(playerReady) {
+        if (playerReady) fallbackSuggested = false
+    }
+
+    // Al ocultarse el overlay el foco vuelve al reproductor, si no el D-pad
+    // se queda apuntando a un botón que ya no está en pantalla.
+    LaunchedEffect(overlayVisible) {
+        if (!overlayVisible) {
+            overlayHasFocus = false
+            runCatching { rootFocus.requestFocus() }
+        }
+    }
+
+    // Vigilante de carga: si en 20 s el WebView no enganchó un <video>, el
+    // servidor no sirve y se ofrece cambiar de fuente. `state` cambia al
+    // elegir otro servidor, así que el contador se reinicia solo.
+    LaunchedEffect(state) {
+        state as? PlayerUiState.Ready ?: return@LaunchedEffect
+        fallbackSuggested = false
+        showServers = false
+        playerReady = false
+        delay(20_000)
+        if (!playerReady) {
+            fallbackSuggested = true
+            showServers = true
+            overlayVisible = true
         }
     }
 
@@ -119,8 +169,12 @@ fun PlayerScreen(
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
                     Key.DirectionCenter, Key.Enter -> {
-                        overlayVisible = !overlayVisible
-                        true
+                        if (overlayHasFocus) {
+                            false
+                        } else {
+                            overlayVisible = !overlayVisible
+                            true
+                        }
                     }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
                         controller.togglePlayPause()
@@ -144,8 +198,15 @@ fun PlayerScreen(
                         }
                     }
                     Key.DirectionUp, Key.DirectionDown -> {
-                        overlayVisible = true
-                        false
+                        if (overlayVisible) {
+                            // Entrar en los botones del overlay.
+                            overlayHasFocus = true
+                            runCatching { overlayFocus.requestFocus() }
+                            true
+                        } else {
+                            overlayVisible = true
+                            false
+                        }
                     }
                     else -> false
                 }
@@ -201,7 +262,22 @@ fun PlayerScreen(
                         episodeNumber = episodeNumber,
                         servers = current.servers,
                         selectedUrl = current.selected.url,
-                        onSelect = viewModel::select,
+                        selectedName = current.selected.displayName,
+                        showServers = showServers,
+                        fallbackSuggested = fallbackSuggested,
+                        focusRequester = overlayFocus,
+                        firstServerFocus = firstServerFocus,
+                        onToggleServers = { showServers = !showServers },
+                        onBackToPlayer = {
+                            overlayHasFocus = false
+                            runCatching { rootFocus.requestFocus() }
+                        },
+                        onSelect = { server ->
+                            viewModel.select(server)
+                            showServers = false
+                            fallbackSuggested = false
+                            playerReady = false
+                        },
                         onExit = onExit,
                     )
                 }
@@ -217,10 +293,42 @@ private fun Overlay(
     episodeNumber: Int,
     servers: List<net.jkanime.tv.model.VideoServer>,
     selectedUrl: String,
+    selectedName: String,
+    showServers: Boolean,
+    fallbackSuggested: Boolean,
+    focusRequester: FocusRequester,
+    firstServerFocus: FocusRequester,
+    onToggleServers: () -> Unit,
+    onBackToPlayer: () -> Unit,
     onSelect: (net.jkanime.tv.model.VideoServer) -> Unit,
     onExit: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    // La lista se acaba de abrir: el foco entra en ella.
+    LaunchedEffect(showServers) {
+        if (!showServers) return@LaunchedEffect
+        repeat(10) {
+            withFrameNanos { }
+            if (firstServerFocus.requestFocus()) return@LaunchedEffect
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            // Con los servidores ocultos, "arriba" devuelve el foco al
+            // reproductor; con la lista abierta, arriba navega entre filas.
+            .onKeyEvent { event ->
+                if (!showServers &&
+                    event.type == KeyEventType.KeyDown &&
+                    event.key == Key.DirectionUp
+                ) {
+                    onBackToPlayer()
+                    true
+                } else {
+                    false
+                }
+            },
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -258,30 +366,56 @@ private fun Overlay(
                 .padding(horizontal = 24.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = "Fuentes",
-                style = MaterialTheme.typography.labelMedium,
-                color = JkTextSecondary,
-            )
+            if (fallbackSuggested) {
+                Text(
+                    text = "$selectedName no cargó. Prueba con otro servidor.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = JkOrange,
+                )
+            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                servers
-                    .filter { it.kind != ServerKind.DOWNLOAD }
-                    .take(5)
-                    .forEach { server ->
-                        TvActionButton(
-                            text = server.displayName,
-                            primary = server.url == selectedUrl,
-                            onClick = { onSelect(server) },
-                        )
-                    }
+            if (showServers) {
+                Text(
+                    text = "Fuentes",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = JkTextSecondary,
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    servers
+                        .filter { it.kind != ServerKind.DOWNLOAD }
+                        // Los players del sitio (Desu, Magi) primero: son los
+                        // más estables. sortedBy es estable, así que conserva
+                        // el orden original dentro de cada grupo.
+                        .sortedBy { if (it.kind == ServerKind.JKPLAYER) 0 else 1 }
+                        .take(6)
+                        .forEachIndexed { index, server ->
+                            TvActionButton(
+                                text = server.displayName,
+                                primary = server.url == selectedUrl,
+                                modifier = if (index == 0) {
+                                    Modifier.focusRequester(firstServerFocus)
+                                } else {
+                                    Modifier
+                                },
+                                onClick = { onSelect(server) },
+                            )
+                        }
+                }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                TvActionButton(
+                    text = if (showServers) "Ocultar servidores" else "Usar otro servidor",
+                    primary = fallbackSuggested && !showServers,
+                    modifier = Modifier.focusRequester(focusRequester),
+                    onClick = onToggleServers,
+                )
+                Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = "OK oculta los controles · ◀ ▶ retrocede/avanza 10 s · Atrás sale",
                     style = MaterialTheme.typography.labelSmall,

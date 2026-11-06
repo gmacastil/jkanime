@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -19,11 +21,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import net.jkanime.tv.ui.theme.JkGreen
 import net.jkanime.tv.ui.theme.JkOrange
 import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkSurfaceHigh
@@ -82,47 +87,74 @@ fun TvActionButton(
     }
 }
 
-/** Item de la grilla de capítulos. */
+/**
+ * Fila de capítulo (columna derecha del detalle).
+ *
+ * Tres estados visuales:
+ * - **visto** (`watched`): insignia y etiqueta en verde.
+ * - **en curso** (`inProgress`): insignia naranja + barra fina de avance.
+ * - **sin ver**: insignia neutra.
+ */
 @Composable
-fun EpisodeTile(
+fun ChapterRow(
     number: String,
     title: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     watched: Boolean = false,
+    inProgress: Boolean = false,
+    progressFraction: Float = 0f,
+    progressLabel: String? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
+    val background = when {
+        focused -> JkSurfaceHigh
+        watched -> JkGreen.copy(alpha = 0.12f)
+        else -> JkSurface
+    }
+
     Row(
         modifier = modifier
-            .width(260.dp)
+            .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(if (focused) JkSurfaceHigh else JkSurface)
+            .background(background)
             .border(
                 width = if (focused) 2.dp else 0.dp,
                 color = if (focused) JkOrange else Color.Transparent,
                 shape = RoundedCornerShape(8.dp),
+            )
+            // El FocusRequester va antes del focusable (clickable).
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (watched) JkSurfaceHigh else JkOrange)
+                .background(
+                    when {
+                        watched -> JkGreen
+                        inProgress -> JkOrange
+                        else -> JkSurfaceHigh
+                    },
+                )
                 .padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
             Text(
                 text = number,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (watched) JkTextSecondary else Color(0xFF141414),
+                color = if (watched || inProgress) Color(0xFF141414) else JkTextPrimary,
             )
         }
 
@@ -134,10 +166,36 @@ fun EpisodeTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+
+            if (inProgress && !watched) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(JkSurfaceHigh),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progressFraction.coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .background(JkOrange),
+                    )
+                }
+            }
+        }
+
+        val label = when {
+            watched -> "Visto"
+            inProgress -> progressLabel ?: "En curso"
+            else -> null
+        }
+        if (label != null) {
             Text(
-                text = if (watched) "Visto" else "Ver",
+                text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = JkTextSecondary,
+                color = if (watched) JkGreen else JkOrange,
             )
         }
     }
