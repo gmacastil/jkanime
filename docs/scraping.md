@@ -150,22 +150,61 @@ Clasificación en `VideoServerParser`:
 > `chaliceguzzlerlandlord.com`, `periodpennavigation.com`. Detalle completo del
 > diagnóstico en [emulator-testing.md](emulator-testing.md).
 
-## 5. Otros endpoints (para fases siguientes)
+## 5. Buscador
+
+`GET /buscar?q=<consulta>` responde **302** a `GET /buscar/<consulta>`, que es
+HTML server-rendered con hasta **30 fichas** y **sin paginación**. La app pide
+la ruta final directamente (el rate limit es de 700 ms por petición, no vale
+gastar una redirección). Espacios como `%20` funcionan; `+` también.
+
+```html
+<div class="col-lg-2" data-g="MjAzNA==">
+  <div class="anime__item">
+    <a href="https://jkanime.net/naruto/">
+      <div class="g-0 anime__item__pic set-bg"
+           data-setbg="https://cdn.jkdesa.com/assets/images/animes/image/naruto.jpg">…</div>
+    </a>
+    <div class="anime__item__text">
+      <ul><li>Concluido</li><li class="anime">Serie</li></ul>
+      <h5><a href="https://jkanime.net/naruto/">Naruto</a></h5>
+    </div>
+  </div>
+</div>
+```
+
+| Dato | Selector |
+|---|---|
+| ficha | `div.anime__item` |
+| slug / URL | `h5 a[href]` → `/slug/` |
+| póster 2:3 | `div.anime__item__pic[data-setbg]` |
+| estado | `ul li` sin clase → `Concluido` |
+| tipo | `ul li.anime` → `Serie` / `Película` / `OVA` / `Especial` |
+| título | `h5 a` |
+
+Fixture: `search.html` (`GET /buscar/naruto`, 23 fichas). Parser:
+`SearchParser`.
+
+> Existe también `POST /ajax_search` (CSRF, `q=`), el autocompletado del sitio:
+> devuelve **solo 5 fichas** en JSON. Se descartó para la app porque la grilla
+> de TV se queda corta; se documenta aquí por si hace falta una búsqueda
+> instantánea de bajo coste.
+
+## 6. Otros endpoints (para fases siguientes)
 
 | Uso | Endpoint |
 |---|---|
-| Búsqueda | `POST /ajax_search` (CSRF, `q=`) |
 | Directorio | `GET /directorio` |
 | Horario semanal | `GET /horario` (`div.page_horario`) |
 | Top | `GET /top` |
 | Estrenos | `GET /estrenos` |
 
-## 6. Reglas de convivencia con el sitio
+## 7. Reglas de convivencia con el sitio
 
 1. `CookieJar` en memoria por proceso (Laravel).
 2. 1 request cada 700 ms + jitter de hasta 250 ms.
 3. UA de Android TV real; `Accept-Language: es-ES`.
-4. Caché: programación 10 min · detalle 24 h · episodios 30 min · fuentes 30 min.
+4. Caché: programación 10 min · detalle 24 h · episodios 30 min · fuentes 30 min ·
+   búsqueda 10 min.
 5. `Referer` de la página del anime en el POST AJAX.
 6. Si aparece `403` o el DOM no matchea, se reintenta con caché (fail-open) y se
    reporta el error en la UI.

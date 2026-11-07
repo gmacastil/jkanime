@@ -3,9 +3,11 @@ package net.jkanime.tv.catalog
 import net.jkanime.tv.catalog.parser.AnimeDetailParser
 import net.jkanime.tv.catalog.parser.EpisodeJsonParser
 import net.jkanime.tv.catalog.parser.ProgramacionParser
+import net.jkanime.tv.catalog.parser.SearchParser
 import net.jkanime.tv.catalog.parser.VideoServerParser
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeDetail
+import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.EpisodesPage
 import net.jkanime.tv.model.Jk
 import net.jkanime.tv.model.ProgramacionSection
@@ -57,6 +59,10 @@ class JkanimeCatalogDataSource(private val http: JkHttpClient = JkHttpClient()) 
 
     suspend fun loadServers(episodeUrl: String, referer: String? = null): List<VideoServer> =
         VideoServerParser.parse(http.getHtml(episodeUrl, referer = referer), episodeUrl)
+
+    /** Buscador del sitio: HTML server-rendered con hasta 30 fichas. */
+    suspend fun loadSearch(query: String): List<AnimeSearchHit> =
+        SearchParser.parse(http.getHtml(Jk.searchUrl(query)))
 
     suspend fun resetSession() = http.resetSession()
 }

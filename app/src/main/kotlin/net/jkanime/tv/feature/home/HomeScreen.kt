@@ -17,10 +17,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +43,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -51,11 +58,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
 import net.jkanime.tv.data.local.FavoriteEntity
 import net.jkanime.tv.model.AnimeCard
+import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.ProgramacionSection
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
@@ -71,10 +80,10 @@ import net.jkanime.tv.ui.theme.JkTextSecondary
 /**
  * Home = "Programación" del sitio, en tarjetas.
  *
- * Cabecera: botón hamburguesa + marca + campo de búsqueda siempre visible
- * (los resultados se filtran en memoria sobre lo ya cargado). Los filtros
- * (Animes / Donghuas / OVAs / Favoritos / Sync) viven en un menú lateral
- * colapsable para dejarle el ancho a la grilla.
+ * Cabecera: botón hamburguesa + marca + campo de búsqueda siempre visible.
+ * La búsqueda consulta el **buscador del sitio** (`GET /buscar/{q}`), no un
+ * filtro local. Los filtros (Animes / Donghuas / OVAs / Favoritos / Sync)
+ * viven en un menú lateral colapsable para dejarle el ancho a la grilla.
  */
 @Composable
 fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
@@ -89,7 +98,7 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
     val showFavorites by viewModel.showFavorites.collectAsStateWithLifecycle()
     val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
-    val results by viewModel.searchResults.collectAsStateWithLifecycle()
+    val search by viewModel.search.collectAsStateWithLifecycle()
 
     val searchFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
@@ -101,9 +110,14 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
     var focusNonce by remember { mutableIntStateOf(0) }
     var drawerWasOpen by remember { mutableStateOf(false) }
 
+    // ▼ desde el campo de búsqueda cuando todavía no llegaron resultados: se
+    // recuerda la intención y se enfoca la primera tarjeta en cuanto aparecen.
+    var pendingGridFocus by remember { mutableStateOf(false) }
+
+    val searching = query.isNotBlank()
     val sections = (state as? HomeUiState.Success)?.sections
     val contentEmpty = when {
-        query.isNotBlank() -> results.isEmpty()
+        searching -> search.hits.isEmpty()
         showFavorites -> favorites.isEmpty()
         else -> sections?.get(section).isNullOrEmpty()
     }
@@ -133,7 +147,23 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
         }
     }
 
+    // Los resultados llegan por red con retraso: si el usuario ya había pedido
+    // bajar a la grilla, se le lleva al primero en cuanto existe.
+    LaunchedEffect(search.hits, pendingGridFocus) {
+        if (!pendingGridFocus || search.hits.isEmpty()) return@LaunchedEffect
+        repeat(10) {
+            withFrameNanos { }
+            if (resultsFocus.requestFocus()) {
+                pendingGridFocus = false
+                return@LaunchedEffect
+            }
+        }
+    }
+
+    // BACK cierra el menú si está abierto; si no, limpia la búsqueda antes de
+    // dejar que el sistema cierre la app.
     BackHandler(enabled = drawerOpen) { viewModel.closeDrawer() }
+    BackHandler(enabled = !drawerOpen && query.isNotEmpty()) { viewModel.clearQuery() }
 
     Box(
         modifier = Modifier
@@ -144,27 +174,31 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
             Header(
                 drawerOpen = drawerOpen,
                 query = query,
-                resultCount = results.size,
+                searching = searching,
+                loading = search.loading,
+                resultCount = search.hits.size,
                 searchFocus = searchFocus,
                 menuFocus = menuFocus,
                 onToggleDrawer = {
                     if (drawerOpen) viewModel.closeDrawer() else viewModel.openDrawer()
                 },
                 onQueryChange = viewModel::setQuery,
-                // El foco baja a la primera tarjeta; si aún no existe (aún no
-                // hay resultados) no pasa nada.
-                onMoveDown = { runCatching { resultsFocus.requestFocus() } },
+                onMoveDown = {
+                    val moved = runCatching { resultsFocus.requestFocus() }.getOrDefault(false)
+                    pendingGridFocus = !moved
+                },
             )
 
             when {
-                query.isNotBlank() -> CardsGrid(
-                    cards = results,
-                    emptyMessage = "Sin resultados para \"$query\"",
-                    resetKey = query,
-                    showSection = true,
-                    autoFocusFirst = false,
+                searching && search.error != null -> ErrorState(
+                    message = search.error!!,
+                    onRetry = viewModel::retrySearch,
+                )
+
+                searching -> SearchGrid(
+                    state = search,
+                    resetKey = search.query,
                     firstFocusRequester = resultsFocus,
-                    focusNonce = focusNonce,
                     onOpenAnime = onOpenAnime,
                 )
 
@@ -229,6 +263,8 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
 private fun Header(
     drawerOpen: Boolean,
     query: String,
+    searching: Boolean,
+    loading: Boolean,
     resultCount: Int,
     searchFocus: FocusRequester,
     menuFocus: FocusRequester,
@@ -243,7 +279,8 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TvIconButton(
-            icon = "☰",
+            icon = Icons.Filled.Menu,
+            contentDescription = "Menú",
             active = drawerOpen,
             focusRequester = menuFocus,
             onClick = onToggleDrawer,
@@ -258,6 +295,8 @@ private fun Header(
 
         SearchField(
             query = query,
+            searching = searching,
+            loading = loading,
             resultCount = resultCount,
             focusRequester = searchFocus,
             onQueryChange = onQueryChange,
@@ -268,14 +307,15 @@ private fun Header(
 }
 
 /**
- * Campo de búsqueda permanente, con forma de píldora (estilo widget de
- * búsqueda). Se usa `BasicTextField` y no un `TextField` de Material porque en
- * Compose for TV no existe; al enfocarlo, el teclado en pantalla del sistema
- * (el de Leanback) se abre con el D-pad.
+ * Campo de búsqueda permanente. Se usa `BasicTextField` y no un `TextField` de
+ * Material porque en Compose for TV no existe; al enfocarlo, el teclado en
+ * pantalla del sistema (el de Leanback) se abre con el D-pad.
  */
 @Composable
 private fun SearchField(
     query: String,
+    searching: Boolean,
+    loading: Boolean,
     resultCount: Int,
     focusRequester: FocusRequester,
     onQueryChange: (String) -> Unit,
@@ -283,16 +323,17 @@ private fun SearchField(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
 
     Row(
         modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(26.dp))
+            .height(48.dp)
+            .clip(shape)
             .background(JkSurfaceHigh)
             .border(
                 width = if (focused) 2.dp else 0.dp,
                 color = if (focused) JkOrange else Color.Transparent,
-                shape = RoundedCornerShape(26.dp),
+                shape = shape,
             )
             .onFocusChanged { focused = it.hasFocus }
             // El BasicTextField de una línea consume DirectionDown para mover
@@ -306,13 +347,14 @@ private fun SearchField(
                     false
                 }
             }
-            .padding(horizontal = 20.dp),
+            .padding(start = 16.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "🔍",
-            style = MaterialTheme.typography.bodyMedium,
-            color = JkTextSecondary,
+        Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = null,
+            tint = JkTextSecondary,
+            modifier = Modifier.size(20.dp),
         )
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -330,7 +372,7 @@ private fun SearchField(
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
                         Text(
-                            text = "Buscar anime…",
+                            text = "Buscar anime en jkanime…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = JkTextSecondary,
                         )
@@ -340,12 +382,16 @@ private fun SearchField(
             },
         )
 
-        if (query.isNotEmpty()) {
-            Spacer(modifier = Modifier.width(12.dp))
+        if (searching) {
             Text(
-                text = if (resultCount == 0) "sin resultados" else "$resultCount",
+                text = when {
+                    loading -> "buscando…"
+                    resultCount == 0 -> "sin resultados"
+                    else -> "$resultCount"
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = JkTextSecondary,
+                modifier = Modifier.padding(end = 16.dp),
             )
         }
     }
@@ -397,12 +443,14 @@ private fun SideDrawer(
         Spacer(modifier = Modifier.height(6.dp))
 
         DrawerItem(
-            label = "★  Favoritos",
+            label = "Favoritos",
+            icon = Icons.Filled.Star,
             selected = showFavorites,
             onClick = onFavorites,
         )
         DrawerItem(
-            label = "⇄  Sync",
+            label = "Sync",
+            icon = Icons.Filled.Refresh,
             selected = false,
             onClick = onSync,
         )
@@ -414,6 +462,7 @@ private fun DrawerItem(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    icon: ImageVector? = null,
     focusRequester: FocusRequester? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -424,8 +473,13 @@ private fun DrawerItem(
         selected -> JkOrange
         else -> Color.Transparent
     }
+    val contentColor = when {
+        focused -> JkOrange
+        selected -> Color(0xFF141414)
+        else -> JkTextPrimary
+    }
 
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
@@ -446,26 +500,92 @@ private fun DrawerItem(
                 onClick = onClick,
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            color = when {
-                focused -> JkOrange
-                selected -> Color(0xFF141414)
-                else -> JkTextPrimary
-            },
+            color = contentColor,
         )
     }
 }
 
 /**
- * Grilla de tarjetas de Programación. `showSection` añade el origen
- * (Animes/Donghuas/OVAs) al subtítulo, útil en los resultados de búsqueda.
+ * Grilla de resultados del buscador del sitio.
  *
- * `autoFocusFirst` se desactiva mientras se escribe: si la grilla robara el
- * foco al cambiar los resultados, el campo de búsqueda dejaría de recibir
- * teclas a la segunda letra.
+ * `autoFocusFirst` no existe aquí a propósito: mientras se escribe el foco debe
+ * quedarse en el campo; se baja con ▼.
+ */
+@Composable
+private fun SearchGrid(
+    state: SearchUiState,
+    resetKey: Any,
+    firstFocusRequester: FocusRequester?,
+    onOpenAnime: (String) -> Unit,
+) {
+    when {
+        !state.hasQuery -> {
+            LoadingState(
+                message = "Escribe al menos ${HomeViewModel.MIN_QUERY_LENGTH} letras " +
+                    "para buscar en jkanime",
+            )
+            return
+        }
+        state.loading && state.hits.isEmpty() -> {
+            LoadingState(message = "Buscando \"${state.query}\"…")
+            return
+        }
+        state.hits.isEmpty() -> {
+            LoadingState(message = "Sin resultados para \"${state.query}\"")
+            return
+        }
+    }
+
+    val firstCardFocus = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(resetKey) {
+        gridState.scrollToItem(0)
+    }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Fixed(6),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 36.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(22.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(state.hits, key = { it.slug }) { hit ->
+            PosterCard(
+                title = hit.title,
+                posterUrl = hit.posterUrl,
+                badge = hit.type,
+                subtitle = hit.statusLabel,
+                width = null,
+                focusRequester = if (hit === state.hits.first()) {
+                    firstFocusRequester ?: firstCardFocus
+                } else {
+                    null
+                },
+                onClick = { onOpenAnime(hit.slug) },
+            )
+        }
+    }
+}
+
+/**
+ * Grilla de tarjetas de Programación. `showSection` añade el origen
+ * (Animes/Donghuas/OVAs) al subtítulo.
  *
  * `focusNonce` cambia al elegir algo en el menú lateral; obliga a repedir el
  * foco aunque las tarjetas sean las mismas (el ítem del menú desaparece del
@@ -477,8 +597,6 @@ private fun CardsGrid(
     emptyMessage: String,
     resetKey: Any,
     showSection: Boolean,
-    autoFocusFirst: Boolean = true,
-    firstFocusRequester: FocusRequester? = null,
     focusNonce: Int = 0,
     onOpenAnime: (String) -> Unit,
 ) {
@@ -490,8 +608,8 @@ private fun CardsGrid(
     val firstCardFocus = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
 
-    // Al cambiar de sección (o de búsqueda) la grilla vuelve arriba: si no, el
-    // scroll anterior se arrastra y la primera fila queda cortada.
+    // Al cambiar de sección la grilla vuelve arriba: si no, el scroll anterior
+    // se arrastra y la primera fila queda cortada.
     LaunchedEffect(resetKey) {
         gridState.scrollToItem(0)
     }
@@ -500,8 +618,7 @@ private fun CardsGrid(
     // DESPUÉS del primer frame (los items del LazyGrid se crean durante la
     // medición) y se reintenta: requestFocus() devuelve false, no lanza, si el
     // nodo aún no está listo.
-    LaunchedEffect(cards, autoFocusFirst, focusNonce) {
-        if (!autoFocusFirst) return@LaunchedEffect
+    LaunchedEffect(cards, focusNonce) {
         repeat(10) {
             withFrameNanos { }
             if (firstCardFocus.requestFocus()) return@LaunchedEffect
@@ -527,11 +644,7 @@ private fun CardsGrid(
                     card.dateLabel,
                 ).joinToString(" · ").ifBlank { null },
                 width = null,
-                focusRequester = if (card === cards.first()) {
-                    firstFocusRequester ?: firstCardFocus
-                } else {
-                    null
-                },
+                focusRequester = if (card === cards.first()) firstCardFocus else null,
                 onClick = { onOpenAnime(card.slug) },
             )
         }

@@ -17,10 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -49,11 +54,12 @@ import net.jkanime.tv.model.Episode
 import net.jkanime.tv.ui.component.ChapterRow
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
+import net.jkanime.tv.ui.component.SortArrowsIcon
 import net.jkanime.tv.ui.component.TvActionButton
-import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkGreen
 import net.jkanime.tv.ui.theme.JkOrange
+import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkSurfaceHigh
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
@@ -211,11 +217,10 @@ private fun Content(
                     style = MaterialTheme.typography.titleMedium,
                     color = JkTextPrimary,
                 )
-                // Ordenamiento: icono de flechas arriba/abajo pegado al título
-                // de la lista (antes era un botón con texto que ocupaba media fila).
-                TvIconButton(
-                    icon = "⇅",
-                    active = false,
+                // Ordenamiento: flechas arriba/abajo pegadas al título de la
+                // lista (antes era un botón con texto que ocupaba media fila).
+                SortButton(
+                    descending = descending,
                     onClick = onToggleSort,
                 )
                 resumeEpisode?.let { episode ->
@@ -388,6 +393,37 @@ private fun MetaLine(label: String, value: String, valueColor: Color = JkTextPri
     }
 }
 
+/** Botón de orden: flechas Material apiladas, con el estado en el color. */
+@Composable
+private fun SortButton(descending: Boolean, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val tint = when {
+        focused -> JkOrange
+        descending -> JkOrange
+        else -> JkTextPrimary
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (focused) JkSurfaceHigh else JkSurface)
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) JkOrange else Color.Transparent,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        SortArrowsIcon(tint = tint)
+    }
+}
+
 /** Estrella de favoritos: rellena si el anime ya está en la lista. */
 @Composable
 private fun FavoriteStar(
@@ -403,24 +439,26 @@ private fun FavoriteStar(
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
-            .clip(RoundedCornerShape(50))
+            .size(48.dp)
+            .clip(CircleShape)
             .background(if (focused) JkSurfaceHigh else Color.Transparent)
             .border(
                 width = 2.dp,
                 color = if (focused) JkOrange else Color.Transparent,
-                shape = RoundedCornerShape(50),
+                shape = CircleShape,
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onToggle,
-            )
-            .padding(horizontal = 12.dp, vertical = 2.dp),
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = if (isFavorite) "★" else "☆",
-            style = MaterialTheme.typography.headlineMedium,
-            color = if (isFavorite) JkOrange else JkTextSecondary,
+        Icon(
+            imageVector = Icons.Filled.Star,
+            contentDescription = if (isFavorite) "Quitar de favoritos" else "Añadir a favoritos",
+            tint = if (isFavorite) JkOrange else JkTextSecondary,
+            modifier = Modifier.size(30.dp),
         )
     }
 }

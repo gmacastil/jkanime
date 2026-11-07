@@ -270,21 +270,29 @@ en el hilo principal) en vez de a la lambda. Síntoma: el vídeo reproduce
   el aviso aparece a los 20 s y la lista queda abierta con el foco en el primer
   servidor; elegir Magi recarga y el aviso desaparece al enganchar el vídeo.
 
-## F8 — Cabecera con menú lateral, buscador fijo e icono de orden — verificado
+## F8 — Cabecera con menú lateral, buscador del sitio e iconos Material — verificado
 
 ### Home
 
 - La cabecera ya no tiene la fila de botones (Animes/Donghuas/OVAs/Favoritos/
-  Sync) ni el texto "Programación": queda `☰` + marca + campo de búsqueda en
-  forma de píldora, siempre visible y ocupando el ancho restante.
+  Sync) ni el texto "Programación": queda `☰` + marca + campo de búsqueda,
+  siempre visible y ocupando el ancho restante. Radio de 10 dp (antes píldora
+  de 26 dp) e iconos Material (`Icons.Filled.Menu` / `Search`), no emojis.
 - Los filtros viven en un `SideDrawer` de 260 dp sobre un velo negro al 60 %.
   Se abre con `☰`, se cierra con `BACK` (`BackHandler`) o al elegir una entrada.
   Al abrir, el foco va al primer ítem (`Animes`); al cerrar, la grilla lo
   recupera.
-- La búsqueda ya no es un modo: `query` no vacío gana sobre la sección y sobre
-  favoritos. Con la consulta vacía se ve la sección elegida.
-- La entrada `Favoritos` del menú **muestra** favoritos (antes era un toggle);
-  para volver a una sección se elige en el mismo menú.
+- La búsqueda **pega al buscador del sitio** (`GET /buscar/{q}`, ver
+  `scraping.md` §5), no filtra en memoria. Debounce de 550 ms, mínimo 2 letras,
+  caché de 10 min y `searchJob.cancel()` para que una respuesta vieja no pise a
+  la nueva. Mientras carga se mantienen los resultados anteriores y el contador
+  de la barra dice `buscando…`.
+- `BACK` con una búsqueda activa la limpia (y vuelve a la sección) en vez de
+  cerrar la app.
+
+**Trampa:** el `BasicTextField` consume `DirectionLeft/Right` para el cursor, así
+que un botón `✕` a la derecha del campo es **inalcanzable** con el D-pad. Por eso
+limpiar es `BACK`, no un icono.
 
 **Trampa:** al elegir una entrada del menú, el ítem enfocado desaparece del
 árbol y el D-pad queda muerto. `HomeScreen` lleva un `focusNonce` que se
@@ -293,22 +301,31 @@ el foco de la primera tarjeta (si no, con las mismas tarjetas el efecto no se
 relanza). Si el contenido queda vacío (favoritos sin nada) el foco cae al botón
 `☰`, que siempre existe.
 
+**Trampa:** los resultados llegan por red con retraso. Si el usuario pulsa `▼`
+antes de que existan, `pendingGridFocus` recuerda la intención y el foco baja a
+la primera tarjeta en cuanto aparecen.
+
 **Trampa:** el velo del menú **no** bloquea el foco geométricamente. Con el
 menú abierto, `DPAD_RIGHT` desde un ítem puede aterrizar en una tarjeta de la
 grilla de detrás; para salir del menú está `BACK` o elegir una entrada.
 
 ### Detalle
 
-- El botón de orden pasó a `TvIconButton("⇅")` pegado al texto
-  `Capítulos (N)`; el estado actual se lee en una etiqueta pequeña a la derecha
-  de la fila (`Nuevos primero` / `Antiguos primero`).
+- El botón de orden pasó a flechas Material apiladas
+  (`Icons.Filled.KeyboardArrowUp` + `KeyboardArrowDown`; `SwapVert` solo existe
+  en `material-icons-extended`, que pesaría decenas de MB) pegadas al texto
+  `Capítulos (N)`. El estado se lee en el color (naranja = descendente) y en la
+  etiqueta `Nuevos primero` / `Antiguos primero`.
+- La estrella de favoritos es `Icons.Filled.Star` en un círculo de 48 dp:
+  gris si no está, naranja si está. `material-icons-core` no trae `StarBorder`.
 - El `LaunchedEffect` que pide el foco inicial **no** incluye el orden en su
-  clave: si lo incluyera, al tocar `⇅` el foco saltaba a la primera fila y no
-  se podía volver a invertir sin navegar de nuevo.
+  clave: si lo incluyera, al tocar el icono el foco saltaba a la primera fila y
+  no se podía volver a invertir sin navegar de nuevo.
 
 Verificado en emulador: `☰` → menú con foco en `Animes` → `Donghuas` cierra y
 recarga la grilla con foco en la primera tarjeta; `BACK` cierra el menú sin
 cambiar de sección; `Favoritos` vacío deja el foco en `☰`; `Sync` abre la
-pantalla de sincronización; la búsqueda filtra al instante (`majutsu` → 2
-resultados, etiqueta `Animes · Jueves 05`) y `⇅` invierte el orden sin perder el
-foco.
+pantalla de sincronización. Buscador: `naruto` → **23** fichas del sitio
+(Boruto, Boruto the Movie, Naruto, Naruto Shippuden…), `shingeki` → 18,
+`one` → 30 (el tope del sitio). `▼` baja a la primera tarjeta y `ENTER` abre el
+detalle de un resultado remoto. `BACK` con búsqueda activa la limpia.

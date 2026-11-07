@@ -29,8 +29,23 @@ data class AnimeCard(
     val animeUrl: String get() = Jk.animeUrl(slug)
 }
 
-/** Estado de emisión tal como lo publica el sitio. */
-enum class AiringStatus(val raw: String, val label: String) {
+/**
+ * Resultado del buscador del sitio (`GET /buscar/{consulta}`).
+ *
+ * A diferencia de [AnimeCard] no es un episodio recién subido: es una ficha
+ * de anime del catálogo, sin número de episodio ni sección de programación.
+ */
+data class AnimeSearchHit(
+    val slug: String,
+    val title: String,
+    val posterUrl: String?,
+    val type: String?,
+    val statusLabel: String?,
+) {
+    val animeUrl: String get() = Jk.animeUrl(slug)
+}
+
+/** Estado de emisión tal como lo publica el sitio. */enum class AiringStatus(val raw: String, val label: String) {
     CURRENTLY("currently", "En emisión"),
     FINISHED("finished", "Concluido"),
     UPCOMING("upcoming", "Por estrenar"),

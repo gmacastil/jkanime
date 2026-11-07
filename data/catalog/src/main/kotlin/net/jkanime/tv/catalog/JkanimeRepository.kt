@@ -4,6 +4,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeDetail
+import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.EpisodesPage
 import net.jkanime.tv.model.ProgramacionSection
 import net.jkanime.tv.model.VideoServer
@@ -27,6 +28,7 @@ class JkanimeRepository(
     private val detailCache = mutableMapOf<String, Entry<AnimeDetail>>()
     private val episodesCache = mutableMapOf<Int, Entry<EpisodesPage>>()
     private val serversCache = mutableMapOf<String, Entry<List<VideoServer>>>()
+    private val searchCache = mutableMapOf<String, Entry<List<AnimeSearchHit>>>()
 
     suspend fun programacion(force: Boolean = false): Map<ProgramacionSection, List<AnimeCard>> =
         mutex.withLock {
@@ -80,11 +82,32 @@ class JkanimeRepository(
             loaded
         }
 
+    /**
+     * Buscador del sitio. La clave de caché va en minúsculas para que
+     * "Naruto" y "naruto" no gasten dos peticiones (el sitio es
+     * case-insensitive).
+     */
+    suspend fun search(query: String, force: Boolean = false): List<AnimeSearchHit> =
+        mutex.withLock {
+            val key = query.trim().lowercase()
+            if (key.isBlank()) return@withLock emptyList()
+
+            val cached = searchCache[key]
+            if (!force && cached != null && isFresh(cached.storedAt, SEARCH_TTL_MS)) {
+                return@withLock cached.value
+            }
+            val loaded = runCatching { dataSource.loadSearch(key) }
+                .getOrElse { error -> cached?.value ?: throw error }
+            searchCache[key] = Entry(loaded, now())
+            loaded
+        }
+
     suspend fun invalidateAll() = mutex.withLock {
         programacionCache = null
         detailCache.clear()
         episodesCache.clear()
         serversCache.clear()
+        searchCache.clear()
         dataSource.resetSession()
     }
 
@@ -97,5 +120,6 @@ class JkanimeRepository(
         const val DETAIL_TTL_MS = 24 * 60 * 60 * 1000L
         const val EPISODES_TTL_MS = 30 * 60 * 1000L
         const val SERVERS_TTL_MS = 30 * 60 * 1000L
+        const val SEARCH_TTL_MS = 10 * 60 * 1000L
     }
 }

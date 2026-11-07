@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.tv.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -25,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -90,18 +95,21 @@ fun TvActionButton(
 }
 
 /**
- * Botón compacto de icono (glifo) para D-pad: mismo lenguaje visual que
- * [TvActionButton] pero cuadrado y sin texto de relleno. Se usa para el menú
- * hamburguesa y para el icono de ordenamiento de capítulos.
+ * Botón compacto de icono para D-pad: mismo lenguaje visual que
+ * [TvActionButton] pero cuadrado y sin texto. Se usa para el menú
+ * hamburguesa, la lupa del buscador y el icono de ordenamiento.
  */
 @Composable
 fun TvIconButton(
-    icon: String,
+    icon: ImageVector,
+    contentDescription: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     active: Boolean = false,
     focusRequester: FocusRequester? = null,
     size: Dp = 44.dp,
+    iconSize: Dp = 22.dp,
+    tint: Color? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -111,7 +119,7 @@ fun TvIconButton(
         active -> JkOrange
         else -> JkSurface
     }
-    val contentColor = when {
+    val contentColor = tint ?: when {
         focused -> JkOrange
         active -> Color(0xFF141414)
         else -> JkTextPrimary
@@ -138,10 +146,41 @@ fun TvIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = icon,
-            style = MaterialTheme.typography.titleMedium,
-            color = contentColor,
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
+/**
+ * Flechas arriba/abajo apiladas (el `⇅` de ordenar). No existe en
+ * `material-icons-core` (solo en el artefacto `extended`, que pesa decenas de
+ * MB), así que se compone con los dos chevrons que sí vienen en core.
+ */
+@Composable
+fun SortArrowsIcon(
+    modifier: Modifier = Modifier,
+    tint: Color = JkTextPrimary,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy((-8).dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.KeyboardArrowUp,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
+        Icon(
+            imageVector = Icons.Filled.KeyboardArrowDown,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(18.dp),
         )
     }
 }

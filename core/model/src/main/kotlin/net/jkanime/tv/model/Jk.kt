@@ -23,6 +23,17 @@ object Jk {
     const val CDN_VIDEO = "https://cdn.jkdesa.com/assets/images/animes/video/image/"
 
     const val SEARCH_AJAX_URL = "$BASE_URL/ajax_search"
+
+    /**
+     * Buscador del sitio. `GET /buscar?q=` responde 302 a `/buscar/{consulta}`,
+     * que es HTML con hasta 30 fichas (`div.anime__item`). Se pide la ruta
+     * final directamente para no gastar una redirección (el rate limit es de
+     * 700 ms por petición).
+     */
+    fun searchUrl(query: String): String {
+        val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8").replace("+", "%20")
+        return "$BASE_URL/buscar/$encoded"
+    }
     const val DIRECTORY_URL = "$BASE_URL/directorio"
     const val SCHEDULE_URL = "$BASE_URL/horario"
 
