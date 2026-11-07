@@ -269,3 +269,46 @@ en el hilo principal) en vez de a la lambda. Síntoma: el vídeo reproduce
 - Con el servidor caído (la web devuelve `500 Server Error` dentro del iframe)
   el aviso aparece a los 20 s y la lista queda abierta con el foco en el primer
   servidor; elegir Magi recarga y el aviso desaparece al enganchar el vídeo.
+
+## F8 — Cabecera con menú lateral, buscador fijo e icono de orden — verificado
+
+### Home
+
+- La cabecera ya no tiene la fila de botones (Animes/Donghuas/OVAs/Favoritos/
+  Sync) ni el texto "Programación": queda `☰` + marca + campo de búsqueda en
+  forma de píldora, siempre visible y ocupando el ancho restante.
+- Los filtros viven en un `SideDrawer` de 260 dp sobre un velo negro al 60 %.
+  Se abre con `☰`, se cierra con `BACK` (`BackHandler`) o al elegir una entrada.
+  Al abrir, el foco va al primer ítem (`Animes`); al cerrar, la grilla lo
+  recupera.
+- La búsqueda ya no es un modo: `query` no vacío gana sobre la sección y sobre
+  favoritos. Con la consulta vacía se ve la sección elegida.
+- La entrada `Favoritos` del menú **muestra** favoritos (antes era un toggle);
+  para volver a una sección se elige en el mismo menú.
+
+**Trampa:** al elegir una entrada del menú, el ítem enfocado desaparece del
+árbol y el D-pad queda muerto. `HomeScreen` lleva un `focusNonce` que se
+incrementa en cada selección y entra en la clave del `LaunchedEffect` que pide
+el foco de la primera tarjeta (si no, con las mismas tarjetas el efecto no se
+relanza). Si el contenido queda vacío (favoritos sin nada) el foco cae al botón
+`☰`, que siempre existe.
+
+**Trampa:** el velo del menú **no** bloquea el foco geométricamente. Con el
+menú abierto, `DPAD_RIGHT` desde un ítem puede aterrizar en una tarjeta de la
+grilla de detrás; para salir del menú está `BACK` o elegir una entrada.
+
+### Detalle
+
+- El botón de orden pasó a `TvIconButton("⇅")` pegado al texto
+  `Capítulos (N)`; el estado actual se lee en una etiqueta pequeña a la derecha
+  de la fila (`Nuevos primero` / `Antiguos primero`).
+- El `LaunchedEffect` que pide el foco inicial **no** incluye el orden en su
+  clave: si lo incluyera, al tocar `⇅` el foco saltaba a la primera fila y no
+  se podía volver a invertir sin navegar de nuevo.
+
+Verificado en emulador: `☰` → menú con foco en `Animes` → `Donghuas` cierra y
+recarga la grilla con foco en la primera tarjeta; `BACK` cierra el menú sin
+cambiar de sección; `Favoritos` vacío deja el foco en `☰`; `Sync` abre la
+pantalla de sincronización; la búsqueda filtra al instante (`majutsu` → 2
+resultados, etiqueta `Animes · Jueves 05`) y `⇅` invierte el orden sin perder el
+foco.

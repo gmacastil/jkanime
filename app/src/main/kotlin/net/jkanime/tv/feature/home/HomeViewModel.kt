@@ -42,19 +42,36 @@ class HomeViewModel(
     private val _showFavorites = MutableStateFlow(false)
     val showFavorites: StateFlow<Boolean> = _showFavorites.asStateFlow()
 
-    fun toggleFavorites() {
-        _showFavorites.value = !_showFavorites.value
-        if (_showFavorites.value) _searchOpen.value = false
+    /** Entrada "Favoritos" del menú: siempre deja la vista en favoritos. */
+    fun openFavorites() {
+        _showFavorites.value = true
+        _query.value = ""
+        _drawerOpen.value = false
+    }
+
+    // ---------------------------------------------------------------------
+    // Menú lateral (hamburguesa): sustituye a la fila de botones que antes
+    // vivía en la cabecera. Animes/Donghuas/OVAs viven en `section`; Favoritos
+    // y Sync son entradas propias del menú.
+    // ---------------------------------------------------------------------
+
+    private val _drawerOpen = MutableStateFlow(false)
+    val drawerOpen: StateFlow<Boolean> = _drawerOpen.asStateFlow()
+
+    fun openDrawer() {
+        _drawerOpen.value = true
+    }
+
+    fun closeDrawer() {
+        _drawerOpen.value = false
     }
 
     // ---------------------------------------------------------------------
     // Búsqueda: filtra en memoria lo que ya está cargado en "Programación"
     // (animes + donghuas + ovas), así que responde al instante y no gasta
     // red. No busca en todo el catálogo del sitio, solo en lo visible.
+    // El campo está siempre visible: no hay modo búsqueda que abrir/cerrar.
     // ---------------------------------------------------------------------
-
-    private val _searchOpen = MutableStateFlow(false)
-    val searchOpen: StateFlow<Boolean> = _searchOpen.asStateFlow()
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
@@ -71,29 +88,25 @@ class HomeViewModel(
                 .sortedBy { it.title.lowercase() }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun openSearch() {
-        _showFavorites.value = false
-        _searchOpen.value = true
-    }
-
-    fun closeSearch() {
-        _searchOpen.value = false
-        _query.value = ""
-    }
-
     fun setQuery(value: String) {
         _query.value = value
+        if (value.isNotBlank()) _showFavorites.value = false
+    }
+
+    fun clearQuery() {
+        _query.value = ""
     }
 
     init {
         refresh()
     }
 
-    /** Elegir una sección sale de Favoritos y de la búsqueda. */
+    /** Elegir una sección sale de Favoritos, limpia la búsqueda y cierra el menú. */
     fun selectSection(section: ProgramacionSection) {
         _section.value = section
         _showFavorites.value = false
-        if (_searchOpen.value) closeSearch()
+        _query.value = ""
+        _drawerOpen.value = false
     }
 
     fun refresh(force: Boolean = false) {

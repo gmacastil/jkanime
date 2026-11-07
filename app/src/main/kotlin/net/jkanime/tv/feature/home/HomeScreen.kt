@@ -1,12 +1,18 @@
 package net.jkanime.tv.feature.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,13 +24,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -49,16 +60,21 @@ import net.jkanime.tv.model.ProgramacionSection
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
 import net.jkanime.tv.ui.component.PosterCard
-import net.jkanime.tv.ui.component.TvActionButton
+import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkOrange
+import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkSurfaceHigh
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
 
 /**
  * Home = "Programación" del sitio, en tarjetas.
- * Requerimiento 1 y 2 del brief, más búsqueda sobre lo ya cargado.
+ *
+ * Cabecera: botón hamburguesa + marca + campo de búsqueda siempre visible
+ * (los resultados se filtran en memoria sobre lo ya cargado). Los filtros
+ * (Animes / Donghuas / OVAs / Favoritos / Sync) viven en un menú lateral
+ * colapsable para dejarle el ancho a la grilla.
  */
 @Composable
 fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
@@ -71,117 +87,168 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
     val section by viewModel.section.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val showFavorites by viewModel.showFavorites.collectAsStateWithLifecycle()
-    val searchOpen by viewModel.searchOpen.collectAsStateWithLifecycle()
+    val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.searchResults.collectAsStateWithLifecycle()
 
     val searchFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
-    val favoritesTabFocus = remember { FocusRequester() }
+    val menuFocus = remember { FocusRequester() }
+    val firstDrawerItemFocus = remember { FocusRequester() }
+
+    // Cada vez que se elige algo en el menú hay que devolver el foco a la
+    // grilla: el ítem pulsado desaparece del árbol y el D-pad queda muerto.
+    var focusNonce by remember { mutableIntStateOf(0) }
+    var drawerWasOpen by remember { mutableStateOf(false) }
+
+    val sections = (state as? HomeUiState.Success)?.sections
+    val contentEmpty = when {
+        query.isNotBlank() -> results.isEmpty()
+        showFavorites -> favorites.isEmpty()
+        else -> sections?.get(section).isNullOrEmpty()
+    }
 
     // Con la lista de favoritos vacía no hay ninguna tarjeta que enfocar y el
-    // D-pad se quedaba muerto. Se devuelve el foco a la pestaña "Favoritos".
+    // D-pad se quedaba muerto. Se devuelve el foco al botón del menú.
     LaunchedEffect(showFavorites, favorites.isEmpty()) {
         if (!showFavorites || favorites.isNotEmpty()) return@LaunchedEffect
         repeat(10) {
             withFrameNanos { }
-            if (favoritesTabFocus.requestFocus()) return@LaunchedEffect
-        }
-    }
-    LaunchedEffect(searchOpen) {
-        if (!searchOpen) return@LaunchedEffect
-        repeat(10) {
-            withFrameNanos { }
-            if (searchFocus.requestFocus()) return@LaunchedEffect
+            if (menuFocus.requestFocus()) return@LaunchedEffect
         }
     }
 
-    Column(
+    LaunchedEffect(drawerOpen) {
+        if (drawerOpen) {
+            drawerWasOpen = true
+            repeat(10) {
+                withFrameNanos { }
+                if (firstDrawerItemFocus.requestFocus()) return@LaunchedEffect
+            }
+        } else if (drawerWasOpen) {
+            // Se deja un par de frames a la grilla para que tome el foco; si
+            // no hay nada que enfocar, al menos el menú queda alcanzable.
+            repeat(4) { withFrameNanos { } }
+            if (contentEmpty) menuFocus.requestFocus()
+        }
+    }
+
+    BackHandler(enabled = drawerOpen) { viewModel.closeDrawer() }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(JkBackground),
     ) {
-        Header(
-            selected = section,
-            showFavorites = showFavorites,
-            searchOpen = searchOpen,
-            favoritesFocus = favoritesTabFocus,
-            onSelect = viewModel::selectSection,
-            onToggleFavorites = viewModel::toggleFavorites,
-            onToggleSearch = {
-                if (searchOpen) viewModel.closeSearch() else viewModel.openSearch()
-            },
-            onOpenSync = onOpenSync,
-        )
-
-        if (searchOpen) {
-            SearchBar(
+        Column(modifier = Modifier.fillMaxSize()) {
+            Header(
+                drawerOpen = drawerOpen,
                 query = query,
                 resultCount = results.size,
-                focusRequester = searchFocus,
+                searchFocus = searchFocus,
+                menuFocus = menuFocus,
+                onToggleDrawer = {
+                    if (drawerOpen) viewModel.closeDrawer() else viewModel.openDrawer()
+                },
                 onQueryChange = viewModel::setQuery,
                 // El foco baja a la primera tarjeta; si aún no existe (aún no
                 // hay resultados) no pasa nada.
                 onMoveDown = { runCatching { resultsFocus.requestFocus() } },
-                onClose = viewModel::closeSearch,
-            )
-        }
-
-        when {
-            searchOpen -> CardsGrid(
-                cards = results,
-                emptyMessage = if (query.isBlank()) {
-                    "Escribe para buscar en Programación"
-                } else {
-                    "Sin resultados para \"$query\""
-                },
-                resetKey = query,
-                showSection = true,
-                autoFocusFirst = false,
-                firstFocusRequester = resultsFocus,
-                onOpenAnime = onOpenAnime,
             )
 
-            showFavorites -> FavoritesGrid(
-                favorites = favorites,
-                onOpenAnime = onOpenAnime,
-            )
-
-            else -> when (val current = state) {
-                is HomeUiState.Loading -> LoadingState()
-                is HomeUiState.Error -> ErrorState(
-                    message = current.message,
-                    onRetry = { viewModel.refresh(force = true) },
-                )
-                is HomeUiState.Success -> CardsGrid(
-                    cards = current.sections[section].orEmpty(),
-                    emptyMessage = "Sin novedades en esta sección",
-                    resetKey = section,
-                    showSection = false,
+            when {
+                query.isNotBlank() -> CardsGrid(
+                    cards = results,
+                    emptyMessage = "Sin resultados para \"$query\"",
+                    resetKey = query,
+                    showSection = true,
+                    autoFocusFirst = false,
+                    firstFocusRequester = resultsFocus,
+                    focusNonce = focusNonce,
                     onOpenAnime = onOpenAnime,
                 )
+
+                showFavorites -> FavoritesGrid(
+                    favorites = favorites,
+                    focusNonce = focusNonce,
+                    onOpenAnime = onOpenAnime,
+                )
+
+                else -> when (val current = state) {
+                    is HomeUiState.Loading -> LoadingState()
+                    is HomeUiState.Error -> ErrorState(
+                        message = current.message,
+                        onRetry = { viewModel.refresh(force = true) },
+                    )
+                    is HomeUiState.Success -> CardsGrid(
+                        cards = current.sections[section].orEmpty(),
+                        emptyMessage = "Sin novedades en esta sección",
+                        resetKey = section,
+                        showSection = false,
+                        focusNonce = focusNonce,
+                        onOpenAnime = onOpenAnime,
+                    )
+                }
             }
+        }
+
+        if (drawerOpen) {
+            // Velo sobre el contenido: deja claro que el menú tiene el foco.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f)),
+            )
+
+            SideDrawer(
+                selected = section,
+                showFavorites = showFavorites,
+                firstItemFocus = firstDrawerItemFocus,
+                onSelectSection = {
+                    viewModel.selectSection(it)
+                    focusNonce++
+                },
+                onFavorites = {
+                    viewModel.openFavorites()
+                    focusNonce++
+                },
+                onSync = {
+                    viewModel.closeDrawer()
+                    onOpenSync()
+                },
+            )
         }
     }
 }
 
+/**
+ * Cabecera: hamburguesa, marca y buscador fijo. Sin fila de botones: los
+ * filtros están en el menú lateral.
+ */
 @Composable
 private fun Header(
-    selected: ProgramacionSection,
-    showFavorites: Boolean,
-    searchOpen: Boolean,
-    favoritesFocus: FocusRequester,
-    onSelect: (ProgramacionSection) -> Unit,
-    onToggleFavorites: () -> Unit,
-    onToggleSearch: () -> Unit,
-    onOpenSync: () -> Unit,
+    drawerOpen: Boolean,
+    query: String,
+    resultCount: Int,
+    searchFocus: FocusRequester,
+    menuFocus: FocusRequester,
+    onToggleDrawer: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onMoveDown: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 18.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        TvIconButton(
+            icon = "☰",
+            active = drawerOpen,
+            focusRequester = menuFocus,
+            onClick = onToggleDrawer,
+        )
+        Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = "JK TV",
             style = MaterialTheme.typography.headlineSmall,
@@ -189,101 +256,78 @@ private fun Header(
         )
         Spacer(modifier = Modifier.width(24.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProgramacionSection.entries.forEach { item ->
-                TvActionButton(
-                    text = item.label,
-                    primary = item == selected && !searchOpen && !showFavorites,
-                    onClick = { onSelect(item) },
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(14.dp))
-
-        TvActionButton(
-            text = "🔍 Buscar",
-            primary = searchOpen,
-            onClick = onToggleSearch,
-        )
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        TvActionButton(
-            text = "★ Favoritos",
-            primary = showFavorites,
-            modifier = Modifier.focusRequester(favoritesFocus),
-            onClick = onToggleFavorites,
-        )
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        TvActionButton(
-            text = "⇄ Sync",
-            primary = false,
-            onClick = onOpenSync,
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Text(
-            text = "Programación",
-            style = MaterialTheme.typography.labelMedium,
-            color = JkTextSecondary,
+        SearchField(
+            query = query,
+            resultCount = resultCount,
+            focusRequester = searchFocus,
+            onQueryChange = onQueryChange,
+            onMoveDown = onMoveDown,
+            modifier = Modifier.weight(1f),
         )
     }
 }
 
 /**
- * Campo de búsqueda. Se usa `BasicTextField` y no un `TextField` de Material
- * porque en Compose for TV no existe; al enfocarlo, el teclado en pantalla del
- * sistema (el de Leanback) se abre con el D-pad.
+ * Campo de búsqueda permanente, con forma de píldora (estilo widget de
+ * búsqueda). Se usa `BasicTextField` y no un `TextField` de Material porque en
+ * Compose for TV no existe; al enfocarlo, el teclado en pantalla del sistema
+ * (el de Leanback) se abre con el D-pad.
  */
 @Composable
-private fun SearchBar(
+private fun SearchField(
     query: String,
     resultCount: Int,
     focusRequester: FocusRequester,
     onQueryChange: (String) -> Unit,
     onMoveDown: () -> Unit,
-    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    var focused by remember { mutableStateOf(false) }
+
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        // El Box intercepta la flecha abajo en fase "preview": un
-        // BasicTextField de una línea consume DirectionDown para mover el
-        // cursor y nunca deja que el foco baje a la grilla. Desde el padre
-        // (preview = de padre a hijo) sí llegamos antes que el campo.
-        Box(
-            modifier = Modifier.onPreviewKeyEvent { event ->
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(JkSurfaceHigh)
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) JkOrange else Color.Transparent,
+                shape = RoundedCornerShape(26.dp),
+            )
+            .onFocusChanged { focused = it.hasFocus }
+            // El BasicTextField de una línea consume DirectionDown para mover
+            // el cursor y nunca deja que el foco baje a la grilla. Desde el
+            // padre (preview = de padre a hijo) sí llegamos antes que el campo.
+            .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
                     onMoveDown()
                     true
                 } else {
                     false
                 }
-            },
-        ) {
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = JkTextPrimary),
-                cursorBrush = SolidColor(JkOrange),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                modifier = Modifier
-                    .width(560.dp)
-                    .focusRequester(focusRequester)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(JkSurfaceHigh)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                decorationBox = { inner ->
+            }
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "🔍",
+            style = MaterialTheme.typography.bodyMedium,
+            color = JkTextSecondary,
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = JkTextPrimary),
+            cursorBrush = SolidColor(JkOrange),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
                         Text(
                             text = "Buscar anime…",
@@ -292,23 +336,126 @@ private fun SearchBar(
                         )
                     }
                     inner()
-                },
+                }
+            },
+        )
+
+        if (query.isNotEmpty()) {
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = if (resultCount == 0) "sin resultados" else "$resultCount",
+                style = MaterialTheme.typography.labelSmall,
+                color = JkTextSecondary,
+            )
+        }
+    }
+}
+
+/** Menú lateral colapsable con los filtros y accesos. */
+@Composable
+private fun SideDrawer(
+    selected: ProgramacionSection,
+    showFavorites: Boolean,
+    firstItemFocus: FocusRequester,
+    onSelectSection: (ProgramacionSection) -> Unit,
+    onFavorites: () -> Unit,
+    onSync: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(260.dp)
+            .fillMaxHeight()
+            .background(JkSurface)
+            .border(width = 1.dp, color = JkSurfaceHigh)
+            .padding(vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "MENÚ",
+            style = MaterialTheme.typography.labelSmall,
+            color = JkTextSecondary,
+            modifier = Modifier.padding(start = 28.dp, bottom = 8.dp),
+        )
+
+        ProgramacionSection.entries.forEachIndexed { index, item ->
+            DrawerItem(
+                label = item.label,
+                selected = item == selected && !showFavorites,
+                focusRequester = if (index == 0) firstItemFocus else null,
+                onClick = { onSelectSection(item) },
             )
         }
 
-        Text(
-            text = if (query.isBlank()) {
-                "Escribe y los resultados se filtran al instante"
-            } else {
-                "$resultCount resultado(s) · ▼ para ir a la grilla"
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = JkTextSecondary,
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 24.dp, vertical = 4.dp)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(JkSurfaceHigh),
         )
+        Spacer(modifier = Modifier.height(6.dp))
 
-        Spacer(modifier = Modifier.weight(1f))
+        DrawerItem(
+            label = "★  Favoritos",
+            selected = showFavorites,
+            onClick = onFavorites,
+        )
+        DrawerItem(
+            label = "⇄  Sync",
+            selected = false,
+            onClick = onSync,
+        )
+    }
+}
 
-        TvActionButton(text = "Cerrar", primary = false, onClick = onClose)
+@Composable
+private fun DrawerItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+
+    val background = when {
+        focused -> JkSurfaceHigh
+        selected -> JkOrange
+        else -> Color.Transparent
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(background)
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) JkOrange else Color.Transparent,
+                shape = RoundedCornerShape(8.dp),
+            )
+            // El FocusRequester va antes del focusable (clickable).
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = when {
+                focused -> JkOrange
+                selected -> Color(0xFF141414)
+                else -> JkTextPrimary
+            },
+        )
     }
 }
 
@@ -319,6 +466,10 @@ private fun SearchBar(
  * `autoFocusFirst` se desactiva mientras se escribe: si la grilla robara el
  * foco al cambiar los resultados, el campo de búsqueda dejaría de recibir
  * teclas a la segunda letra.
+ *
+ * `focusNonce` cambia al elegir algo en el menú lateral; obliga a repedir el
+ * foco aunque las tarjetas sean las mismas (el ítem del menú desaparece del
+ * árbol y el D-pad quedaría muerto).
  */
 @Composable
 private fun CardsGrid(
@@ -328,6 +479,7 @@ private fun CardsGrid(
     showSection: Boolean,
     autoFocusFirst: Boolean = true,
     firstFocusRequester: FocusRequester? = null,
+    focusNonce: Int = 0,
     onOpenAnime: (String) -> Unit,
 ) {
     if (cards.isEmpty()) {
@@ -348,7 +500,7 @@ private fun CardsGrid(
     // DESPUÉS del primer frame (los items del LazyGrid se crean durante la
     // medición) y se reintenta: requestFocus() devuelve false, no lanza, si el
     // nodo aún no está listo.
-    LaunchedEffect(cards, autoFocusFirst) {
+    LaunchedEffect(cards, autoFocusFirst, focusNonce) {
         if (!autoFocusFirst) return@LaunchedEffect
         repeat(10) {
             withFrameNanos { }
@@ -393,6 +545,7 @@ private fun CardsGrid(
 @Composable
 private fun FavoritesGrid(
     favorites: List<FavoriteEntity>,
+    focusNonce: Int = 0,
     onOpenAnime: (String) -> Unit,
 ) {
     if (favorites.isEmpty()) {
@@ -401,7 +554,7 @@ private fun FavoritesGrid(
     }
 
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(favorites.first().slug) {
+    LaunchedEffect(favorites.first().slug, focusNonce) {
         repeat(10) {
             withFrameNanos { }
             if (firstFocus.requestFocus()) return@LaunchedEffect

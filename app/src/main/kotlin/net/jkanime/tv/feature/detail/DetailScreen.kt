@@ -50,6 +50,7 @@ import net.jkanime.tv.ui.component.ChapterRow
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
 import net.jkanime.tv.ui.component.TvActionButton
+import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkGreen
 import net.jkanime.tv.ui.theme.JkOrange
@@ -137,8 +138,9 @@ private fun Content(
     val starFocus = remember { FocusRequester() }
 
     // El foco inicial va al primer capítulo (acción principal); si no hay
-    // capítulos, a la estrella de favoritos.
-    LaunchedEffect(sorted, episodes.isEmpty()) {
+    // capítulos, a la estrella de favoritos. La clave NO incluye el orden: al
+    // tocar ⇅ el foco debe quedarse en el icono para poder volver a invertir.
+    LaunchedEffect(detail.slug, sorted.isEmpty()) {
         repeat(10) {
             withFrameNanos { }
             val ok = if (sorted.isEmpty()) starFocus.requestFocus()
@@ -209,6 +211,13 @@ private fun Content(
                     style = MaterialTheme.typography.titleMedium,
                     color = JkTextPrimary,
                 )
+                // Ordenamiento: icono de flechas arriba/abajo pegado al título
+                // de la lista (antes era un botón con texto que ocupaba media fila).
+                TvIconButton(
+                    icon = "⇅",
+                    active = false,
+                    onClick = onToggleSort,
+                )
                 resumeEpisode?.let { episode ->
                     TvActionButton(
                         text = "Continuar Ep ${episode.numberLabel}",
@@ -219,10 +228,10 @@ private fun Content(
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                TvActionButton(
-                    text = if (descending) "↓ Más nuevos primero" else "↑ Más antiguos primero",
-                    primary = false,
-                    onClick = onToggleSort,
+                Text(
+                    text = if (descending) "Nuevos primero" else "Antiguos primero",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = JkTextSecondary,
                 )
             }
 

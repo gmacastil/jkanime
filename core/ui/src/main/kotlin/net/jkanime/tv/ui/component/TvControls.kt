@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -83,6 +85,63 @@ fun TvActionButton(
             text = text,
             style = MaterialTheme.typography.labelLarge,
             color = textColor,
+        )
+    }
+}
+
+/**
+ * Botón compacto de icono (glifo) para D-pad: mismo lenguaje visual que
+ * [TvActionButton] pero cuadrado y sin texto de relleno. Se usa para el menú
+ * hamburguesa y para el icono de ordenamiento de capítulos.
+ */
+@Composable
+fun TvIconButton(
+    icon: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    focusRequester: FocusRequester? = null,
+    size: Dp = 44.dp,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+
+    val background = when {
+        focused -> JkSurfaceHigh
+        active -> JkOrange
+        else -> JkSurface
+    }
+    val contentColor = when {
+        focused -> JkOrange
+        active -> Color(0xFF141414)
+        else -> JkTextPrimary
+    }
+
+    Box(
+        modifier = modifier
+            // El FocusRequester va antes del focusable (clickable).
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+            )
+            .size(size)
+            .clip(RoundedCornerShape(8.dp))
+            .background(background)
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) JkOrange else Color.Transparent,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = icon,
+            style = MaterialTheme.typography.titleMedium,
+            color = contentColor,
         )
     }
 }
