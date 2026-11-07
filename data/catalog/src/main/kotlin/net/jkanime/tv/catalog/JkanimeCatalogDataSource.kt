@@ -1,6 +1,7 @@
 package net.jkanime.tv.catalog
 
 import net.jkanime.tv.catalog.parser.AnimeDetailParser
+import net.jkanime.tv.catalog.parser.DirectorioParser
 import net.jkanime.tv.catalog.parser.EpisodeJsonParser
 import net.jkanime.tv.catalog.parser.ProgramacionParser
 import net.jkanime.tv.catalog.parser.SearchParser
@@ -8,6 +9,7 @@ import net.jkanime.tv.catalog.parser.VideoServerParser
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeDetail
 import net.jkanime.tv.model.AnimeSearchHit
+import net.jkanime.tv.model.DirectorioPage
 import net.jkanime.tv.model.EpisodesPage
 import net.jkanime.tv.model.Jk
 import net.jkanime.tv.model.ProgramacionSection
@@ -63,6 +65,10 @@ class JkanimeCatalogDataSource(private val http: JkHttpClient = JkHttpClient()) 
     /** Buscador del sitio: HTML server-rendered con hasta 30 fichas. */
     suspend fun loadSearch(query: String): List<AnimeSearchHit> =
         SearchParser.parse(http.getHtml(Jk.searchUrl(query)))
+
+    /** Directorio con filtros: 30 fichas por página + el formulario de filtros. */
+    suspend fun loadDirectorio(filters: Map<String, String>, page: Int): DirectorioPage =
+        DirectorioParser.parse(http.getHtml(Jk.directorioUrl(filters, page)))
 
     suspend fun resetSession() = http.resetSession()
 }

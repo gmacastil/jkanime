@@ -13,6 +13,8 @@ pantalla vacía.
 | `anime_detail.html` | `GET https://jkanime.net/seitokai-ni-mo-ana-wa-aru/` |
 | `episode.html` | `GET https://jkanime.net/seitokai-ni-mo-ana-wa-aru/5/` |
 | `episodes_page1.json` | `POST https://jkanime.net/ajax/episodes/4967/` |
+| `search.html` | `GET https://jkanime.net/buscar/naruto` |
+| `directorio.html` | `GET https://jkanime.net/directorio` |
 
 ---
 
@@ -189,11 +191,65 @@ Fixture: `search.html` (`GET /buscar/naruto`, 23 fichas). Parser:
 > de TV se queda corta; se documenta aquí por si hace falta una búsqueda
 > instantánea de bajo coste.
 
-## 6. Otros endpoints (para fases siguientes)
+## 6. Directorio (filtros reales del sitio)
+
+`GET /directorio` y `GET /directorio?<filtros>&p=<página>` — HTML
+server-rendered con el formulario de filtros, **pero los resultados NO están
+en el DOM**: el sitio los inyecta en el cliente desde una variable
+`var animes = {…};` embebida en un `<script>` con el JSON paginado de Laravel
+(`current_page`, `last_page`, `total`, `data[30]`). `div.anime__item` (el
+selector del buscador) está presente 0 veces en esta página.
+
+```html
+<form action="https://jkanime.net/directorio" method="get">
+  <select name="filtro">…</select>      <!-- "Ordenar por" -->
+  <select name="genero">…</select>      <!-- 46 opciones: accion, aventura, …, hentai -->
+  <select name="letra">…</select>       <!-- A-Z; <option> SIN atributo value -->
+  <select name="demografia">…</select>  <!-- niños, shoujo, shounen, seinen, josei -->
+  <select name="categoria">…</select>   <!-- donghua, latino -->
+  <select name="tipo">…</select>        <!-- animes, peliculas, especiales, ovas, onas -->
+  <select name="estado">…</select>      <!-- emision, finalizados, estrenos -->
+  <select name="fecha">…</select>       <!-- 1981-2026; <option> SIN atributo value -->
+  <select name="temporada">…</select>   <!-- invierno, primavera, verano, otoño -->
+  <select name="orden">…</select>       <!-- asc, desc -->
+</form>
+<script>
+var animes = {"current_page":1,"last_page":169,"total":5061,"per_page":30,
+  "data":[{"slug":"…","title":"…","image":"https://cdn.jkdesa.com/…",
+           "tipo":"Serie","estado":"En espera", …}, …]};
+</script>
+```
+
+| Dato | Origen |
+|---|---|
+| filtros disponibles | `form[action*=directorio] select[name]` → cada `<option>` |
+| etiqueta de cada `<select>` | el sitio no trae `<label>`; hardcodeadas en `DirectorioParser.LABELS` |
+| resultados | JSON embebido `var animes = {…}`, NO el DOM |
+| `slug`/`title`/`image`/`tipo`/`estado` | mismos campos que `AnimeSearchHit` |
+
+**Trampas verificadas contra el sitio real:**
+
+- `letra` y `fecha` traen `<option>A</option>` **sin** atributo `value` (a
+  diferencia del resto, que sí lo traen aunque sea vacío) — hay que usar
+  `.text()` como valor cuando `hasAttr("value")` es `false`.
+- El JSON no se puede extraer con una regex de llave a llave: las sinopsis
+  dentro de `data[]` traen comillas y llaves sin escapar en algunos casos.
+  `DirectorioParser.extractAnimesJson` hace un escaneo carácter a carácter
+  con profundidad de llaves + estado "dentro de cadena" para encontrar el
+  cierre correcto.
+- `total`/`last_page` varían mucho según filtro: sin filtros ~5061
+  (`last_page=169`); `genero=accion&tipo=animes` → 1166 (`last_page=39`).
+  `per_page` es siempre 30.
+- Construcción de la URL (`Jk.directorioUrl(filters, page)`): omite valores
+  en blanco y solo agrega `p=` cuando `page > 1`.
+
+Fixture: `directorio.html` (`GET /directorio`, página 1 sin filtros, 5061
+resultados totales, 30 en esta página). Parser: `DirectorioParser`.
+
+## 6.1. Otros endpoints (para fases siguientes)
 
 | Uso | Endpoint |
 |---|---|
-| Directorio | `GET /directorio` |
 | Horario semanal | `GET /horario` (`div.page_horario`) |
 | Top | `GET /top` |
 | Estrenos | `GET /estrenos` |

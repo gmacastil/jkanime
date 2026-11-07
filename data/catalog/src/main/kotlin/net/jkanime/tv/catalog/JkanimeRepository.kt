@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.withLock
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeDetail
 import net.jkanime.tv.model.AnimeSearchHit
+import net.jkanime.tv.model.DirectorioPage
 import net.jkanime.tv.model.EpisodesPage
 import net.jkanime.tv.model.ProgramacionSection
 import net.jkanime.tv.model.VideoServer
@@ -29,6 +30,7 @@ class JkanimeRepository(
     private val episodesCache = mutableMapOf<Int, Entry<EpisodesPage>>()
     private val serversCache = mutableMapOf<String, Entry<List<VideoServer>>>()
     private val searchCache = mutableMapOf<String, Entry<List<AnimeSearchHit>>>()
+    private val directorioCache = mutableMapOf<String, Entry<DirectorioPage>>()
 
     suspend fun programacion(force: Boolean = false): Map<ProgramacionSection, List<AnimeCard>> =
         mutex.withLock {
@@ -102,12 +104,38 @@ class JkanimeRepository(
             loaded
         }
 
+    /**
+     * Directorio con filtros. La clave incluye filtros y página para que cada
+     * combinación tenga su propia entrada; el usuario cambia filtros seguido y
+     * volver a un estado anterior no debe costar otra petición.
+     */
+    suspend fun directorio(
+        filters: Map<String, String> = emptyMap(),
+        page: Int = 1,
+        force: Boolean = false,
+    ): DirectorioPage = mutex.withLock {
+        val key = filters.filterValues { it.isNotBlank() }
+            .toSortedMap()
+            .entries
+            .joinToString("&") { "${'$'}{it.key}=${'$'}{it.value}" } + "#p$page"
+
+        val cached = directorioCache[key]
+        if (!force && cached != null && isFresh(cached.storedAt, DIRECTORIO_TTL_MS)) {
+            return@withLock cached.value
+        }
+        val loaded = runCatching { dataSource.loadDirectorio(filters, page) }
+            .getOrElse { error -> cached?.value ?: throw error }
+        directorioCache[key] = Entry(loaded, now())
+        loaded
+    }
+
     suspend fun invalidateAll() = mutex.withLock {
         programacionCache = null
         detailCache.clear()
         episodesCache.clear()
         serversCache.clear()
         searchCache.clear()
+        directorioCache.clear()
         dataSource.resetSession()
     }
 
@@ -121,5 +149,6 @@ class JkanimeRepository(
         const val EPISODES_TTL_MS = 30 * 60 * 1000L
         const val SERVERS_TTL_MS = 30 * 60 * 1000L
         const val SEARCH_TTL_MS = 10 * 60 * 1000L
+        const val DIRECTORIO_TTL_MS = 10 * 60 * 1000L
     }
 }

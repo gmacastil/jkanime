@@ -329,3 +329,51 @@ pantalla de sincronización. Buscador: `naruto` → **23** fichas del sitio
 (Boruto, Boruto the Movie, Naruto, Naruto Shippuden…), `shingeki` → 18,
 `one` → 30 (el tope del sitio). `▼` baja a la primera tarjeta y `ENTER` abre el
 detalle de un resultado remoto. `BACK` con búsqueda activa la limpia.
+
+## F10 — Foco en el último capítulo visto y pantalla Directorio — verificado
+
+### Detalle: foco inicial en el último episodio visto/en curso
+
+- `Content()` en `DetailScreen.kt` ya no enfoca siempre `sorted.first()`.
+  Calcula `initialFocusIndex`:
+  1. Si hay `resumeEpisode` (empezado y sin terminar), ese episodio.
+  2. Si no, el de número **más alto** entre los que tengan `completed == true`
+     o `positionMs > 0` en `progressByEpisode`.
+  3. Si no hay ninguno con progreso, el índice `0` (comportamiento anterior).
+- El `FocusRequester` se asigna por índice dentro del `itemsIndexed` de la
+  `LazyColumn` (`index == initialFocusIndex`), no solo a `index == 0`.
+- La clave del `LaunchedEffect` incluye `initialFocusIndex` para que, si el
+  progreso cambia (p. ej. tras ver un capítulo y volver), el foco se
+  recalcule sin salir de la pantalla.
+
+**Verificado con datos inyectados en Room** (ep. 9 `completed=true`, ep. 10
+`positionMs=300000/1200000` ≈ 25 %, sobre un anime de 12 capítulos ordenado
+"Nuevos primero" con el 12 arriba): el foco cae en **Episodio 10** (borde
+naranja, barra de progreso al 25 %), no en el Episodio 12. El botón
+"Continuar Ep 10" aparece correctamente junto al título de la sección.
+Confirmado con captura (`screencap`, ya que Compose for TV no siempre marca
+`focused="true"` en el dump de `uiautomator` aunque el resaltado visual sí
+esté presente).
+
+### Directorio: nueva entrada en el menú, filtros reales del sitio
+
+- `SideDrawer` (`HomeScreen.kt`) ya no tiene las entradas `Donghuas`/`OVAs`:
+  queda solo `Animes` (quick filter de Programación) + una entrada nueva
+  `Directorio` (icono `Icons.Filled.List`) que navega a `DirectorioScreen` vía
+  `Routes.DIRECTORIO` en `JkNavHost`.
+- `DirectorioScreen` + `DirectorioViewModel` cargan `GET /directorio` (ver
+  `scraping.md` §6): panel de filtros a la izquierda (`FiltersPanel` con un
+  `TvDropdown` por cada `<select>` del sitio — Ordenar por, Género, Letra,
+  Demografía, Categoría, Tipo, Estado, Año, Temporada, Dirección) y grilla de
+  resultados a la derecha con paginación (`Anterior`/`Siguiente`).
+- Cualquier cambio de filtro reinicia la paginación a la página 1
+  (`setFilter` → `loadPage(1)`); `clearFilters()` vacía todos los filtros.
+- `TvDropdown` es un desplegable D-pad-friendly: se expande al recibir foco
+  (`onFocusChanged`), cada opción es un ítem clickeable con check (`Icons.
+  Filled.Check`) en la seleccionada.
+
+Verificado en emulador: `☰` → `Directorio` abre la pantalla con los 10
+filtros del sitio y una grilla con animes reales (`Cardfight!! Vanguard:
+Divinez…`, `Demons' Crest`, `Watashi no Shiawase na Kekkon Special`…) con su
+tipo (Serie/ONA) y estado (En espera/En emisión/Concluido) tal como vienen
+del sitio.

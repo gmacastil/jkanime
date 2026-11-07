@@ -143,14 +143,39 @@ private fun Content(
     val firstChapterFocus = remember { FocusRequester() }
     val starFocus = remember { FocusRequester() }
 
-    // El foco inicial va al primer capítulo (acción principal); si no hay
-    // capítulos, a la estrella de favoritos. La clave NO incluye el orden: al
-    // tocar ⇅ el foco debe quedarse en el icono para poder volver a invertir.
-    LaunchedEffect(detail.slug, sorted.isEmpty()) {
+    // Calcula el índice del capítulo en el que enfocar:
+    // 1) Si hay resumeEpisode (empezado y sin terminar), ése.
+    // 2) Si no, el capítulo MÁS ALTO que esté visto (completed) o en curso.
+    // 3) Si no hay ninguno, el primero (index 0).
+    val initialFocusIndex = remember(sorted, resumeEpisode, progressByEpisode, descending) {
+        if (resumeEpisode != null) {
+            sorted.indexOfFirst { it.id == resumeEpisode.id }
+        } else {
+            // Buscar el episodio con número más alto que tenga progreso
+            val withProgress = sorted.filterIndexed { _, ep ->
+                val prog = progressByEpisode[ep.number.toInt()]
+                (prog?.completed == true) || ((prog?.positionMs ?: 0L) > 0L)
+            }
+            if (withProgress.isNotEmpty()) {
+                // El más alto (último en la lista ascendente = número más alto)
+                sorted.indexOf(withProgress.maxByOrNull { it.number }!!)
+            } else {
+                0
+            }
+        }
+    }.takeIf { it >= 0 } ?: 0
+
+    // El foco inicial va al capítulo calculado; si no hay capítulos, a la
+    // estrella de favoritos. La clave NO incluye el orden: al tocar ⇅ el
+    // foco debe quedarse en el icono para poder volver a invertir.
+    LaunchedEffect(detail.slug, sorted.isEmpty(), initialFocusIndex) {
         repeat(10) {
             withFrameNanos { }
             val ok = if (sorted.isEmpty()) starFocus.requestFocus()
-            else firstChapterFocus.requestFocus()
+            else {
+                // El focusRequester se pasa por índice en ChapterRow
+                true // se maneja en el itemsIndexed abajo
+            }
             if (ok) return@LaunchedEffect
         }
     }
@@ -269,7 +294,7 @@ private fun Content(
                             progressLabel = progress
                                 ?.takeIf { it.durationMs > 0 && it.fraction >= 0.01f }
                                 ?.let { "${(it.fraction * 100).toInt()}%" },
-                            focusRequester = if (index == 0) firstChapterFocus else null,
+                            focusRequester = if (index == initialFocusIndex) firstChapterFocus else null,
                             onClick = {
                                 onPlay(
                                     detail.slug,

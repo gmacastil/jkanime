@@ -35,6 +35,21 @@ object Jk {
         return "$BASE_URL/buscar/$encoded"
     }
     const val DIRECTORY_URL = "$BASE_URL/directorio"
+
+    /**
+     * Directorio con filtros. El formulario del sitio es un GET con un
+     * `<select>` por filtro (`genero`, `letra`, `tipo`, `estado`, `fecha`…) y
+     * la paginación va en `p`. Los filtros vacíos se omiten para no ensuciar
+     * la URL ni romper el caché del repositorio.
+     */
+    fun directorioUrl(filters: Map<String, String> = emptyMap(), page: Int = 1): String {
+        val params = filters
+            .filterValues { it.isNotBlank() }
+            .map { (key, value) -> "$key=${java.net.URLEncoder.encode(value, "UTF-8")}" }
+            .toMutableList()
+        if (page > 1) params += "p=$page"
+        return if (params.isEmpty()) DIRECTORY_URL else "$DIRECTORY_URL?${params.joinToString("&")}"
+    }
     const val SCHEDULE_URL = "$BASE_URL/horario"
 
     /** UA de dispositivo TV real: el sitio tiene detección de bots. */

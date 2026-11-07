@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -82,11 +83,15 @@ import net.jkanime.tv.ui.theme.JkTextSecondary
  *
  * Cabecera: botón hamburguesa + marca + campo de búsqueda siempre visible.
  * La búsqueda consulta el **buscador del sitio** (`GET /buscar/{q}`), no un
- * filtro local. Los filtros (Animes / Donghuas / OVAs / Favoritos / Sync)
+ * filtro local. Los filtros (Animes / Directorio / Favoritos / Sync)
  * viven en un menú lateral colapsable para dejarle el ancho a la grilla.
  */
 @Composable
-fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
+fun HomeScreen(
+    onOpenAnime: (String) -> Unit,
+    onOpenSync: () -> Unit = {},
+    onOpenDirectorio: () -> Unit = {},
+) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
     val viewModel: HomeViewModel = viewModel(
@@ -250,6 +255,10 @@ fun HomeScreen(onOpenAnime: (String) -> Unit, onOpenSync: () -> Unit = {}) {
                     viewModel.closeDrawer()
                     onOpenSync()
                 },
+                onDirectorio = {
+                    viewModel.closeDrawer()
+                    onOpenDirectorio()
+                },
             )
         }
     }
@@ -406,6 +415,7 @@ private fun SideDrawer(
     onSelectSection: (ProgramacionSection) -> Unit,
     onFavorites: () -> Unit,
     onSync: () -> Unit,
+    onDirectorio: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -423,14 +433,22 @@ private fun SideDrawer(
             modifier = Modifier.padding(start = 28.dp, bottom = 8.dp),
         )
 
-        ProgramacionSection.entries.forEachIndexed { index, item ->
-            DrawerItem(
-                label = item.label,
-                selected = item == selected && !showFavorites,
-                focusRequester = if (index == 0) firstItemFocus else null,
-                onClick = { onSelectSection(item) },
-            )
-        }
+        // Solo "Animes" (antes había Donghuas y OVAs)
+        val animesItem = ProgramacionSection.ANIMES
+        DrawerItem(
+            label = animesItem.label,
+            selected = animesItem == selected && !showFavorites,
+            focusRequester = firstItemFocus,
+            onClick = { onSelectSection(animesItem) },
+        )
+
+        // Directorio: la navegación al catálogo filtrado del sitio
+        DrawerItem(
+            label = "Directorio",
+            icon = Icons.Filled.List,
+            selected = false,
+            onClick = onDirectorio,
+        )
 
         Spacer(modifier = Modifier.height(6.dp))
         Box(
