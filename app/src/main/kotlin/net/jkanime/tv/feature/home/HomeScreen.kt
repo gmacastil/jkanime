@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -91,6 +92,7 @@ fun HomeScreen(
     onOpenAnime: (String) -> Unit,
     onOpenSync: () -> Unit = {},
     onOpenDirectorio: () -> Unit = {},
+    onOpenProfiles: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
@@ -259,6 +261,10 @@ fun HomeScreen(
                     viewModel.closeDrawer()
                     onOpenDirectorio()
                 },
+                onProfiles = {
+                    viewModel.closeDrawer()
+                    onOpenProfiles()
+                },
             )
         }
     }
@@ -416,6 +422,7 @@ private fun SideDrawer(
     onFavorites: () -> Unit,
     onSync: () -> Unit,
     onDirectorio: () -> Unit,
+    onProfiles: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -471,6 +478,12 @@ private fun SideDrawer(
             icon = Icons.Filled.Refresh,
             selected = false,
             onClick = onSync,
+        )
+        DrawerItem(
+            label = "Perfiles",
+            icon = Icons.Filled.AccountBox,
+            selected = false,
+            onClick = onProfiles,
         )
     }
 }

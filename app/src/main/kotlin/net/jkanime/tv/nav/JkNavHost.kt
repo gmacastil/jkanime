@@ -10,12 +10,14 @@ import net.jkanime.tv.feature.detail.DetailScreen
 import net.jkanime.tv.feature.directorio.DirectorioScreen
 import net.jkanime.tv.feature.home.HomeScreen
 import net.jkanime.tv.feature.player.PlayerActivity
+import net.jkanime.tv.feature.profiles.ProfilesScreen
 import net.jkanime.tv.feature.sync.SyncScreen
 
 object Routes {
     const val HOME = "home"
     const val SYNC = "sync"
     const val DIRECTORIO = "directorio"
+    const val PROFILES = "profiles"
     const val DETAIL = "detail/{slug}"
     fun detail(slug: String) = "detail/$slug"
 }
@@ -30,11 +32,16 @@ fun JkNavHost() {
                 onOpenAnime = { slug -> navController.navigate(Routes.detail(slug)) },
                 onOpenSync = { navController.navigate(Routes.SYNC) },
                 onOpenDirectorio = { navController.navigate(Routes.DIRECTORIO) },
+                onOpenProfiles = { navController.navigate(Routes.PROFILES) },
             )
         }
 
         composable(Routes.SYNC) {
             SyncScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.PROFILES) {
+            ProfilesScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.DIRECTORIO) {

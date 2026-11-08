@@ -33,6 +33,7 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
 import net.jkanime.tv.data.sync.PairingCode
+import net.jkanime.tv.data.sync.SyncCredentials
 import net.jkanime.tv.data.sync.SyncResult
 import net.jkanime.tv.ui.component.TvActionButton
 import net.jkanime.tv.ui.theme.JkBackground
@@ -56,12 +57,21 @@ fun SyncScreen(onBack: () -> Unit) {
     val engine = remember(context) { Graph.sync(context) }
     val scope = rememberCoroutineScope()
 
-    var credentials by remember { mutableStateOf(engine.currentCredentials()) }
+    // `currentCredentials()` es suspend ahora: lee el perfil activo de Room
+    // (multiusuario F11). Se resuelve al entrar; si hay espacio, el modo
+    // pasa a PAIRED en el mismo frame.
+    var credentials by remember { mutableStateOf<SyncCredentials?>(null) }
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var typedCode by remember { mutableStateOf("") }
     var pairing by remember { mutableStateOf<PairingCode?>(null) }
-    var mode by remember { mutableStateOf(if (engine.currentCredentials() == null) Mode.CHOOSE else Mode.PAIRED) }
+    var mode by remember { mutableStateOf(Mode.CHOOSE) }
+
+    LaunchedEffect(Unit) {
+        val current = engine.currentCredentials()
+        credentials = current
+        if (current != null) mode = Mode.PAIRED
+    }
 
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(mode) {
@@ -184,10 +194,12 @@ fun SyncScreen(onBack: () -> Unit) {
                     }
                 },
                 onUnlink = {
-                    engine.clearSpace()
-                    credentials = null
-                    mode = Mode.CHOOSE
-                    status = null
+                    scope.launch {
+                        engine.clearSpace()
+                        credentials = null
+                        mode = Mode.CHOOSE
+                        status = null
+                    }
                 },
                 onBack = onBack,
             )

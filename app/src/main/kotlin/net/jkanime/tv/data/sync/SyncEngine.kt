@@ -1,6 +1,7 @@
 package net.jkanime.tv.data.sync
 
 import net.jkanime.tv.data.local.LibraryRepository
+import net.jkanime.tv.data.local.ProfileManager
 
 /**
  * Motor de sincronización: pull → merge local → push.
@@ -13,27 +14,55 @@ import net.jkanime.tv.data.local.LibraryRepository
  * El push va protegido además del lado del servidor
  * (`where excluded.updated_at >= tabla.updated_at`), así que un push
  * concurrente nunca pisa algo más nuevo.
+ *
+ * **Multiusuario (F11):** las credenciales viven en el perfil activo
+ * (`ProfileManager`); las de SharedPreferences quedan como modo legacy para
+ * dispositivos sin perfiles. Al crear el primer perfil, el espacio hereda
+ * automáticamente las credenciales legacy del dispositivo (claim).
  */
 class SyncEngine(
     private val library: LibraryRepository,
     private val client: SupabaseSyncClient,
     private val store: SyncCredentialsStore,
+    private val profiles: ProfileManager,
 ) {
 
     val isConfigured: Boolean get() = client.isConfigured
 
-    fun currentCredentials(): SyncCredentials? = store.credentials
+    /**
+     * Credenciales vigentes: las del perfil activo; si el perfil aún no
+     * tiene espacio, hereda las legacy del dispositivo (una sola vez); si no
+     * hay perfil, las legacy directamente.
+     */
+    suspend fun currentCredentials(): SyncCredentials? {
+        val profile = profiles.activeProfile() ?: return store.credentials
+        val code = profile.spaceCode
+        val token = profile.spaceToken
+        if (code != null && token != null) return SyncCredentials(code, token)
 
-    /** Crea un espacio nuevo y lo guarda en este dispositivo. */
+        // Primer perfil del dispositivo: el espacio del dispositivo pasa a
+        // ser del perfil y las credenciales legacy dejan de usarse.
+        val legacy = store.credentials ?: return null
+        profiles.setSpace(profile.id, legacy.code, legacy.token)
+        store.credentials = null
+        return legacy
+    }
+
+    /** Crea un espacio nuevo y lo guarda en el perfil activo (o en legacy). */
     suspend fun createSpace(): SyncCredentials {
         val credentials = client.createSpace()
-        store.credentials = credentials
+        val profile = profiles.activeProfile()
+        if (profile != null) {
+            profiles.setSpace(profile.id, credentials.code, credentials.token)
+        } else {
+            store.credentials = credentials
+        }
         return credentials
     }
 
     /** Genera un código temporal para vincular otro dispositivo. */
     suspend fun createPairingCode(): PairingCode {
-        val credentials = store.credentials
+        val credentials = currentCredentials()
             ?: throw IllegalStateException("Este dispositivo no está vinculado")
         return client.newPairingCode(credentials)
     }
@@ -44,16 +73,26 @@ class SyncEngine(
      */
     suspend fun joinSpace(pairingCode: String) {
         val credentials = client.joinWithCode(pairingCode)
-        store.credentials = credentials
+        val profile = profiles.activeProfile()
+        if (profile != null) {
+            profiles.setSpace(profile.id, credentials.code, credentials.token)
+        } else {
+            store.credentials = credentials
+        }
     }
 
-    /** Desvincula este dispositivo (los datos remotos no se borran). */
-    fun clearSpace() {
-        store.credentials = null
+    /** Desvincula el espacio del perfil activo (los remotos no se borran). */
+    suspend fun clearSpace() {
+        val profile = profiles.activeProfile()
+        if (profile != null) {
+            profiles.clearSpace(profile.id)
+        } else {
+            store.credentials = null
+        }
     }
 
     suspend fun syncNow(): SyncResult {
-        val credentials = store.credentials
+        val credentials = currentCredentials()
             ?: return SyncResult.NotPaired
         if (!client.isConfigured) return SyncResult.NotConfigured
 

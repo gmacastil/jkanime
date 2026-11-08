@@ -1,6 +1,8 @@
 package net.jkanime.tv.data.local
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
 
 /**
  * Fachada de persistencia local (favoritos + progreso). Los ViewModels solo
@@ -10,29 +12,46 @@ import kotlinx.coroutines.flow.Flow
  * `merge*` son las entradas que usa el motor de sync: aplican datos remotos
  * solo si son más nuevos, para que un dispositivo offline no pise cambios
  * hechos en otro.
+ *
+ * **Multiusuario (F11):** todas las lecturas se suscriben a
+ * `ProfileManager.activeId` con `flatMapLatest`, así al cambiar de perfil en
+ * la misma TV los Flows re-emiten con la biblioteca del nuevo dueño sin
+ * tocar los ViewModels. Las escrituras usan `owner()` (el activo en ese
+ * instante).
  */
-class LibraryRepository(private val db: JkDatabase) {
+@OptIn(ExperimentalCoroutinesApi::class)
+class LibraryRepository(
+    private val db: JkDatabase,
+    private val profiles: ProfileManager,
+) {
 
-    val favorites: Flow<List<FavoriteEntity>> = db.favorites().observeAll()
+    val favorites: Flow<List<FavoriteEntity>> =
+        profiles.activeId.flatMapLatest { owner -> db.favorites().observeAll(owner) }
 
-    fun isFavorite(slug: String): Flow<Boolean> = db.favorites().observeIsFavorite(slug)
+    fun isFavorite(slug: String): Flow<Boolean> =
+        profiles.activeId.flatMapLatest { owner -> db.favorites().observeIsFavorite(owner, slug) }
 
-    fun favorite(slug: String): Flow<FavoriteEntity?> = db.favorites().observe(slug)
+    fun favorite(slug: String): Flow<FavoriteEntity?> =
+        profiles.activeId.flatMapLatest { owner -> db.favorites().observe(owner, slug) }
 
-    fun progressFor(slug: String): Flow<List<ProgressEntity>> = db.progress().observeFor(slug)
+    fun progressFor(slug: String): Flow<List<ProgressEntity>> =
+        profiles.activeId.flatMapLatest { owner -> db.progress().observeFor(owner, slug) }
 
     /** Instantánea de favoritos para el worker de sync (no es un Flow). */
-    suspend fun favoritesSnapshot(): List<FavoriteEntity> = db.favorites().all()
+    suspend fun favoritesSnapshot(): List<FavoriteEntity> =
+        db.favorites().all(profiles.owner())
 
     /** Incluye tombstones: es lo que se empuja al backend. */
-    suspend fun favoritesForPush(): List<FavoriteEntity> = db.favorites().allIncludingDeleted()
+    suspend fun favoritesForPush(): List<FavoriteEntity> =
+        db.favorites().allIncludingDeleted(profiles.owner())
 
-    suspend fun allProgress(): List<ProgressEntity> = db.progress().all()
+    suspend fun allProgress(): List<ProgressEntity> = db.progress().all(profiles.owner())
 
-    suspend fun lastProgress(slug: String): ProgressEntity? = db.progress().lastFor(slug)
+    suspend fun lastProgress(slug: String): ProgressEntity? =
+        db.progress().lastFor(profiles.owner(), slug)
 
     suspend fun episodeProgress(slug: String, episode: Int): ProgressEntity? =
-        db.progress().get(slug, episode)
+        db.progress().get(profiles.owner(), slug, episode)
 
     suspend fun toggleFavorite(
         slug: String,
@@ -43,12 +62,13 @@ class LibraryRepository(private val db: JkDatabase) {
         statusLabel: String?,
         lastAiredEpisode: Int?,
     ): Boolean {
+        val owner = profiles.owner()
         val dao = db.favorites()
         val now = System.currentTimeMillis()
-        val existing = dao.get(slug)
+        val existing = dao.get(owner, slug)
         val isAlive = existing != null && existing.deletedAt == null
         return if (isAlive) {
-            dao.softDelete(slug, now)
+            dao.softDelete(owner, slug, now)
             false
         } else {
             // Si existe como tombstone se reusa la fila: si se insertara otra
@@ -56,6 +76,7 @@ class LibraryRepository(private val db: JkDatabase) {
             // viejos.
             dao.upsert(
                 FavoriteEntity(
+                    owner = owner,
                     slug = slug,
                     animeId = animeId,
                     title = title,
@@ -82,6 +103,7 @@ class LibraryRepository(private val db: JkDatabase) {
         statusLabel: String?,
     ) {
         db.favorites().setAired(
+            owner = profiles.owner(),
             slug = slug,
             aired = lastAiredEpisode,
             total = totalEpisodes,
@@ -101,11 +123,13 @@ class LibraryRepository(private val db: JkDatabase) {
         durationMs: Long,
         completed: Boolean,
     ) {
-        val previous = db.progress().get(slug, episode)
+        val owner = profiles.owner()
+        val previous = db.progress().get(owner, slug, episode)
         val now = System.currentTimeMillis()
         val finalCompleted = completed || previous?.completed == true
         db.progress().upsert(
             ProgressEntity(
+                owner = owner,
                 slug = slug,
                 episode = episode,
                 positionMs = if (finalCompleted) durationMs.coerceAtLeast(positionMs) else positionMs,
@@ -115,7 +139,7 @@ class LibraryRepository(private val db: JkDatabase) {
             ),
         )
         if (completed) {
-            db.favorites().setLastWatched(slug, episode, now)
+            db.favorites().setLastWatched(owner, slug, episode, now)
         }
     }
 
@@ -124,14 +148,18 @@ class LibraryRepository(private val db: JkDatabase) {
     // ---------------------------------------------------------------------
 
     suspend fun mergeFavorite(remote: FavoriteEntity) {
-        val local = db.favorites().get(remote.slug)
+        val owner = profiles.owner()
+        val local = db.favorites().get(owner, remote.slug)
         if (local != null && local.updatedAt > remote.updatedAt) return
-        db.favorites().upsert(remote)
+        // El remoto viene del espacio del perfil activo: se adopta con el
+        // owner actual, nunca con el que traiga el JSON.
+        db.favorites().upsert(remote.copy(owner = owner))
     }
 
     suspend fun mergeProgress(remote: ProgressEntity) {
-        val local = db.progress().get(remote.slug, remote.episode)
+        val owner = profiles.owner()
+        val local = db.progress().get(owner, remote.slug, remote.episode)
         if (local != null && local.updatedAt > remote.updatedAt) return
-        db.progress().upsert(remote)
+        db.progress().upsert(remote.copy(owner = owner))
     }
 }

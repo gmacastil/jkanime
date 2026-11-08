@@ -4,6 +4,7 @@ import android.content.Context
 import net.jkanime.tv.catalog.JkanimeRepository
 import net.jkanime.tv.data.local.JkDatabase
 import net.jkanime.tv.data.local.LibraryRepository
+import net.jkanime.tv.data.local.ProfileManager
 import net.jkanime.tv.data.sync.SyncCredentialsStore
 import net.jkanime.tv.data.sync.SyncEngine
 
@@ -15,13 +16,25 @@ object Graph {
     val repository: JkanimeRepository by lazy { JkanimeRepository() }
 
     @Volatile
+    private var profileManager: ProfileManager? = null
+
+    /** Perfiles locales (F11). Comparte la DB singleton con `library`. */
+    fun profiles(context: Context): ProfileManager =
+        profileManager ?: synchronized(this) {
+            profileManager ?: ProfileManager(context, JkDatabase.get(context))
+                .also { profileManager = it }
+        }
+
+    @Volatile
     private var libraryRepository: LibraryRepository? = null
 
     /** Favoritos + progreso (Room). Requiere `Context` para abrir la DB. */
     fun library(context: Context): LibraryRepository =
         libraryRepository ?: synchronized(this) {
-            libraryRepository ?: LibraryRepository(JkDatabase.get(context))
-                .also { libraryRepository = it }
+            libraryRepository ?: LibraryRepository(
+                db = JkDatabase.get(context),
+                profiles = profiles(context),
+            ).also { libraryRepository = it }
         }
 
     @Volatile
@@ -34,6 +47,7 @@ object Graph {
                 library = library(context),
                 client = SyncCredentialsStore.client(),
                 store = SyncCredentialsStore(context),
+                profiles = profiles(context),
             ).also { syncEngine = it }
         }
 }

@@ -417,3 +417,80 @@ los taps en esas coordenadas no caían en el botón. El `bounds` del nodo
 **contenedor con foco** sí era correcto. Regla: si un tap "no hace nada",
 validar la posición real con `screencap` + recorte PIL de la franja antes
 de reintentar.
+
+---
+
+## F11 — Perfiles locales tipo Netflix (multiusuario) — verificado 2026-11-08
+
+Varios usuarios en la MISMA TV: cada perfil es un `owner` de su biblioteca
+en Room y de su propio sync space. Sin servicios externos (Google Cloud
+quedó descartado por ahora; el login por cuenta se puede añadir después
+sobre este mismo sistema).
+
+### Cambios
+
+- **Room v2 → v3** (`MIGRATION_2_3`): SQLite no permite cambiar la PK con
+  ALTER TABLE, así que `favorites`/`progress` se **recrean** con `owner` como
+  primera columna de la PK (`PRIMARY KEY(owner, slug)` / `(owner, slug,
+  episode)`); las filas existentes quedan como `owner = 0` (modo legacy) y
+  se crea la tabla `profiles` (name, pin_hash, space_code, space_token,
+  created_at, last_used_at).
+- **`ProfileManager`** (nuevo): perfil activo en SharedPreferences
+  (`jk-profiles` / `active_profile_id`), `create()` con `claimLegacy()` del
+  primer perfil, `activate()`, `delete()` (borra solo datos locales y
+  activa el siguiente perfil si borraba el activo), `setSpace/clearSpace`.
+- **`LibraryRepository`**: todas las lecturas son
+  `profiles.activeId.flatMapLatest { dao...(owner) }` → cambiar de perfil
+  re-emite Home/Detalle/Sync sin tocar ViewModels. Escrituras con
+  `profiles.owner()`; `merge*` hace `remote.copy(owner = …)` (el JSON
+  remoto llega con `owner=0` por defecto en las entities).
+- **`SyncEngine`**: credenciales por perfil (`profiles.setSpace`); el
+  primer perfil **hereda** el espacio legacy del dispositivo y limpia
+  `jk-sync.xml`. `currentCredentials()` ahora es `suspend`.
+- **UI**: entrada "Perfiles" en el drawer (icono `AccountBox`), ruta
+  `Routes.PROFILES`, pantalla `ProfilesScreen` (crear/activar/eliminar con
+  confirmación).
+
+### Verificación en emulador (sobre DB v2 con datos reales)
+
+1. **Migración**: instalación sobre la DB v2 → `PRAGMA user_version = 3`,
+   7 favoritos + 7 progresos conservados con `owner = 0`, tabla `profiles`
+   creada, app arranca sin crash.
+2. **Primer perfil ("Alejoa")**: al crearlo reclamó los 7+7 filas
+   (`owner=1`, `owner=0` → 0) y, al abrir Sync, `currentCredentials()`
+   migró el espacio `07951576` al perfil (`profiles.space_code` seteado,
+   `jk-sync.xml` sin code/token).
+3. **Sync por perfil real**: "Sincronizar ahora" → `last_sync_at`
+   actualizado con el espacio del perfil.
+4. **Segundo perfil ("Luis")**: biblioteca vacía ("Aún no tienes
+   favoritos"), Sync muestra "Crear espacio de sync / Ya tengo un código"
+   (sin vincular).
+5. **Cambio en caliente**: activar Alejoa desde su fila → sus 7
+   favoritos reaparecen en Home sin recargar (flatMapLatest).
+6. **Borrar perfil**: eliminar → confirmar → el siguiente queda activo
+   (bug encontrado y corregido: antes quedaba `active=0` y la biblioteca
+   se veía vacía).
+
+### Trampas nuevas de F11
+
+- **`Modifier.focusRequester()` DEBE ir ANTES de `clickable`** (del focus
+  target) en la cadena de modificadores. Si va después,
+  `requestFocus()` devuelve `false` silenciosamente y el foco nunca llega
+  a la fila: el D-pad queda "atrapado". Síntoma en logcat
+  (`JkProfiles`): `no se pudo enfocar el objetivo` en el `LaunchedEffect`
+  de entrada.
+- **Al enfocar el `BasicTextField` el IME se abre solo** y se traga
+  DPAD_DOWN/CENTER (trampa ya conocida). Solución en `ProfilesScreen`:
+  `LocalSoftwareKeyboardController.hide()` cuando el foco vuelve a la
+  lista, e `onPreviewKeyEvent` en el campo que intercepta
+  `DirectionUp` (→ primera fila) y `DirectionDown` (→ botón Crear, o a la
+  lista si el botón está deshabilitado).
+- **Race al entrar**: `LaunchedEffect(profiles.isEmpty())` arranca con la
+  lista vacía (el `initialValue` de `collectAsStateWithLifecycle`), enfoca
+  el campo, y Room emite después → el efecto se relanza con la clave
+  cambiada y debe poder mover el foco a la fila (si no puede, ver arriba).
+- **`collectAsStateWithLifecycle` sobre un `Flow` que no es `StateFlow`**
+  exige `initialValue` explícito.
+- La UI de la app usa **`androidx.tv.material3`** (`MaterialTheme`, `Text`),
+  no `androidx.compose.material3` — importar el equivocado da
+  `Unresolved reference` en cadena.
