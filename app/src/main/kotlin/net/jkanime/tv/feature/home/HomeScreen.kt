@@ -23,7 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -445,7 +445,7 @@ private fun SideDrawer(
         // Directorio: la navegación al catálogo filtrado del sitio
         DrawerItem(
             label = "Directorio",
-            icon = Icons.Filled.List,
+            icon = Icons.AutoMirrored.Filled.List,
             selected = false,
             onClick = onDirectorio,
         )

@@ -377,3 +377,43 @@ filtros del sitio y una grilla con animes reales (`Cardfight!! Vanguard:
 Divinez…`, `Demons' Crest`, `Watashi no Shiawase na Kekkon Special`…) con su
 tipo (Serie/ONA) y estado (En espera/En emisión/Concluido) tal como vienen
 del sitio.
+
+## Emparejamiento Supabase (pendiente de F6) — verificado 2026-11-08
+
+Los dos pendientes de Supabase quedaron cerrados:
+
+1. **Bloque SQL de emparejamiento ejecutado** en el SQL Editor del proyecto
+   `imbquhejcckjgyxtgurw` (`sync_pairings` + `sync_new_pairing` + `sync_join`
+   + grants, líneas 248-342 de `docs/supabase/schema.sql`). Verificado con
+   curl: `sync_join` con código inválido → `invalid_pairing_code`;
+   `sync_new_pairing` con credenciales malas → `invalid_credentials` (antes
+   ambos devolvían `PGRST202`).
+2. **Clave publishable** (`sb_publishable_…`) reemplazada en
+   `local.properties` — antes había una `sb_secret_…`, que salta RLS y no
+   debe viajar en el APK. `:app:assembleDebug` recompilado con la nueva.
+
+Flujo completo probado en el emulador (Sync):
+
+- **`sync_new_pairing` desde la app**: "Vincular otro dispositivo" →
+  `pairing ok: 54845918` (código de 8 dígitos, caduca en 15 min).
+- **`sync_join` vía curl**: con `54845918` devolvió
+  `{"code":"07951576","token":"3d3c…"}` (el espacio correcto); un segundo
+  uso del mismo código → `invalid_pairing_code` (un solo uso ✓).
+- **`sync_join` desde la app**: "Desvincular" → modo "¿Primer dispositivo?"
+  → "Ya tengo un código" → teclado en pantalla → `84076138` →
+  **"Dispositivo vinculado"** con el espacio `0795 1576` recuperado.
+  (Ojo: `input text` no llega a este formulario — hay que teclear con taps
+  en el keypad numérico de la pantalla.)
+- **Sync post-re-vinculación**: "Sincronizar ahora" →
+  `Sincronizado: 6 favoritos, 7 progresos`.
+
+### Trampa: bounds de texto obsoletos en `uiautomator dump`
+
+En la pantalla Sync, tras cambiar el estado (aparece/desaparece la fila del
+código de emparejamiento), los `bounds=` de los nodos de **texto** no
+enfocados quedaron desfasados ~115 px respecto a la posición real (decían
+`y=468` para "Sincronizar ahora" cuando el botón estaba en `y=575-671`), y
+los taps en esas coordenadas no caían en el botón. El `bounds` del nodo
+**contenedor con foco** sí era correcto. Regla: si un tap "no hace nada",
+validar la posición real con `screencap` + recorte PIL de la franja antes
+de reintentar.
