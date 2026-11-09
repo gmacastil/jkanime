@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.tv.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -312,7 +312,7 @@ fun TvNumberPad(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 TvIconButton(
-                                    icon = Icons.Filled.ArrowBack,
+                                    icon = Icons.Filled.ExitToApp,
                                     contentDescription = "Volver",
                                     size = if (compact) 50.dp else 56.dp,
                                     iconSize = if (compact) 23.dp else 25.dp,
