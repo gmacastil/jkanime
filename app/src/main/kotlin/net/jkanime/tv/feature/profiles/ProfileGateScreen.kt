@@ -1,8 +1,7 @@
 package net.jkanime.tv.feature.profiles
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +43,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.Glow
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
@@ -167,108 +172,123 @@ fun ProfileGateScreen(onReady: () -> Unit) {
             }
 
             Mode.CREATE -> {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                // Formulario en una Surface MD3 (tv-material3): eleva el
+                // bloque de creación del fondo con el mismo lenguaje visual
+                // de las Card de los tiles, en vez del Box+background suelto
+                // de antes.
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.6f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = SurfaceDefaults.colors(
+                        containerColor = JkSurface,
+                        contentColor = JkTextPrimary,
+                    ),
                 ) {
-                    Text(
-                        text = if (profiles.isNullOrEmpty()) {
-                            "Crea tu perfil para empezar"
-                        } else {
-                            "Crear perfil"
-                        },
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = JkOrange,
-                    )
-                    if (profiles.isNullOrEmpty()) {
-                        Text(
-                            text = "El primer perfil tomará tus favoritos y progreso actuales.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = JkTextSecondary,
-                        )
-                    }
-
-                    BasicTextField(
-                        value = name,
-                        onValueChange = { name = it },
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .focusRequester(nameFieldFocus)
-                            // ▼/▲ salen del campo (el BasicTextField se traga
-                            // las flechas para mover el cursor).
-                            .onPreviewKeyEvent { event ->
-                                if (event.type != KeyEventType.KeyDown) {
-                                    return@onPreviewKeyEvent false
-                                }
-                                when (event.key) {
-                                    Key.DirectionDown -> {
-                                        val ok = runCatching { createButtonFocus.requestFocus() }
-                                            .getOrDefault(false)
-                                        if (!ok) runCatching { nameFieldFocus.requestFocus() }
-                                        true
-                                    }
-
-                                    Key.DirectionUp -> {
-                                        if (!profiles.isNullOrEmpty()) {
-                                            mode = Mode.CHOOSER
-                                        }
-                                        true
-                                    }
-
-                                    else -> false
-                                }
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                    ) {
+                        Text(
+                            text = if (profiles.isNullOrEmpty()) {
+                                "Crea tu perfil para empezar"
+                            } else {
+                                "Crear perfil"
                             },
-                        textStyle = TextStyle(color = JkTextPrimary, fontSize = 18.sp),
-                        cursorBrush = SolidColor(JkOrange),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            if (name.isNotBlank()) {
-                                scope.launch {
-                                    manager.create(name)
-                                    Graph.syncInBackground(context)
-                                    onReady()
-                                }
-                            }
-                        }),
-                        decorationBox = { inner ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(JkSurface, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                            ) {
-                                if (name.isEmpty()) {
-                                    Text(
-                                        text = "Nombre del perfil",
-                                        color = JkTextSecondary,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                    )
-                                }
-                                inner()
-                            }
-                        },
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TvActionButton(
-                            text = "Crear perfil",
-                            onClick = {
-                                scope.launch {
-                                    manager.create(name)
-                                    Graph.syncInBackground(context)
-                                    onReady()
-                                }
-                            },
-                            enabled = name.isNotBlank(),
-                            modifier = Modifier.focusRequester(createButtonFocus),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = JkOrange,
                         )
-                        if (!profiles.isNullOrEmpty()) {
-                            TvActionButton(
-                                text = "Cancelar",
-                                primary = false,
-                                onClick = { mode = Mode.CHOOSER },
+                        if (profiles.isNullOrEmpty()) {
+                            Text(
+                                text = "El primer perfil tomará tus favoritos y progreso actuales.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = JkTextSecondary,
                             )
+                        }
+
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(nameFieldFocus)
+                                // ▼/▲ salen del campo (el BasicTextField se
+                                // traga las flechas para mover el cursor).
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) {
+                                        return@onPreviewKeyEvent false
+                                    }
+                                    when (event.key) {
+                                        Key.DirectionDown -> {
+                                            val ok = runCatching { createButtonFocus.requestFocus() }
+                                                .getOrDefault(false)
+                                            if (!ok) runCatching { nameFieldFocus.requestFocus() }
+                                            true
+                                        }
+
+                                        Key.DirectionUp -> {
+                                            if (!profiles.isNullOrEmpty()) {
+                                                mode = Mode.CHOOSER
+                                            }
+                                            true
+                                        }
+
+                                        else -> false
+                                    }
+                                },
+                            textStyle = TextStyle(color = JkTextPrimary, fontSize = 18.sp),
+                            cursorBrush = SolidColor(JkOrange),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = {
+                                if (name.isNotBlank()) {
+                                    scope.launch {
+                                        manager.create(name)
+                                        Graph.syncInBackground(context)
+                                        onReady()
+                                    }
+                                }
+                            }),
+                            decorationBox = { inner ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(JkSurfaceHigh, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                ) {
+                                    if (name.isEmpty()) {
+                                        Text(
+                                            text = "Nombre del perfil",
+                                            color = JkTextSecondary,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                        )
+                                    }
+                                    inner()
+                                }
+                            },
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            TvActionButton(
+                                text = "Crear perfil",
+                                onClick = {
+                                    scope.launch {
+                                        manager.create(name)
+                                        Graph.syncInBackground(context)
+                                        onReady()
+                                    }
+                                },
+                                enabled = name.isNotBlank(),
+                                modifier = Modifier.focusRequester(createButtonFocus),
+                            )
+                            if (!profiles.isNullOrEmpty()) {
+                                TvActionButton(
+                                    text = "Cancelar",
+                                    primary = false,
+                                    onClick = { mode = Mode.CHOOSER },
+                                )
+                            }
                         }
                     }
                 }
@@ -279,7 +299,15 @@ fun ProfileGateScreen(onReady: () -> Unit) {
 
 private enum class Mode { LOADING, CHOOSER, CREATE }
 
-/** Tile de perfil estilo Netflix: caja con la inicial + nombre. */
+/**
+ * Tile de perfil estilo Netflix, ahora con `androidx.tv.material3.Card`
+ * (Material Design 3 para TV): `CardDefaults.colors/scale/shape/border`
+ * reemplazan el `Box` + `background` + `border` manuales de antes. El
+ * `Card` recibe `onClick`/`interactionSource` directamente, así que ya no
+ * hace falta `.clickable(...)` — pero el `focusRequester()` sigue yendo
+ * ANTES del `Card` en la cadena de modificadores (misma trampa F11: si va
+ * después, `requestFocus()` falla en silencio).
+ */
 @Composable
 private fun ProfileTile(
     profile: ProfileEntity,
@@ -290,38 +318,38 @@ private fun ProfileTile(
     val focused by interactionSource.collectIsFocusedAsState()
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
+        Card(
+            onClick = onClick,
             modifier = Modifier
-                // focusRequester ANTES de clickable: si va después,
-                // requestFocus() devuelve false en silencio (trampa F11).
                 .then(
                     focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier,
                 )
-                .size(160.dp)
-                .background(
-                    color = if (focused) JkSurfaceHigh else JkSurface,
+                .size(160.dp),
+            interactionSource = interactionSource,
+            shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+            colors = CardDefaults.colors(
+                containerColor = JkSurface,
+                contentColor = JkTextPrimary,
+                focusedContainerColor = JkSurfaceHigh,
+                focusedContentColor = JkOrange,
+            ),
+            scale = CardDefaults.scale(focusedScale = 1.05f),
+            border = CardDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(3.dp, JkOrange),
                     shape = RoundedCornerShape(12.dp),
-                )
-                .then(
-                    if (focused) {
-                        Modifier.border(3.dp, JkOrange, RoundedCornerShape(12.dp))
-                    } else {
-                        Modifier
-                    },
-                )
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick,
                 ),
-            contentAlignment = Alignment.Center,
+            ),
+            glow = CardDefaults.glow(focusedGlow = Glow(elevationColor = JkOrange, elevation = 8.dp)),
         ) {
-            Text(
-                text = profile.name.take(1).uppercase(),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (focused) JkOrange else JkTextPrimary,
-            )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = profile.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (focused) JkOrange else JkTextPrimary,
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -332,33 +360,41 @@ private fun ProfileTile(
     }
 }
 
-/** Tile "+ Nuevo perfil" al final del selector. */
+/** Tile "+ Nuevo perfil" al final del selector, con el mismo estilo Card. */
 @Composable
 private fun NewProfileTile(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(160.dp)
-                .background(
-                    color = if (focused) JkSurfaceHigh else JkSurface,
+        Card(
+            onClick = onClick,
+            modifier = Modifier.size(160.dp),
+            interactionSource = interactionSource,
+            shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+            colors = CardDefaults.colors(
+                containerColor = JkSurface,
+                contentColor = JkTextSecondary,
+                focusedContainerColor = JkSurfaceHigh,
+                focusedContentColor = JkOrange,
+            ),
+            scale = CardDefaults.scale(focusedScale = 1.05f),
+            border = CardDefaults.border(
+                focusedBorder = Border(
+                    border = BorderStroke(3.dp, JkOrange),
                     shape = RoundedCornerShape(12.dp),
-                )
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick,
                 ),
-            contentAlignment = Alignment.Center,
+            ),
+            glow = CardDefaults.glow(focusedGlow = Glow(elevationColor = JkOrange, elevation = 8.dp)),
         ) {
-            Text(
-                text = "+",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (focused) JkOrange else JkTextSecondary,
-            )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "+",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (focused) JkOrange else JkTextSecondary,
+                )
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(

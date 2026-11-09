@@ -600,3 +600,68 @@ perfil "Alejoa" real con espacio `07951576`): se leyó `last_sync_at` de
 de `1794183999754` a `1794185823408`, confirmando que `syncNow()` corrió
 automáticamente al autoactivar el perfil. La app entró a Home sin demora
 visible (navegación no bloqueada por el sync).
+
+## Tarjetas Material Design 3 en el gate de perfiles — verificado 2026-11-08
+
+Pedido explícito del usuario: mostrar y crear perfiles con tarjetas
+estilo Material Design 3, en vez de los `Box` + `background` + `border` +
+`clickable` manuales de F11/F11.1.
+
+### Cambios
+
+- **`ProfileTile`/`NewProfileTile`** (`ProfileGateScreen.kt`): reescritos
+  sobre `androidx.tv.material3.Card` (no `ClassicCard`/`CompactCard` —
+  los tiles solo muestran una inicial o "+", no una imagen). `Card` recibe
+  `onClick`/`interactionSource` directamente, así que ya no hace falta
+  `.clickable(...)` aparte. Estilo vía:
+  - `CardDefaults.shape(shape = RoundedCornerShape(12.dp))`
+  - `CardDefaults.colors(containerColor = JkSurface, contentColor = ...,
+    focusedContainerColor = JkSurfaceHigh, focusedContentColor = JkOrange)`
+  - `CardDefaults.scale(focusedScale = 1.05f)`
+  - `CardDefaults.border(focusedBorder = Border(border =
+    BorderStroke(3.dp, JkOrange), shape = RoundedCornerShape(12.dp)))`
+  - `CardDefaults.glow(focusedGlow = Glow(elevationColor = JkOrange,
+    elevation = 8.dp))`
+  - El `focusRequester()` del tile `Alejoa`/primer perfil sigue yendo
+    **antes** del `Card` en la cadena de modificadores (misma trampa F11:
+    después de un componente clickable, `requestFocus()` falla en
+    silencio).
+- **Formulario `Mode.CREATE`**: envuelto en un `androidx.tv.material3.Surface`
+  (variante no interactiva, vía `SurfaceDefaults.colors(containerColor =
+  JkSurface, contentColor = JkTextPrimary)`, `shape = RoundedCornerShape(16.dp)`,
+  `modifier = Modifier.fillMaxWidth(0.6f)`), reemplazando el `Box` +
+  `background` suelto de antes. El `Column` interior pasa a
+  `padding(32.dp)`; el fondo del `BasicTextField` cambia de `JkSurface` a
+  `JkSurfaceHigh` para que se note dentro de la nueva `Surface`; el ancho
+  del campo pasa de `fillMaxWidth(0.5f)` a `fillMaxWidth()` (ya es relativo
+  al ancho de la `Surface`, no al de toda la pantalla).
+- API de `tv-material3` 1.1.0 confirmada por `javap` sobre el aar
+  decompilado y por `developer.android.com`:
+  `Border(border: BorderStroke, inset: Dp, shape: Shape)` (constructor
+  secundario público) y `Glow(elevationColor: Color, elevation: Dp)`
+  (constructor público añadido en 1.1.0) — ambos usados directamente, no
+  vía `.None`.
+
+### Verificación en emulador
+
+Con un segundo perfil de prueba ("TestCard") insertado directo en
+`jk-tv.db` y `active_profile_id=0` (fuerza el chooser con 2+ perfiles):
+
+- `screencap` confirmó las 3 `Card` del chooser (Alejoa, TestCard, "+
+  Nuevo perfil") con esquinas redondeadas; la tarjeta con foco muestra
+  borde naranja + glow, las demás quedan en `JkSurface` plano.
+- `DPAD_RIGHT` repetido movió el foco correctamente entre las 3 `Card`
+  (confirmado por screencap en cada paso).
+- `DPAD_CENTER` sobre "+ Nuevo perfil" abrió el formulario dentro de la
+  nueva `Surface` — panel elevado y redondeado, visualmente distinto del
+  fondo, en vez del bloque suelto anterior.
+- Escrito el nombre "CardMD3", `KEYCODE_BACK` cerró el IME sin perder el
+  texto, y `DPAD_DOWN` bajó el foco al botón "Crear perfil" — confirmado
+  con `uiautomator dump` (`focused="true"` sobre el nodo del botón).
+- `DPAD_CENTER` sobre "Crear perfil" creó el perfil y navegó a Home de
+  inmediato (sin regresión del auto-sync de F11.2).
+- `./gradlew :app:assembleDebug` y `./gradlew test` → `BUILD SUCCESSFUL`.
+- Restauración: DB y `shared_prefs/jk-profiles.xml` del emulador
+  restaurados desde `jk-tv-backup.db` (perfil "Alejoa" único, 7
+  favoritos, espacio `07951576`) — confirmado con `screencap` y lectura
+  directa de la DB restaurada.
