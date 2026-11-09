@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -470,7 +470,7 @@ private fun Overlay(
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 TvIconButton(
-                    icon = Icons.Filled.Close,
+                    icon = Icons.Filled.ExitToApp,
                     contentDescription = "Salir del reproductor",
                     size = 40.dp,
                     onClick = onExit,
