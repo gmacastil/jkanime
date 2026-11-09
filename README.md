@@ -73,8 +73,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Un APK de debug ya compilado (listo para sideload) vive en `dist/` — no se
-versiona en git (`*.apk` está en `.gitignore`); se regenera con
-`./gradlew :app:assembleDebug` y copiándolo a `dist/`.
+versiona en git (`*.apk` está en `.gitignore`). Para generarlo por demanda,
+en vez de `assembleDebug` + copiar a mano:
+
+```bash
+./tools/build-apk.sh              # build + copia versionada a dist/
+./tools/build-apk.sh --install    # además lo instala en el dispositivo/emulador conectado
+./tools/build-apk.sh --clean      # ./gradlew clean antes de compilar
+./tools/build-apk.sh --out DIR    # copiar a otro directorio en vez de dist/
+```
+
+El script imprime ruta, tamaño y sha256 del APK generado.
 
 Si el sitio cambia y los tests fallan, refresca los fixtures con
 `./tools/refresh-fixtures.sh` y compara el HTML nuevo contra los selectores
