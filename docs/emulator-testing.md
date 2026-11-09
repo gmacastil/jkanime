@@ -717,3 +717,84 @@ Mismo patrón MD3 ya validado en F11.3 (`ProfileGateScreen.kt`):
 - `DPAD_DOWN` + `DPAD_CENTER` sobre una opción: seleccionó y colapsó el
   dropdown correctamente (misma lógica de `onSelect`/`expanded.value`, sin
   cambios funcionales, solo visuales).
+
+---
+
+## F12 — Avatares de perfil en Home + selector reentrante con borrado — verificado 2026-11-09
+
+Pedido explícito del usuario: identificar perfiles con avatares, mostrar el
+avatar del perfil activo en Home, sacar "Perfiles" del menú lateral de Home
+(el usuario debe salir de Home para cambiar/crear perfil) y permitir borrar
+perfiles desde el propio chooser de tarjetas.
+
+### Cambios
+
+- **`ProfileAvatar.kt`** (nuevo, `feature/profiles/`): `avatarColorFor(profileId)`
+  devuelve un color determinista de una paleta fija según el id del perfil
+  (sin cambio de esquema en `ProfileEntity`, sin migración de Room — el
+  color se deriva en cada render). `ProfileAvatar(name, profileId, modifier,
+  size)` composable circular con la inicial del nombre, reutilizado en el
+  header de Home y en las tarjetas del chooser.
+- **`HomeScreen.kt`**: "Perfiles" eliminado del `SideDrawer`. El `Header`
+  ahora muestra un `ProfileAvatarButton` (44.dp) junto al campo de búsqueda
+  con el avatar del perfil activo; al pulsarlo navega a `PROFILE_SWITCH`.
+- **`ProfileGateScreen.kt`**: pasa a ser de doble propósito —
+  - gate inicial de arranque (`startInChooser = false`, comportamiento de
+    F11/F11.1 sin cambios: 0 perfiles → formulario, 1 perfil → autoactivar,
+    2+ → chooser).
+  - pantalla reentrante de cambio de perfil desde Home
+    (`startInChooser = true`, con `onBack: () -> Unit` para volver).
+  - nuevo modo edición (`editMode`/`confirmDeleteId`): botón lápiz/check en
+    la cabecera; en modo edición cada `ProfileTile` muestra una insignia "X"
+    roja (`JkRed`, nuevo color en `Theme.kt`) en la esquina; al tocar la
+    tarjeta se reemplaza su contenido por una confirmación inline
+    ("¿Eliminar "<nombre>"?" + botones Eliminar/Cancelar) sin salir de la
+    pantalla. Si se borra el último perfil, cae automáticamente a
+    `Mode.CREATE`.
+- **`ProfilesScreen.kt` eliminado** — completamente reemplazado por
+  `ProfileGateScreen`.
+- **`JkNavHost.kt`**: nueva ruta `Routes.PROFILE_SWITCH` sustituye a la
+  antigua `Routes.PROFILES`; `onOpenProfiles` de `HomeScreen` navega ahí.
+
+### Bug encontrado y corregido: insignia de borrado invisible
+
+La "X" roja de borrado no se veía en pantalla aunque el nodo existía en el
+árbol de UI (bounds correctos) y el color de fondo era el esperado por
+debajo del `Card`. Causa: el `Card` de `tv-material3` con `Glow` (elevación
+de foco) se repinta por encima de hermanos dentro del mismo `Box` padre,
+tapando el badge. Fix: `.zIndex(1f)` en el `Box` del badge (import
+`androidx.compose.ui.zIndex`), confirmado visualmente tras rebuild — mismo
+patrón a vigilar en cualquier otro overlay sobre un `Card` con `Glow`.
+
+### Verificación en emulador
+
+- Avatar en el header de Home confirmado visible (círculo verde "A"),
+  bounds `[1780,32][1876,128]`; `input tap` en el centro navega siempre a
+  `PROFILE_SWITCH` ("¿Quién está viendo?").
+- `SideDrawer` confirmado sin "Perfiles": solo `Animes`, `Directorio`,
+  `Favoritos`, `Sync`.
+- Modo edición: tap en el lápiz muestra la insignia roja en cada tarjeta y
+  cambia el texto de ayuda a "Elige un perfil para eliminarlo.".
+- Tap en una tarjeta en modo edición → confirmación inline con nombre real
+  del perfil + Eliminar/Cancelar.
+- "Cancelar" restaura la tarjeta sin borrar nada.
+- "Eliminar" confirmado end-to-end sobre un perfil de prueba ("TestD",
+  creado durante esta misma sesión de pruebas): tras confirmar, el perfil
+  desaparece del chooser y solo queda el perfil original ("Alejoa").
+- Salir del modo edición (tap en el check) hace desaparecer la insignia y
+  vuelve a mostrarse la tarjeta "+ Nuevo perfil".
+- Creación de perfil desde el chooser reentrante verificada end-to-end:
+  "+ Nuevo perfil" → formulario `Mode.CREATE` → `input text` + `ENTER` →
+  perfil creado y vuelta directa a Home con el nuevo avatar activo.
+- `./gradlew :app:assembleDebug` → `BUILD SUCCESSFUL` en cada iteración
+  (incluida la del fix de `zIndex`).
+- Estado final del emulador restaurado a un solo perfil ("Alejoa", avatar
+  verde "A") tras borrar el perfil de prueba usado en la verificación.
+
+### Detalle menor de foco (no bloqueante)
+
+Tras confirmar o cancelar un borrado, el foco del D-pad no vuelve a la
+tarjeta de origen sino al botón lápiz/check de la cabecera (navegable con
+`DPAD_DOWN`/`DPAD_LEFT`/`DPAD_RIGHT` igual, solo cambia de dónde parte).
+No afecta la funcionalidad; pendiente de pulir si se quiere exactitud de
+foco perfecta.
