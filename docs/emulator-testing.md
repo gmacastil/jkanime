@@ -1020,3 +1020,21 @@ numérico.
 - Cambiar un filtro (Género = Comedia) reinicia a página 1 y la ventana se
   recalcula a 68 páginas.
 - `./gradlew :app:assembleDebug` → `BUILD SUCCESSFUL` tras cada paso.
+
+## F15 — Menú lateral del avatar y orden de capítulos — verificado 2026-11-09
+
+- El menú del avatar dejó de ser un panel centrado con filas de botones y ahora
+  es un cajón lateral derecho de 420 dp, con scrim, cabecera del perfil,
+  estado de sincronización y opciones verticales (`Sincronizar ahora`, generar
+  vínculo, desvincular y cambiar perfil).
+- El modo de código conserva el mismo cajón y usa el teclado numérico dentro
+  del menú; `BACK`/la flecha regresan a las opciones principales y `X` cierra.
+- El botón de ordenar capítulos recibió un `FocusRequester` estable y rutas
+  explícitas: `DPAD_UP` desde el primer capítulo llega al ordenamiento y
+  `DPAD_DOWN` desde el ordenamiento vuelve al primer capítulo. Después de
+  invertir la lista el foco se conserva en el botón, permitiendo alternar varias
+  veces seguidas.
+- Se corrigió además el foco inicial del detalle: ahora se solicita
+  explícitamente el capítulo inicial en vez de dejar el foco en la estrella.
+- Verificado en emulador: orden descendente `6..1`, alternancia ascendente
+  `1..6`, foco visible en el control y navegación de ida y vuelta con D-pad.

@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -142,6 +143,7 @@ private fun Content(
 
     val firstChapterFocus = remember { FocusRequester() }
     val starFocus = remember { FocusRequester() }
+    val sortFocus = remember { FocusRequester() }
 
     // Calcula el índice del capítulo en el que enfocar:
     // 1) Si hay resumeEpisode (empezado y sin terminar), ése.
@@ -173,8 +175,10 @@ private fun Content(
             withFrameNanos { }
             val ok = if (sorted.isEmpty()) starFocus.requestFocus()
             else {
-                // El focusRequester se pasa por índice en ChapterRow
-                true // se maneja en el itemsIndexed abajo
+                // El primer capítulo ya está compuesto al entrar al detalle.
+                // Pedirlo explícitamente evita que el foco caiga en la
+                // estrella y hace que DPAD_UP llegue al botón de orden.
+                firstChapterFocus.requestFocus()
             }
             if (ok) return@LaunchedEffect
         }
@@ -246,7 +250,15 @@ private fun Content(
                 // lista (antes era un botón con texto que ocupaba media fila).
                 SortButton(
                     descending = descending,
-                    onClick = onToggleSort,
+                    focusRequester = sortFocus,
+                    downFocusRequester = firstChapterFocus,
+                    onClick = {
+                        onToggleSort()
+                        // La lista cambia de composición al instante. Pedir
+                        // de nuevo el foco mantiene el D-pad sobre el control
+                        // y permite invertir el orden varias veces seguidas.
+                        sortFocus.requestFocus()
+                    },
                 )
                 resumeEpisode?.let { episode ->
                     TvActionButton(
@@ -294,6 +306,11 @@ private fun Content(
                             progressLabel = progress
                                 ?.takeIf { it.durationMs > 0 && it.fraction >= 0.01f }
                                 ?.let { "${(it.fraction * 100).toInt()}%" },
+                            modifier = if (index == 0) {
+                                Modifier.focusProperties { up = sortFocus }
+                            } else {
+                                Modifier
+                            },
                             focusRequester = if (index == initialFocusIndex) firstChapterFocus else null,
                             onClick = {
                                 onPlay(
@@ -420,7 +437,12 @@ private fun MetaLine(label: String, value: String, valueColor: Color = JkTextPri
 
 /** Botón de orden: flechas Material apiladas, con el estado en el color. */
 @Composable
-private fun SortButton(descending: Boolean, onClick: () -> Unit) {
+private fun SortButton(
+    descending: Boolean,
+    focusRequester: FocusRequester,
+    downFocusRequester: FocusRequester,
+    onClick: () -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     val tint = when {
@@ -431,6 +453,10 @@ private fun SortButton(descending: Boolean, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
+            // Debe ir antes de clickable: clickable crea el focus target.
+            .focusRequester(focusRequester)
+            .focusProperties { down = downFocusRequester }
+            .size(48.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (focused) JkSurfaceHigh else JkSurface)
             .border(
@@ -443,7 +469,8 @@ private fun SortButton(descending: Boolean, onClick: () -> Unit) {
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(8.dp),
+        contentAlignment = Alignment.Center,
     ) {
         SortArrowsIcon(tint = tint)
     }
