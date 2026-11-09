@@ -15,6 +15,9 @@ val JkTextSecondary = Color(0xFFA6A6B2)
 /** Capítulos ya vistos (verde) y estado "en emisión". */
 val JkGreen = Color(0xFF3DDC84)
 
+/** Acciones destructivas (eliminar perfil). */
+val JkRed = Color(0xFFE84C4C)
+
 private val JkColorScheme = darkColorScheme(
     primary = JkOrange,
     onPrimary = Color(0xFF141414),

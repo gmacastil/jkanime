@@ -14,15 +14,14 @@ import net.jkanime.tv.feature.directorio.DirectorioScreen
 import net.jkanime.tv.feature.home.HomeScreen
 import net.jkanime.tv.feature.player.PlayerActivity
 import net.jkanime.tv.feature.profiles.ProfileGateScreen
-import net.jkanime.tv.feature.profiles.ProfilesScreen
 import net.jkanime.tv.feature.sync.SyncScreen
 
 object Routes {
     const val HOME = "home"
     const val SYNC = "sync"
     const val DIRECTORIO = "directorio"
-    const val PROFILES = "profiles"
     const val PROFILE_GATE = "profile_gate"
+    const val PROFILE_SWITCH = "profile_switch"
     const val DETAIL = "detail/{slug}"
     fun detail(slug: String) = "detail/$slug"
 }
@@ -58,7 +57,7 @@ fun JkNavHost() {
                 onOpenAnime = { slug -> navController.navigate(Routes.detail(slug)) },
                 onOpenSync = { navController.navigate(Routes.SYNC) },
                 onOpenDirectorio = { navController.navigate(Routes.DIRECTORIO) },
-                onOpenProfiles = { navController.navigate(Routes.PROFILES) },
+                onOpenProfiles = { navController.navigate(Routes.PROFILE_SWITCH) },
             )
         }
 
@@ -66,8 +65,15 @@ fun JkNavHost() {
             SyncScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Routes.PROFILES) {
-            ProfilesScreen(onBack = { navController.popBackStack() })
+        // Reingreso al selector de perfiles (F12): se llega saliendo de Home,
+        // nunca desde el menú lateral. A diferencia de PROFILE_GATE, siempre
+        // arranca en el chooser y BACK vuelve a Home sin tocar el activo.
+        composable(Routes.PROFILE_SWITCH) {
+            ProfileGateScreen(
+                startInChooser = true,
+                onReady = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
+            )
         }
 
         composable(Routes.DIRECTORIO) {

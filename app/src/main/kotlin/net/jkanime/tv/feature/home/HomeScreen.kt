@@ -19,12 +19,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -68,6 +68,7 @@ import net.jkanime.tv.data.local.FavoriteEntity
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.ProgramacionSection
+import net.jkanime.tv.feature.profiles.ProfileAvatar
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
 import net.jkanime.tv.ui.component.PosterCard
@@ -96,6 +97,8 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
+    val profileManager = remember(context) { Graph.profiles(context) }
+    val activeProfile by profileManager.activeProfile.collectAsStateWithLifecycle(initialValue = null)
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(Graph.repository, library),
     )
@@ -186,6 +189,8 @@ fun HomeScreen(
                 resultCount = search.hits.size,
                 searchFocus = searchFocus,
                 menuFocus = menuFocus,
+                profileName = activeProfile?.name,
+                profileId = activeProfile?.id ?: 0,
                 onToggleDrawer = {
                     if (drawerOpen) viewModel.closeDrawer() else viewModel.openDrawer()
                 },
@@ -194,6 +199,7 @@ fun HomeScreen(
                     val moved = runCatching { resultsFocus.requestFocus() }.getOrDefault(false)
                     pendingGridFocus = !moved
                 },
+                onOpenProfiles = onOpenProfiles,
             )
 
             when {
@@ -261,10 +267,6 @@ fun HomeScreen(
                     viewModel.closeDrawer()
                     onOpenDirectorio()
                 },
-                onProfiles = {
-                    viewModel.closeDrawer()
-                    onOpenProfiles()
-                },
             )
         }
     }
@@ -283,9 +285,12 @@ private fun Header(
     resultCount: Int,
     searchFocus: FocusRequester,
     menuFocus: FocusRequester,
+    profileName: String?,
+    profileId: Int,
     onToggleDrawer: () -> Unit,
     onQueryChange: (String) -> Unit,
     onMoveDown: () -> Unit,
+    onOpenProfiles: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -318,6 +323,50 @@ private fun Header(
             onMoveDown = onMoveDown,
             modifier = Modifier.weight(1f),
         )
+
+        if (profileName != null) {
+            Spacer(modifier = Modifier.width(16.dp))
+            ProfileAvatarButton(
+                name = profileName,
+                profileId = profileId,
+                onClick = onOpenProfiles,
+            )
+        }
+    }
+}
+
+/**
+ * Avatar del perfil activo en la cabecera de Home: identifica "quién está
+ * viendo" de un vistazo y, al pulsarlo, saca al usuario de Home de vuelta al
+ * selector de tarjetas (`Routes.PROFILE_SWITCH`) — es la ÚNICA forma de
+ * cambiar/crear/eliminar perfiles; ya no vive en el menú lateral.
+ */
+@Composable
+private fun ProfileAvatarButton(
+    name: String,
+    profileId: Int,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) JkOrange else Color.Transparent,
+                shape = CircleShape,
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        ProfileAvatar(name = name, profileId = profileId, size = 40.dp)
     }
 }
 
@@ -422,7 +471,6 @@ private fun SideDrawer(
     onFavorites: () -> Unit,
     onSync: () -> Unit,
     onDirectorio: () -> Unit,
-    onProfiles: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -478,12 +526,6 @@ private fun SideDrawer(
             icon = Icons.Filled.Refresh,
             selected = false,
             onClick = onSync,
-        )
-        DrawerItem(
-            label = "Perfiles",
-            icon = Icons.Filled.AccountBox,
-            selected = false,
-            onClick = onProfiles,
         )
     }
 }

@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.profiles
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,6 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -42,11 +48,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Glow
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
@@ -55,8 +63,10 @@ import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
 import net.jkanime.tv.data.local.ProfileEntity
 import net.jkanime.tv.ui.component.TvActionButton
+import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkOrange
+import net.jkanime.tv.ui.theme.JkRed
 import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkSurfaceHigh
 import net.jkanime.tv.ui.theme.JkTextPrimary
@@ -64,19 +74,28 @@ import net.jkanime.tv.ui.theme.JkTextSecondary
 
 /**
  * Puerta de entrada tipo Netflix (F11): se muestra al arrancar la app
- * cuando NO hay perfil configurado (`active_profile_id = 0`).
+ * cuando NO hay perfil configurado (`active_profile_id = 0`), y también se
+ * reutiliza para **cambiar/crear/eliminar** perfiles una vez dentro de la
+ * app (F12): a diferencia del menú de Home, esto exige salir de Home y
+ * volver a esta pantalla de tarjetas (`startInChooser = true`).
  *
- * Reglas:
+ * Reglas de la puerta inicial (`startInChooser = false`):
  *  - 0 perfiles  → formulario de creación (el primero reclama los datos
  *    legacy `owner=0` y, por el camino del sync, el espacio del dispositivo).
  *  - 1 perfil    → se activa solo (queda por default) y se entra a Home.
  *  - 2+ perfiles → selector para elegir, como Netflix.
  *
- * Si ya hay perfil activo esta pantalla ni se compone (el NavHost arranca
- * directo en Home).
+ * En modo reingreso (`startInChooser = true`) siempre se arranca en el
+ * selector (aunque haya un solo perfil, porque la intención explícita es
+ * verlo en tarjetas para crear/eliminar) y `BACK`/`onBack` devuelve a Home
+ * sin tocar el perfil activo.
  */
 @Composable
-fun ProfileGateScreen(onReady: () -> Unit) {
+fun ProfileGateScreen(
+    onReady: () -> Unit,
+    startInChooser: Boolean = false,
+    onBack: () -> Unit = {},
+) {
     val context = LocalContext.current
     val manager = remember(context) { Graph.profiles(context) }
     val scope = rememberCoroutineScope()
@@ -84,14 +103,21 @@ fun ProfileGateScreen(onReady: () -> Unit) {
     // null = cargando (Room aún no emitió); después llega la lista real.
     val profiles by manager.profiles.collectAsStateWithLifecycle(initialValue = null)
 
-    var mode by remember { mutableStateOf(Mode.LOADING) }
+    var mode by remember { mutableStateOf(if (startInChooser) Mode.CHOOSER else Mode.LOADING) }
     var name by remember { mutableStateOf("") }
+
+    // Modo edición (borrar perfiles): solo tiene sentido dentro del
+    // selector, así que se resetea cada vez que se entra/sale de él.
+    var editMode by remember(mode) { mutableStateOf(false) }
+    var confirmDeleteId by remember(mode) { mutableStateOf<Int?>(null) }
 
     val firstProfileFocus = remember { FocusRequester() }
     val nameFieldFocus = remember { FocusRequester() }
     val createButtonFocus = remember { FocusRequester() }
+    val editToggleFocus = remember { FocusRequester() }
 
-    // Decisión inicial según cuántos perfiles haya (solo desde LOADING).
+    // Decisión inicial según cuántos perfiles haya (solo desde LOADING, es
+    // decir solo en la puerta de arranque, nunca en el reingreso).
     LaunchedEffect(profiles) {
         val list = profiles ?: return@LaunchedEffect
         when {
@@ -108,9 +134,24 @@ fun ProfileGateScreen(onReady: () -> Unit) {
         }
     }
 
+    // Si se borra el último perfil desde el selector, no queda nada que
+    // elegir: hay que pasar a creación igual que en una instalación nueva.
+    LaunchedEffect(mode, profiles?.isEmpty()) {
+        if (mode == Mode.CHOOSER && profiles?.isEmpty() == true) {
+            mode = Mode.CREATE
+        }
+    }
+
+    // BACK: en edición/creación vuelve un paso atrás; en el selector del
+    // reingreso vuelve a Home sin tocar el perfil activo.
+    BackHandler(enabled = mode == Mode.CREATE && !profiles.isNullOrEmpty()) { mode = Mode.CHOOSER }
+    BackHandler(enabled = startInChooser && mode == Mode.CHOOSER) { onBack() }
+
     // Foco por modo: al primer perfil en el selector, al campo en creación
-    // (el IME se abre solo y eso aquí está bien: es la única tarea).
-    LaunchedEffect(mode) {
+    // (el IME se abre solo y eso aquí está bien: es la única tarea). También
+    // se re-dispara si la lista cambia de tamaño estando en el selector
+    // (p. ej. tras borrar un perfil).
+    LaunchedEffect(mode, profiles?.size) {
         val target = when (mode) {
             Mode.CHOOSER -> firstProfileFocus
             Mode.CREATE -> nameFieldFocus
@@ -137,11 +178,32 @@ fun ProfileGateScreen(onReady: () -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
-                    Text(
-                        text = "¿Quién está viendo?",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = JkTextPrimary,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text(
+                            text = "¿Quién está viendo?",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = JkTextPrimary,
+                        )
+                        if (!profiles.isNullOrEmpty()) {
+                            TvIconButton(
+                                icon = if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
+                                contentDescription = if (editMode) {
+                                    "Terminar edición"
+                                } else {
+                                    "Administrar perfiles"
+                                },
+                                active = editMode,
+                                focusRequester = editToggleFocus,
+                                onClick = {
+                                    editMode = !editMode
+                                    confirmDeleteId = null
+                                },
+                            )
+                        }
+                    }
 
                     val list = profiles.orEmpty()
                     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -149,22 +211,41 @@ fun ProfileGateScreen(onReady: () -> Unit) {
                             ProfileTile(
                                 profile = profile,
                                 focusRequester = if (index == 0) firstProfileFocus else null,
+                                editMode = editMode,
+                                confirmDelete = confirmDeleteId == profile.id,
                                 onClick = {
-                                    scope.launch {
-                                        manager.activate(profile.id)
-                                        Graph.syncInBackground(context)
-                                        onReady()
+                                    if (editMode) {
+                                        confirmDeleteId = profile.id
+                                    } else {
+                                        scope.launch {
+                                            manager.activate(profile.id)
+                                            Graph.syncInBackground(context)
+                                            onReady()
+                                        }
                                     }
                                 },
+                                onConfirmDelete = {
+                                    scope.launch {
+                                        manager.delete(profile.id)
+                                        confirmDeleteId = null
+                                    }
+                                },
+                                onCancelDelete = { confirmDeleteId = null },
                             )
                         }
-                        NewProfileTile(
-                            onClick = { mode = Mode.CREATE },
-                        )
+                        if (!editMode) {
+                            NewProfileTile(
+                                onClick = { mode = Mode.CREATE },
+                            )
+                        }
                     }
 
                     Text(
-                        text = "Cada perfil tiene sus favoritos, su progreso y su nube propios.",
+                        text = if (editMode) {
+                            "Elige un perfil para eliminarlo."
+                        } else {
+                            "Cada perfil tiene sus favoritos, su progreso y su nube propios."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                     )
@@ -307,56 +388,99 @@ private enum class Mode { LOADING, CHOOSER, CREATE }
  * hace falta `.clickable(...)` — pero el `focusRequester()` sigue yendo
  * ANTES del `Card` en la cadena de modificadores (misma trampa F11: si va
  * después, `requestFocus()` falla en silencio).
+ *
+ * En `editMode` la tarjeta muestra una `X` roja y, al pulsarla, pide
+ * confirmación (`confirmDelete`) con dos botones en vez de navegar al perfil.
  */
 @Composable
 private fun ProfileTile(
     profile: ProfileEntity,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
+    editMode: Boolean = false,
+    confirmDelete: Boolean = false,
+    onConfirmDelete: () -> Unit = {},
+    onCancelDelete: () -> Unit = {},
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .then(
-                    focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier,
-                )
-                .size(160.dp),
-            interactionSource = interactionSource,
-            shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
-            colors = CardDefaults.colors(
-                containerColor = JkSurface,
-                contentColor = JkTextPrimary,
-                focusedContainerColor = JkSurfaceHigh,
-                focusedContentColor = JkOrange,
-            ),
-            scale = CardDefaults.scale(focusedScale = 1.05f),
-            border = CardDefaults.border(
-                focusedBorder = Border(
-                    border = BorderStroke(3.dp, JkOrange),
-                    shape = RoundedCornerShape(12.dp),
+        Box {
+            Card(
+                onClick = onClick,
+                modifier = Modifier
+                    .then(
+                        focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier,
+                    )
+                    .size(160.dp),
+                interactionSource = interactionSource,
+                shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
+                colors = CardDefaults.colors(
+                    containerColor = JkSurface,
+                    contentColor = JkTextPrimary,
+                    focusedContainerColor = JkSurfaceHigh,
+                    focusedContentColor = JkOrange,
                 ),
-            ),
-            glow = CardDefaults.glow(focusedGlow = Glow(elevationColor = JkOrange, elevation = 8.dp)),
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = profile.name.take(1).uppercase(),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (focused) JkOrange else JkTextPrimary,
-                )
+                scale = CardDefaults.scale(focusedScale = 1.05f),
+                border = CardDefaults.border(
+                    focusedBorder = Border(
+                        border = BorderStroke(3.dp, JkOrange),
+                        shape = RoundedCornerShape(12.dp),
+                    ),
+                ),
+                glow = CardDefaults.glow(focusedGlow = Glow(elevationColor = JkOrange, elevation = 8.dp)),
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    ProfileAvatar(
+                        name = profile.name,
+                        profileId = profile.id,
+                        size = 88.dp,
+                    )
+                }
+            }
+            if (editMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        // El Card con Glow eleva su propio contenido y
+                        // puede pintarse por encima de hermanos del mismo
+                        // Box; sin zIndex la X roja queda tapada por la
+                        // tarjeta (visible en bounds pero sin color real).
+                        .zIndex(1f)
+                        .padding(6.dp)
+                        .size(28.dp)
+                        .background(JkRed, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Eliminar perfil",
+                        tint = Color(0xFF141414),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = profile.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (focused) JkOrange else JkTextSecondary,
-        )
+        if (confirmDelete) {
+            Text(
+                text = "¿Eliminar \"${profile.name}\"?",
+                style = MaterialTheme.typography.labelSmall,
+                color = JkTextPrimary,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvActionButton(text = "Eliminar", primary = false, onClick = onConfirmDelete)
+                TvActionButton(text = "Cancelar", primary = false, onClick = onCancelDelete)
+            }
+        } else {
+            Text(
+                text = profile.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (focused) JkOrange else JkTextSecondary,
+            )
+        }
     }
 }
 
