@@ -293,17 +293,22 @@ fun TvNumberPad(
             Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
                 row.forEachIndexed { colIndex, key ->
                     val isFirst = rowIndex == 0 && colIndex == 0
-                    val mod = if (isFirst && focusRequester != null) {
-                        Modifier.focusRequester(focusRequester)
-                    } else {
-                        Modifier
-                    }
+                    val cellWidth = if (compact) 58.dp else 70.dp
+                    val mod = Modifier
+                        .width(cellWidth)
+                        .then(
+                            if (isFirst && focusRequester != null) {
+                                Modifier.focusRequester(focusRequester)
+                            } else {
+                                Modifier
+                            },
+                        )
                     when (key) {
                         "" -> if (onCancel == null) {
-                            Spacer(modifier = Modifier.width(if (compact) 58.dp else 70.dp))
+                            Spacer(modifier = mod)
                         } else {
                             Box(
-                                modifier = Modifier.width(if (compact) 58.dp else 70.dp),
+                                modifier = mod,
                                 contentAlignment = Alignment.Center,
                             ) {
                                 TvIconButton(
