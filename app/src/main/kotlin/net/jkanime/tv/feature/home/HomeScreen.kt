@@ -442,8 +442,8 @@ private fun Header(
             contentDescription = "JK TV",
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(12.dp)),
+                .size(48.dp)
+                .clip(RoundedCornerShape(10.dp)),
         )
         Spacer(modifier = Modifier.width(24.dp))
 
