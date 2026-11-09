@@ -494,3 +494,63 @@ sobre este mismo sistema).
 - La UI de la app usa **`androidx.tv.material3`** (`MaterialTheme`, `Text`),
   no `androidx.compose.material3` — importar el equivocado da
   `Unresolved reference` en cadena.
+
+## Puerta de entrada de perfiles (gate tipo Netflix) — verificado 2026-11-08
+
+Extensión de F11: al arrancar, si no hay perfil activo (`active_profile_id
+== 0`) la app no entra directo a Home — pide/selecciona perfil primero,
+igual que Netflix.
+
+### Cambios
+
+- **`ProfileGateScreen`** (nuevo, `feature/profiles/`): 3 modos internos
+  (`LOADING`, `CHOOSER`, `CREATE`), decididos al observar
+  `profiles.profiles` (lista de `ProfileManager`):
+  - **0 perfiles** → `CREATE`: formulario "Crea tu perfil para empezar" /
+    "El primer perfil tomará tus favoritos y progreso actuales." (reutiliza
+    `ProfileManager.create()`, que hace `claimLegacy()` del `owner=0` +
+    hereda el espacio de sync del dispositivo).
+  - **1 perfil** → autoactivación silenciosa (`activate()` sin UI) y
+    navegación directa a Home.
+  - **2+ perfiles** → `CHOOSER`: "¿Quién está viendo?" con tiles (inicial
+    del nombre en círculo) + tile "+ Nuevo perfil" al final; elegir uno
+    llama `activate()` y navega a Home.
+- **`JkNavHost`**: nueva ruta `Routes.PROFILE_GATE`; el `startDestination`
+  ya no es fijo — se calcula leyendo
+  `Graph.profiles(context).activeId.value` de forma síncrona al componerse:
+  `PROFILE_GATE` si es `0`, `HOME` en otro caso.
+- Mismo patrón de foco que `ProfilesScreen`: `focusRequester()` antes de
+  `clickable` en cada tile; IME con `hide()` + `onPreviewKeyEvent` en el
+  formulario de creación.
+
+### Verificación en emulador (3 escenarios, manipulando `profiles` +
+`jk-profiles.xml` directamente en la DB del paquete)
+
+- **Test B — 2 perfiles, ninguno activo**: selector "¿Quién está viendo?"
+  con tiles "L"/"A"/"+ Nuevo perfil" renderizado correctamente; elegir
+  "Alejoa" activa el perfil y entra a Home con sus 7 favoritos.
+- **Test C — 1 perfil, ninguno activo**: autoactivación sin preguntar nada,
+  entra directo a Home con la biblioteca correcta del único perfil.
+- **Test D — 0 perfiles**: aparece el formulario `CREATE`. Flujo completo
+  con D-pad: `input text` para escribir el nombre, `KEYCODE_BACK` para
+  cerrar el IME sin perder el texto, `DPAD_DOWN` mueve el foco al botón
+  "Crear perfil" (confirmado con `uiautomator dump`, no solo visualmente),
+  `DPAD_CENTER` crea el perfil y navega a Home automáticamente.
+
+### Trampa nueva encontrada en Test D
+
+- **`input text` puede concatenar sobre texto previo del IME** (sugerencias
+  de autocompletar u otro estado residual del campo) en vez de reemplazarlo:
+  en la prueba apareció `"macastilTestD"` en lugar de `"TestD"` al escribir
+  sin limpiar el campo primero. No es un bug de la app — es el
+  comportamiento de `adb shell input text` sobre un `BasicTextField` con
+  contenido/sugerencias previas. Mitigación en pruebas: limpiar el campo
+  con varios `KEYCODE_DEL` (o `KEYCODE_BACK`+reabrir) y confirmar con
+  `screencap` que quedó vacío antes de `input text`.
+- **"Claim legacy" solo reclama `owner = 0`.** Si se simula "0 perfiles"
+  vaciando la tabla `profiles` de una DB que ya tenía un perfil real
+  (datos en `owner = 1`, no `owner = 0`), el perfil nuevo creado por el
+  gate arranca con biblioteca **vacía** — no es un bug, el legacy real de
+  una instalación fresca sí vive en `owner = 0`. Para simular "0 perfiles"
+  de forma fiel a una instalación nueva, los favoritos/progreso de prueba
+  también deben estar en `owner = 0`, no solo vaciar `profiles`.
