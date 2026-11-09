@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">JK TV</string>
+    <string name="app_name">jkanimetv</string>
     <string name="home_title">Programación</string>
     <string name="loading">Cargando…</string>
     <string name="retry">Reintentar</string>
