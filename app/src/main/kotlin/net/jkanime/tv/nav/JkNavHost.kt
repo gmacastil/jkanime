@@ -14,11 +14,9 @@ import net.jkanime.tv.feature.directorio.DirectorioScreen
 import net.jkanime.tv.feature.home.HomeScreen
 import net.jkanime.tv.feature.player.PlayerActivity
 import net.jkanime.tv.feature.profiles.ProfileGateScreen
-import net.jkanime.tv.feature.sync.SyncScreen
 
 object Routes {
     const val HOME = "home"
-    const val SYNC = "sync"
     const val DIRECTORIO = "directorio"
     const val PROFILE_GATE = "profile_gate"
     const val PROFILE_SWITCH = "profile_switch"
@@ -55,14 +53,9 @@ fun JkNavHost() {
         composable(Routes.HOME) {
             HomeScreen(
                 onOpenAnime = { slug -> navController.navigate(Routes.detail(slug)) },
-                onOpenSync = { navController.navigate(Routes.SYNC) },
                 onOpenDirectorio = { navController.navigate(Routes.DIRECTORIO) },
-                onOpenProfiles = { navController.navigate(Routes.PROFILE_SWITCH) },
+                onOpenProfileSwitch = { navController.navigate(Routes.PROFILE_SWITCH) },
             )
-        }
-
-        composable(Routes.SYNC) {
-            SyncScreen(onBack = { navController.popBackStack() })
         }
 
         // Reingreso al selector de perfiles (F12): se llega saliendo de Home,

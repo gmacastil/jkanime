@@ -29,12 +29,15 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -52,6 +55,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,6 +69,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
 import net.jkanime.tv.data.local.FavoriteEntity
+import net.jkanime.tv.data.sync.SyncEngine
+import net.jkanime.tv.data.sync.SyncResult
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.ProgramacionSection
@@ -73,31 +79,37 @@ import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
 import net.jkanime.tv.ui.component.PosterCard
 import net.jkanime.tv.ui.component.TvIconButton
+import net.jkanime.tv.ui.component.TvActionButton
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkOrange
+import net.jkanime.tv.ui.theme.JkRed
 import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkSurfaceHigh
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
+import kotlinx.coroutines.launch
 
 /**
  * Home = "Programación" del sitio, en tarjetas.
  *
  * Cabecera: botón hamburguesa + marca + campo de búsqueda siempre visible.
  * La búsqueda consulta el **buscador del sitio** (`GET /buscar/{q}`), no un
- * filtro local. Los filtros (Animes / Directorio / Favoritos / Sync)
- * viven en un menú lateral colapsable para dejarle el ancho a la grilla.
+ * filtro local. Los filtros (Animes / Directorio / Favoritos) viven en un
+ * menú lateral colapsable para dejarle el ancho a la grilla.
+ * El avatar del perfil (dcha.) abre un menú con opciones de sync y cambio
+ * de perfil.
  */
 @Composable
 fun HomeScreen(
     onOpenAnime: (String) -> Unit,
-    onOpenSync: () -> Unit = {},
     onOpenDirectorio: () -> Unit = {},
-    onOpenProfiles: () -> Unit = {},
+    onOpenProfileSwitch: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
     val profileManager = remember(context) { Graph.profiles(context) }
+    val syncEngine = remember(context) { Graph.sync(context) }
+    val scope = rememberCoroutineScope()
     val activeProfile by profileManager.activeProfile.collectAsStateWithLifecycle(initialValue = null)
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(Graph.repository, library),
@@ -110,10 +122,18 @@ fun HomeScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val search by viewModel.search.collectAsStateWithLifecycle()
 
+    // Modal del avatar: opciones de sync + cambiar perfil
+    var showAvatarMenu by remember { mutableStateOf(false) }
+    var avatarMenuSyncCode by remember { mutableStateOf("") }
+    var avatarMenuBusy by remember { mutableStateOf(false) }
+    var avatarMenuStatus by remember { mutableStateOf<String?>(null) }
+    var avatarMenuMode by remember { mutableStateOf(AvatarMenuMode.MAIN) }
+
     val searchFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
     val menuFocus = remember { FocusRequester() }
     val firstDrawerItemFocus = remember { FocusRequester() }
+    val avatarMenuFocus = remember { FocusRequester() }
 
     // Cada vez que se elige algo en el menú hay que devolver el foco a la
     // grilla: el ítem pulsado desaparece del árbol y el D-pad queda muerto.
@@ -199,7 +219,7 @@ fun HomeScreen(
                     val moved = runCatching { resultsFocus.requestFocus() }.getOrDefault(false)
                     pendingGridFocus = !moved
                 },
-                onOpenProfiles = onOpenProfiles,
+                onOpenAvatarMenu = { showAvatarMenu = true },
             )
 
             when {
@@ -259,14 +279,111 @@ fun HomeScreen(
                     viewModel.openFavorites()
                     focusNonce++
                 },
-                onSync = {
-                    viewModel.closeDrawer()
-                    onOpenSync()
-                },
                 onDirectorio = {
                     viewModel.closeDrawer()
                     onOpenDirectorio()
                 },
+            )
+        }
+
+        // Menú del avatar: overlay a nivel raíz para que cubra toda la
+        // pantalla (incluida la cabecera) y no quede recortado por la Column.
+        if (showAvatarMenu && activeProfile != null) {
+            AvatarMenu(
+                profileName = activeProfile!!.name,
+                profileId = activeProfile!!.id,
+                mode = avatarMenuMode,
+                syncCode = avatarMenuSyncCode,
+                busy = avatarMenuBusy,
+                status = avatarMenuStatus,
+                focusRequester = avatarMenuFocus,
+                onModeChange = { newMode ->
+                    avatarMenuMode = newMode
+                    // Al entrar al teclado, limpia mensajes del estado anterior.
+                    if (newMode == AvatarMenuMode.JOIN_CODE) avatarMenuStatus = null
+                },
+                onCodeChange = { avatarMenuSyncCode = it },
+                onClose = {
+                    showAvatarMenu = false
+                    avatarMenuMode = AvatarMenuMode.MAIN
+                    avatarMenuSyncCode = ""
+                    avatarMenuStatus = null
+                },
+                onSyncNow = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        val result = syncEngine.syncNow()
+                        avatarMenuBusy = false
+                        avatarMenuStatus = when (result) {
+                            is SyncResult.Success ->
+                                "Sincronizado: ${result.favorites} favoritos, ${result.progress} progresos"
+                            is SyncResult.Failure -> "Error: ${result.message}"
+                            SyncResult.NotPaired -> "No hay espacio vinculado"
+                            SyncResult.NotConfigured -> "Backend sin configurar"
+                        }
+                    }
+                },
+                onCreateSpace = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        runCatching { syncEngine.createSpace() }
+                            .onSuccess { creds ->
+                                avatarMenuStatus =
+                                    "Espacio creado: ${creds.code.chunked(4).joinToString(" ")}"
+                                avatarMenuMode = AvatarMenuMode.MAIN
+                            }
+                            .onFailure { avatarMenuStatus = "Error: ${it.message}" }
+                        avatarMenuBusy = false
+                    }
+                },
+                onJoinSpace = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        runCatching { syncEngine.joinSpace(avatarMenuSyncCode) }
+                            .onSuccess {
+                                avatarMenuStatus = "Dispositivo vinculado"
+                                avatarMenuMode = AvatarMenuMode.MAIN
+                                avatarMenuSyncCode = ""
+                            }
+                            .onFailure {
+                                avatarMenuStatus = "No se pudo vincular: ${it.message}"
+                            }
+                        avatarMenuBusy = false
+                    }
+                },
+                onUnlink = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        syncEngine.clearSpace()
+                        avatarMenuStatus = "Desvinculado"
+                        avatarMenuMode = AvatarMenuMode.MAIN
+                        avatarMenuBusy = false
+                    }
+                },
+                onGeneratePairing = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        runCatching { syncEngine.createPairingCode() }
+                            .onSuccess { pairing ->
+                                avatarMenuStatus =
+                                    "Código para vincular (15 min): " +
+                                    pairing.code.chunked(4).joinToString(" ")
+                            }
+                            .onFailure { avatarMenuStatus = "Error: ${it.message}" }
+                        avatarMenuBusy = false
+                    }
+                },
+                onProfileSwitch = {
+                    showAvatarMenu = false
+                    onOpenProfileSwitch()
+                },
+                hasSpace = activeProfile?.spaceCode != null,
+                spaceCode = activeProfile?.spaceCode.orEmpty(),
             )
         }
     }
@@ -290,7 +407,7 @@ private fun Header(
     onToggleDrawer: () -> Unit,
     onQueryChange: (String) -> Unit,
     onMoveDown: () -> Unit,
-    onOpenProfiles: () -> Unit,
+    onOpenAvatarMenu: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -329,7 +446,7 @@ private fun Header(
             ProfileAvatarButton(
                 name = profileName,
                 profileId = profileId,
-                onClick = onOpenProfiles,
+                onClick = onOpenAvatarMenu,
             )
         }
     }
@@ -337,9 +454,7 @@ private fun Header(
 
 /**
  * Avatar del perfil activo en la cabecera de Home: identifica "quién está
- * viendo" de un vistazo y, al pulsarlo, saca al usuario de Home de vuelta al
- * selector de tarjetas (`Routes.PROFILE_SWITCH`) — es la ÚNICA forma de
- * cambiar/crear/eliminar perfiles; ya no vive en el menú lateral.
+ * viendo" de un vistazo. Al pulsarlo abre el menú de sync/perfil (modal).
  */
 @Composable
 private fun ProfileAvatarButton(
@@ -469,7 +584,6 @@ private fun SideDrawer(
     firstItemFocus: FocusRequester,
     onSelectSection: (ProgramacionSection) -> Unit,
     onFavorites: () -> Unit,
-    onSync: () -> Unit,
     onDirectorio: () -> Unit,
 ) {
     Column(
@@ -521,12 +635,333 @@ private fun SideDrawer(
             selected = showFavorites,
             onClick = onFavorites,
         )
-        DrawerItem(
-            label = "Sync",
-            icon = Icons.Filled.Refresh,
-            selected = false,
-            onClick = onSync,
-        )
+    }
+}
+
+/** Modos del menú del avatar (sync/perfil). */
+private enum class AvatarMenuMode {
+    MAIN,       // Menú principal: sync now, link, unlink, pairing, profile switch
+    JOIN_CODE,  // Introduciendo código de 8 dígitos para vincular
+}
+
+/**
+ * Menú modal del avatar: opciones de sincronización + cambiar perfil.
+ * Se muestra como overlay centrado al pulsar el avatar en la cabecera.
+ */
+@Composable
+private fun AvatarMenu(
+    profileName: String,
+    profileId: Int,
+    mode: AvatarMenuMode,
+    syncCode: String,
+    busy: Boolean,
+    status: String?,
+    focusRequester: FocusRequester,
+    onModeChange: (AvatarMenuMode) -> Unit,
+    onCodeChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onSyncNow: () -> Unit,
+    onCreateSpace: () -> Unit,
+    onJoinSpace: () -> Unit,
+    onUnlink: () -> Unit,
+    onGeneratePairing: () -> Unit,
+    onProfileSwitch: () -> Unit,
+    hasSpace: Boolean,
+    spaceCode: String,
+) {
+    LaunchedEffect(mode) {
+        repeat(10) { withFrameNanos {}; if (focusRequester.requestFocus()) return@LaunchedEffect }
+    }
+
+    // Dialog (ventana aparte) para que el D-pad NO se escape al fondo:
+    // un Box overlay en el mismo árbol deja que el foco viaje a la grilla
+    // de detrás. Dialog confina el foco a su ventana.
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = {
+            if (mode == AvatarMenuMode.JOIN_CODE) {
+                onModeChange(AvatarMenuMode.MAIN)
+                onCodeChange("")
+            } else {
+                onClose()
+            }
+        },
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+        ),
+    ) {
+    // Scrim oscuro
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.82f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Panel sólido MD3 para que el texto sea legible sobre la grilla.
+        androidx.tv.material3.Surface(
+            modifier = Modifier.fillMaxWidth(
+                if (mode == AvatarMenuMode.JOIN_CODE) 0.55f else 0.5f,
+            ),
+            shape = RoundedCornerShape(16.dp),
+            colors = androidx.tv.material3.SurfaceDefaults.colors(
+                containerColor = JkSurface,
+                contentColor = JkTextPrimary,
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 40.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+            // Avatar + nombre (se oculta al teclear el código: el teclado
+            // necesita el alto y en 1080p no caben las dos cosas).
+            if (mode != AvatarMenuMode.JOIN_CODE) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ProfileAvatar(name = profileName, profileId = profileId, size = 72.dp)
+                    Text(
+                        text = profileName,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = JkTextPrimary,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            when (mode) {
+                AvatarMenuMode.MAIN -> {
+                    if (hasSpace) {
+                        // Ya vinculado: muestra código + acciones
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = "Código de sincronización",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = JkTextSecondary,
+                            )
+                            Text(
+                                text = spaceCode.chunked(4).joinToString("  "),
+                                style = MaterialTheme.typography.displaySmall,
+                                color = JkOrange,
+                            )
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TvActionButton(
+                                    text = if (busy) "Sincronizando…" else "Sincronizar ahora",
+                                    primary = true,
+                                    enabled = !busy,
+                                    modifier = Modifier.focusRequester(focusRequester),
+                                    onClick = onSyncNow,
+                                )
+                                TvActionButton(
+                                    text = "Generar código de vinculación",
+                                    primary = false,
+                                    enabled = !busy,
+                                    onClick = onGeneratePairing,
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TvActionButton(
+                                    text = "Desvincular",
+                                    primary = false,
+                                    enabled = !busy,
+                                    onClick = onUnlink,
+                                )
+                                TvActionButton(
+                                    text = "Cambiar perfil",
+                                    primary = false,
+                                    enabled = !busy,
+                                    onClick = {
+                                        onClose()
+                                        onProfileSwitch()
+                                    },
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TvActionButton(
+                                    text = "Cerrar",
+                                    primary = false,
+                                    onClick = onClose,
+                                )
+                            }
+                        }
+                    } else {
+                        // Sin vincular: crear espacio o entrar código
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = "Este perfil no está vinculado a la nube.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = JkTextSecondary,
+                                textAlign = TextAlign.Center,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TvActionButton(
+                                    text = if (busy) "Creando…" else "Crear espacio de sync",
+                                    primary = true,
+                                    enabled = !busy,
+                                    modifier = Modifier.focusRequester(focusRequester),
+                                    onClick = onCreateSpace,
+                                )
+                                TvActionButton(
+                                    text = "Tengo un código de vinculación",
+                                    primary = false,
+                                    enabled = !busy,
+                                    onClick = { onModeChange(AvatarMenuMode.JOIN_CODE) },
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                TvActionButton(
+                                    text = "Cambiar perfil",
+                                    primary = false,
+                                    enabled = !busy,
+                                    onClick = {
+                                        onClose()
+                                        onProfileSwitch()
+                                    },
+                                )
+                                TvActionButton(
+                                    text = "Cerrar",
+                                    primary = false,
+                                    onClick = onClose,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                AvatarMenuMode.JOIN_CODE -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "Código de vinculación",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = JkTextSecondary,
+                        )
+                        Text(
+                            text = syncCode.padEnd(8, '·').chunked(4).joinToString("  "),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = JkOrange,
+                        )
+                        // El estado va bajo el código para que no quede fuera
+                        // del panel cuando el teclado ocupa el alto.
+                        status?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = JkTextPrimary,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+
+                        SyncKeypad(
+                            code = syncCode,
+                            onDigit = { if (syncCode.length < 8) onCodeChange(syncCode + it) },
+                            onBackspace = { onCodeChange(syncCode.dropLast(1)) },
+                            onConfirm = { if (syncCode.length == 8) onJoinSpace() },
+                            onCancel = {
+                                onModeChange(AvatarMenuMode.MAIN)
+                                onCodeChange("")
+                            },
+                            busy = busy,
+                            focusRequester = focusRequester,
+                        )
+                    }
+                }
+            }
+
+            if (mode != AvatarMenuMode.JOIN_CODE) {
+                status?.let {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JkTextPrimary,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            }
+        }
+    }
+    }
+}
+
+/**
+ * Teclado numérico estilo TV para entrar el código de 8 dígitos.
+ */
+@Composable
+private fun SyncKeypad(
+    code: String,
+    onDigit: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    busy: Boolean,
+    focusRequester: FocusRequester? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+            listOf("⌫", "0", ""),
+        ).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEachIndexed { colIndex, key ->
+                    val isFirst = rowIndex == 0 && colIndex == 0
+                    val mod = if (isFirst && focusRequester != null) {
+                        Modifier.focusRequester(focusRequester)
+                    } else {
+                        Modifier
+                    }
+                    when (key) {
+                        "" -> Spacer(modifier = Modifier.width(72.dp))
+                        "⌫" -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            enabled = !busy,
+                            modifier = mod,
+                            onClick = onBackspace,
+                        )
+                        else -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            enabled = !busy,
+                            modifier = mod,
+                            onClick = { onDigit(key) },
+                        )
+                    }
+                }
+            }
+        }
+        // Confirmar (solo con 8 dígitos) + volver, en la misma fila.
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (code.length == 8) {
+                TvActionButton(
+                    text = if (busy) "Vinculando…" else "Vincular",
+                    primary = true,
+                    enabled = !busy,
+                    onClick = onConfirm,
+                )
+            }
+            TvActionButton(
+                text = "Volver",
+                primary = false,
+                onClick = onCancel,
+            )
+        }
     }
 }
 

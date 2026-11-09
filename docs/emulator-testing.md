@@ -798,3 +798,128 @@ tarjeta de origen sino al botón lápiz/check de la cabecera (navegable con
 `DPAD_DOWN`/`DPAD_LEFT`/`DPAD_RIGHT` igual, solo cambia de dónde parte).
 No afecta la funcionalidad; pendiente de pulir si se quiere exactitud de
 foco perfecta.
+
+## F13 — Sync al crear perfil + menú del avatar en Home — verificado 2026-11-09
+
+Pedido explícito del usuario: al crear un perfil preguntar si se quiere
+sincronizar (crear espacio nuevo o entrar un código existente), y mover todas
+las acciones de sync al menú que abre el avatar de Home (ver código, vincular,
+desvincular, re-sincronizar), con iconos. La pantalla `Sync` del menú lateral
+desaparece.
+
+### Cambios
+
+- **`ProfileGateScreen.kt`** — nuevo `Mode.SYNC_CHOICE`, al que se pasa
+  **después** de crear un perfil (antes se llamaba `onReady()` de inmediato).
+  Contenido: "¿Quieres sincronizar este perfil?" con `Crear espacio de sync`
+  (primario), `Tengo un código de vinculación`, `Ahora no` (`onSkip` →
+  `onReady()`) y `Atrás` (vuelve al formulario `Mode.CREATE`).
+  - Sub-modo interno `joining` (estado local `var joining by remember`): al
+    pulsar "Tengo un código" se muestra el teclado numérico en la misma
+    pantalla. Antes la condición era `syncCode.isNotBlank()`, así que el
+    teclado **nunca aparecía**.
+  - `syncLinked` (estado del padre): tras crear espacio o vincular con éxito
+    la pantalla cambia a "Perfil sincronizado" + `Continuar`, mostrando el
+    código generado para que el usuario lo apunte.
+  - `SyncKeypad` acepta `focusRequester` (se aplica a la tecla "1") y
+    `onCancel`.
+- **`HomeScreen.kt`** — menú del avatar (`AvatarMenu`) con
+  `AvatarMenuMode { MAIN, JOIN_CODE }`:
+  - **Con espacio**: código en grande (`0795  1576`) + `Sincronizar ahora`,
+    `Generar código de vinculación`, `Desvincular`, `Cambiar perfil`,
+    `Cerrar`.
+  - **Sin espacio**: "Este perfil no está vinculado a la nube." +
+    `Crear espacio de sync` / `Tengo un código de vinculación` + `Cambiar
+    perfil` / `Cerrar`. Es el mismo estado al que se cae **después de
+    desvincular**, que es justo lo pedido: al desvincular se vuelve a
+    preguntar si crear código nuevo o ingresar uno existente.
+  - **`JOIN_CODE`**: teclado numérico + `Vincular` / `Volver` (código de
+    vinculación de 8 dígitos, no el código del espacio).
+  - `Sync` eliminado del `SideDrawer`; el `Header` ya no recibe `onOpenSync`
+    ni `onOpenProfiles` (solo `onOpenAvatarMenu`).
+- **`JkNavHost.kt`**: eliminadas `Routes.SYNC` y su `composable`;
+  `HomeScreen` recibe `onOpenDirectorio` + `onOpenProfileSwitch`.
+- **`feature/sync/SyncScreen.kt` eliminado**: quedó inalcanzable y su
+  funcionalidad vive ahora en el menú del avatar.
+
+### Bugs encontrados y corregidos (todos vistos en emulador)
+
+1. **El overlay no cubría la cabecera**: el menú se renderizaba dentro del
+   `Header`, dentro de la `Column`, así que se recortaba y "Cerrar" quedaba
+   fuera. Fix: moverlo al `Box` raíz de `HomeScreen`.
+2. **El D-pad se escapaba al fondo**: con el menú abierto, `DPAD_DOWN` viajaba
+   al botón hamburguesa de detrás y el menú quedaba inutilizable. Un `Box`
+   overlay **no** confina el foco en TV. Fix: envolver en
+   `androidx.compose.ui.window.Dialog` con
+   `DialogProperties(usePlatformDefaultWidth = false)`. Verificado: 3×
+   `DPAD_DOWN` dejan el foco en "Cerrar" dentro del diálogo.
+3. **Panel ilegible sobre la grilla**: sin fondo sólido el texto se mezclaba
+   con los pósters. Fix: `androidx.tv.material3.Surface` con
+   `SurfaceDefaults.colors(containerColor = JkSurface)` sobre scrim
+   `Color.Black.copy(alpha = 0.82f)`, `RoundedCornerShape(16.dp)`.
+4. **Botones aplastados en 1080p**: en `SyncChoiceScreen` y en el teclado del
+   menú, "Vincular"/"Volver" quedaban con 5 px de alto (texto recortado) y
+   "Ahora no"/"Atrás" fuera del panel. Causa: el `Column` desbordaba el alto
+   disponible (1080p @ density 2 = 540 dp). Fix: `Vincular` + `Volver` en una
+   sola `Row` (solo aparece `Vincular` con 8 dígitos), panel `0.55f` de ancho,
+   paddings 24 dp, y en el menú del avatar **se oculta el bloque
+   avatar+nombre mientras se teclea** (`mode != JOIN_CODE`).
+5. **Mensaje de estado fuera del panel**: el `syncStatus` iba al final del
+   `Column`, así que con el teclado visible el error
+   (`invalid_pairing_code`) no se veía. Fix: en modo `joining` el estado se
+   pinta justo debajo del código.
+6. **Estado obsoleto al reabrir el teclado**: el menú seguía mostrando
+   "Desvinculado" encima del teclado. Fix: `onModeChange` limpia
+   `avatarMenuStatus` al entrar en `JOIN_CODE`.
+7. **Botones alineados a la izquierda**: los `Column` de cada modo no tenían
+   `horizontalAlignment`, así que las filas de botones arrancaban pegadas al
+   borde del panel. Fix: `fillMaxWidth()` +
+   `Alignment.CenterHorizontally` en cada bloque.
+
+### Trampas de prueba confirmadas (ya conocidas, re-confirmadas aquí)
+
+- **El código del espacio NO sirve para vincular**: `joinSpace` espera un
+  **código de vinculación** de un solo uso y 15 min (`createPairingCode` →
+  `sync_new_pairing`). Meter `0795 1576` devuelve
+  `No se pudo vincular: invalid_pairing_code` — comportamiento correcto, pero
+  de ahí que las etiquetas digan "código de vinculación".
+- **`uiautomator dump` no es fiable para el foco en Compose for TV**: marca
+  `focused="true"` en un nodo que no es el que realmente tiene el foco de
+  Compose. Guiarse por la captura (borde naranja) y no por el dump.
+- **"Touch mode" de Android**: tras un `input tap`, el **primer** evento de
+  D-pad solo saca la ventana del modo táctil y no se entrega al componente.
+  En pruebas con adb hay que enviar una tecla "de más" (o pulsar dos veces)
+  antes de dar por fallido un botón. Con un mando real no ocurre.
+- **Los taps sobre botones de TV a veces no disparan `onClick`**; `DPAD_*` +
+  `DPAD_CENTER` sobre el foco confirmado es más fiable.
+- **Las coordenadas cambian al aparecer la línea de estado**: el panel crece y
+  todo se desplaza ~56 px; recalcular bounds después de cada acción.
+
+### Verificación end-to-end en emulador
+
+- Crear perfil → aparece "¿Quieres sincronizar este perfil?" con las 4
+  acciones completas y visibles (captura con `Ahora no` y `Atrás` dentro del
+  panel).
+- "Tengo un código" → teclado numérico (`Introduce el código`, `····  ····`),
+  foco en la tecla "1"; los 8 dígitos pintan `0795  1576` y aparecen
+  `Vincular` + `Volver` en la misma fila con texto legible.
+- "Vincular" con el código del espacio → `No se pudo vincular:
+  invalid_pairing_code` (mensaje visible bajo el código).
+- Avatar de Home → menú modal con avatar, nombre y código `6736 9973`.
+- "Crear espacio de sync" desde el menú → espacio creado y código mostrado en
+  el acto (`Espacio creado: 6736 9973`) sin reiniciar (el
+  `activeProfile` Flow de `ProfileManager` re-emite).
+- "Sincronizar ahora" → `Sincronizado: 0 favoritos, 0 progresos`.
+- "Desvincular" → `Desvinculado` y el menú cae al estado sin espacio con
+  `Crear espacio de sync` / `Tengo un código de vinculación` (misma lógica que
+  al crear el perfil).
+- "Tengo un código de vinculación" en el menú → teclado con `Código de
+  vinculación`, `Vincular` y `Volver` completos (panel más ancho y sin el
+  bloque de avatar).
+- Vincular con un código de vinculación real generado antes →
+  `Dispositivo vinculado` y el menú vuelve a `MAIN` mostrando el código del
+  espacio.
+- `./gradlew :app:assembleDebug` → `BUILD SUCCESSFUL` en cada iteración.
+- Emulador restaurado a un solo perfil ("Alejoa", espacio `07951576`, 7
+  favoritos y 7 progresos intactos) tras borrar `Test3`, `Test2a` y
+  `SyncTest` en el modo edición del chooser.

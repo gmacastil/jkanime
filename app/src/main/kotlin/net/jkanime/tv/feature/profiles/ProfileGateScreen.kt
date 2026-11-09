@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -45,6 +46,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,6 +67,7 @@ import net.jkanime.tv.data.local.ProfileEntity
 import net.jkanime.tv.ui.component.TvActionButton
 import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkBackground
+import net.jkanime.tv.ui.theme.JkGreen
 import net.jkanime.tv.ui.theme.JkOrange
 import net.jkanime.tv.ui.theme.JkRed
 import net.jkanime.tv.ui.theme.JkSurface
@@ -105,6 +108,10 @@ fun ProfileGateScreen(
 
     var mode by remember { mutableStateOf(if (startInChooser) Mode.CHOOSER else Mode.LOADING) }
     var name by remember { mutableStateOf("") }
+    var syncCode by remember { mutableStateOf("") }
+    var syncBusy by remember { mutableStateOf(false) }
+    var syncStatus by remember { mutableStateOf<String?>(null) }
+    var syncLinked by remember { mutableStateOf(false) }
 
     // Modo edición (borrar perfiles): solo tiene sentido dentro del
     // selector, así que se resetea cada vez que se entra/sale de él.
@@ -326,8 +333,11 @@ fun ProfileGateScreen(
                                 if (name.isNotBlank()) {
                                     scope.launch {
                                         manager.create(name)
-                                        Graph.syncInBackground(context)
-                                        onReady()
+                                        // Tras crear, pasamos a la elección de sync
+                                        mode = Mode.SYNC_CHOICE
+                                        syncCode = ""
+                                        syncStatus = null
+                                        syncLinked = false
                                     }
                                 }
                             }),
@@ -354,10 +364,14 @@ fun ProfileGateScreen(
                             TvActionButton(
                                 text = "Crear perfil",
                                 onClick = {
-                                    scope.launch {
-                                        manager.create(name)
-                                        Graph.syncInBackground(context)
-                                        onReady()
+                                    if (name.isNotBlank()) {
+                                        scope.launch {
+                                            manager.create(name)
+                                            mode = Mode.SYNC_CHOICE
+                                            syncCode = ""
+                                            syncStatus = null
+                                            syncLinked = false
+                                        }
                                     }
                                 },
                                 enabled = name.isNotBlank(),
@@ -374,11 +388,287 @@ fun ProfileGateScreen(
                     }
                 }
             }
+
+            Mode.SYNC_CHOICE -> {
+                // Pantalla de elección de sync tras crear el perfil
+                SyncChoiceScreen(
+                    syncCode = syncCode,
+                    syncBusy = syncBusy,
+                    syncStatus = syncStatus,
+                    linked = syncLinked,
+                    onCodeChange = { syncCode = it },
+                    onCreateSpace = {
+                        syncBusy = true
+                        syncStatus = null
+                        scope.launch {
+                            runCatching { Graph.sync(context).createSpace() }
+                                .onSuccess { creds ->
+                                    syncStatus = "Guarda este código: " +
+                                        creds.code.chunked(4).joinToString(" ")
+                                    syncLinked = true
+                                    Graph.syncInBackground(context)
+                                }
+                                .onFailure { syncStatus = "Error: ${it.message}" }
+                            syncBusy = false
+                        }
+                    },
+                    onJoinSpace = {
+                        syncBusy = true
+                        syncStatus = null
+                        scope.launch {
+                            runCatching { Graph.sync(context).joinSpace(syncCode) }
+                                .onSuccess {
+                                    syncStatus = "Dispositivo vinculado al espacio"
+                                    syncLinked = true
+                                    Graph.syncInBackground(context)
+                                }
+                                .onFailure {
+                                    syncStatus = "No se pudo vincular: ${it.message}"
+                                }
+                            syncBusy = false
+                        }
+                    },
+                    onSkip = {
+                        onReady()
+                    },
+                    onBack = { mode = Mode.CREATE },
+                )
+            }
         }
     }
 }
 
-private enum class Mode { LOADING, CHOOSER, CREATE }
+private enum class Mode { LOADING, CHOOSER, CREATE, SYNC_CHOICE }
+
+/**
+ * Pantalla de elección de sync tras crear un perfil.
+ * Opciones: crear espacio nuevo, entrar código existente, o saltar.
+ *
+ * Sub-modo interno `joining`: al pulsar "Tengo un código" se muestra el
+ * teclado numérico en la misma pantalla (antes dependía de que syncCode no
+ * estuviera vacío, así que nunca aparecía).
+ */
+@Composable
+private fun SyncChoiceScreen(
+    syncCode: String,
+    syncBusy: Boolean,
+    syncStatus: String?,
+    linked: Boolean,
+    onCodeChange: (String) -> Unit,
+    onCreateSpace: () -> Unit,
+    onJoinSpace: () -> Unit,
+    onSkip: () -> Unit,
+    onBack: () -> Unit,
+) {
+    var joining by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(joining, linked) {
+        repeat(10) { withFrameNanos {}; if (focusRequester.requestFocus()) return@LaunchedEffect }
+    }
+
+    // Panel compacto centrado para que TODO quepa en 1080p sin recortes.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(JkBackground)
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.tv.material3.Surface(
+            modifier = Modifier.fillMaxWidth(0.55f),
+            shape = RoundedCornerShape(16.dp),
+            colors = SurfaceDefaults.colors(
+                containerColor = JkSurface,
+                contentColor = JkTextPrimary,
+            ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 36.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = when {
+                        linked -> "Perfil sincronizado"
+                        joining -> "Código de vinculación"
+                        else -> "¿Quieres sincronizar este perfil?"
+                    },
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = JkTextPrimary,
+                    textAlign = TextAlign.Center,
+                )
+
+                if (linked) {
+                    // Ya hay espacio: solo queda entrar a la app.
+                    syncStatus?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = JkGreen,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    TvActionButton(
+                        text = "Continuar",
+                        primary = true,
+                        enabled = !syncBusy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        onClick = onSkip,
+                    )
+                } else if (!joining) {
+                    Text(
+                        text = "Tus favoritos y progreso se compartirán con otros dispositivos.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JkTextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    TvActionButton(
+                        text = if (syncBusy) "Creando…" else "Crear espacio de sync",
+                        primary = true,
+                        enabled = !syncBusy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        onClick = onCreateSpace,
+                    )
+                    TvActionButton(
+                        text = "Tengo un código de vinculación",
+                        primary = false,
+                        enabled = !syncBusy,
+                        onClick = {
+                            onCodeChange("")
+                            joining = true
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TvActionButton(
+                            text = "Ahora no",
+                            primary = false,
+                            enabled = !syncBusy,
+                            onClick = onSkip,
+                        )
+                        TvActionButton(text = "Atrás", primary = false, onClick = onBack)
+                    }
+                } else {
+                    Text(
+                        text = syncCode.padEnd(8, '·').chunked(4).joinToString("  "),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = JkOrange,
+                    )
+                    // El estado va justo debajo del código (no al final) para
+                    // que el mensaje de error no quede fuera del panel.
+                    syncStatus?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = JkTextPrimary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    SyncKeypad(
+                        code = syncCode,
+                        onDigit = { if (syncCode.length < 8) onCodeChange(syncCode + it) },
+                        onBackspace = { onCodeChange(syncCode.dropLast(1)) },
+                        onConfirm = { if (syncCode.length == 8) onJoinSpace() },
+                        onCancel = {
+                            onCodeChange("")
+                            joining = false
+                        },
+                        busy = syncBusy,
+                        focusRequester = focusRequester,
+                    )
+                }
+
+                if (!linked && !joining) {
+                    syncStatus?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = JkTextPrimary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Teclado numérico estilo TV para entrar el código de 8 dígitos.
+ */
+@Composable
+private fun SyncKeypad(
+    code: String,
+    onDigit: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+    busy: Boolean,
+    focusRequester: FocusRequester? = null,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+            listOf("⌫", "0", ""),
+        ).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEachIndexed { colIndex, key ->
+                    val isFirst = rowIndex == 0 && colIndex == 0
+                    val mod = if (isFirst && focusRequester != null) {
+                        Modifier.focusRequester(focusRequester)
+                    } else {
+                        Modifier
+                    }
+                    when (key) {
+                        "" -> Spacer(modifier = Modifier.width(72.dp))
+                        "⌫" -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            enabled = !busy,
+                            modifier = mod,
+                            onClick = onBackspace,
+                        )
+                        else -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            enabled = !busy,
+                            modifier = mod,
+                            onClick = { onDigit(key) },
+                        )
+                    }
+                }
+            }
+        }
+        // Acciones: confirmar (solo con 8 dígitos) + volver, en la misma fila
+        // para no desbordar el panel en 1080p.
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (code.length == 8) {
+                TvActionButton(
+                    text = if (busy) "Vinculando…" else "Vincular",
+                    primary = true,
+                    enabled = !busy,
+                    onClick = onConfirm,
+                )
+            }
+            TvActionButton(
+                text = "Volver",
+                primary = false,
+                onClick = onCancel,
+            )
+        }
+    }
+}
 
 /**
  * Tile de perfil estilo Netflix, ahora con `androidx.tv.material3.Card`
