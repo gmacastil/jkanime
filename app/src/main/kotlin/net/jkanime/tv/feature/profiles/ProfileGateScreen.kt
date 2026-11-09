@@ -635,6 +635,7 @@ private fun SyncKeypad(
         TvNumberPad(
             onDigit = onDigit,
             onBackspace = onBackspace,
+            onCancel = onCancel,
             enabled = !busy,
             compact = compact,
             focusRequester = focusRequester,
@@ -652,12 +653,6 @@ private fun SyncKeypad(
                     onClick = onConfirm,
                 )
             }
-            TvActionButton(
-                text = "Volver",
-                primary = false,
-                compact = compact,
-                onClick = onCancel,
-            )
         }
     }
 }

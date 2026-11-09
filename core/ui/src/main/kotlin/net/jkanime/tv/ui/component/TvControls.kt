@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.tv.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -276,6 +277,7 @@ fun TvChipButton(
 fun TvNumberPad(
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
+    onCancel: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     compact: Boolean = false,
@@ -297,7 +299,22 @@ fun TvNumberPad(
                         Modifier
                     }
                     when (key) {
-                        "" -> Spacer(modifier = Modifier.width(if (compact) 58.dp else 70.dp))
+                        "" -> if (onCancel == null) {
+                            Spacer(modifier = Modifier.width(if (compact) 58.dp else 70.dp))
+                        } else {
+                            Box(
+                                modifier = Modifier.width(if (compact) 58.dp else 70.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                TvIconButton(
+                                    icon = Icons.Filled.ArrowBack,
+                                    contentDescription = "Volver",
+                                    size = if (compact) 42.dp else 48.dp,
+                                    iconSize = if (compact) 20.dp else 22.dp,
+                                    onClick = onCancel,
+                                )
+                            }
+                        }
                         "⌫" -> TvActionButton(
                             text = key,
                             primary = false,
