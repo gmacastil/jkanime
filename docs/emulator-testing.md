@@ -665,3 +665,55 @@ Con un segundo perfil de prueba ("TestCard") insertado directo en
   restaurados desde `jk-tv-backup.db` (perfil "Alejoa" único, 7
   favoritos, espacio `07951576`) — confirmado con `screencap` y lectura
   directa de la DB restaurada.
+
+---
+
+## Fix MD3 del panel de filtros en Directorio — verificado 2026-11-08
+
+Reporte del usuario: "el menú de buscar animes de directorio se ve mal".
+Se auditaron visualmente (vía `screencap`) todas las pantallas/menús
+principales — Home, cabecera + buscador, `SideDrawer`, Detail, Sync — y
+**solo Directorio** tenía un problema real.
+
+### Diagnóstico
+
+`JkSurface` (`#17171C`) y `JkBackground` (`#0E0E11`) son tonos casi
+idénticos: el `FiltersPanel` (`Box` + `background(JkSurface)` +
+`border(1.dp, JkSurfaceHigh)`) se fundía visualmente con el fondo general,
+sin relieve. Además el trigger de `TvDropdown` solo pintaba borde cuando
+tenía foco (`width = if (buttonFocused) 2.dp else 0.dp`): en reposo se
+veía como texto suelto con una flechita, no como un control.
+
+### Fix
+
+Mismo patrón MD3 ya validado en F11.3 (`ProfileGateScreen.kt`):
+
+- `FiltersPanel`: el `Column` con `background`/`border` manual pasó a
+  `androidx.tv.material3.Surface` con
+  `SurfaceDefaults.colors(containerColor = JkSurfaceHigh, ...)` — token
+  más claro que `JkSurface`, así el panel se eleva del fondo con
+  contraste real, no solo con un borde de 1dp invisible.
+- `TvDropdown` (trigger): el `Box` + `clickable` pasó a
+  `androidx.tv.material3.Card` con `CardDefaults.border(border = ...,
+  focusedBorder = ...)` — a diferencia de F11.3 (que solo definía
+  `focusedBorder`), aquí se definió también el `border` de reposo
+  (`Border(BorderStroke(1.dp, JkSurfaceHigh), ...)`) para que el control
+  se vea como tal incluso sin foco. El foco sigue resaltando con borde
+  naranja de 2dp + texto/icono naranja, igual que antes.
+- La lista de opciones expandida (`Column` con fondo `JkSurfaceHigh` +
+  borde naranja) no cambió: ya tenía buen contraste.
+
+### Verificación en emulador
+
+- `./gradlew :app:assembleDebug` y `./gradlew test` → `BUILD SUCCESSFUL`.
+- `screencap` antes/después del `FiltersPanel`: el panel pasó de verse
+  plano/fundido con el fondo a tener un contenedor `JkSurfaceHigh`
+  claramente diferenciado, con los 5 dropdowns (`Ordenar por`, `Género`,
+  `Letra`, `Demografía`, `Categoría`) visibles como controles reales.
+- `DPAD_LEFT` sobre el primer dropdown (`Ordenar por`): borde naranja +
+  texto naranja en foco, lista expandida (`Por fecha`/`Por nombre`/`Por
+  popularidad`) con el ítem seleccionado resaltado — sin regresión del
+  comportamiento de expandir/colapsar al ganar/perder foco.
+- `DPAD_DOWN` + `DPAD_CENTER` sobre una opción: seleccionó y colapsó el
+  dropdown correctamente (misma lógica de `onSelect`/`expanded.value`, sin
+  cambios funcionales, solo visuales).

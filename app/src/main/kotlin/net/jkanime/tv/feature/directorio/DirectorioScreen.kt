@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.directorio
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,8 +40,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
 import net.jkanime.tv.model.AnimeSearchHit
@@ -149,27 +155,37 @@ private fun FiltersPanel(
         return
     }
 
-    Column(
+    // Surface MD3 en vez del Box+background suelto de antes: JkSurface y
+    // JkBackground son tonos casi idénticos, así que sin un token de
+    // contenedor más claro + sombra/borde el panel se fundía con el fondo.
+    Surface(
         modifier = Modifier
             .width(320.dp)
             .fillMaxHeight()
-            .padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
-            .background(JkSurface)
-            .border(width = 1.dp, color = JkSurfaceHigh),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+            .padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = SurfaceDefaults.colors(
+            containerColor = JkSurfaceHigh,
+            contentColor = JkTextPrimary,
+        ),
     ) {
-        Text(
-            text = "FILTROS",
-            style = MaterialTheme.typography.labelSmall,
-            color = JkTextSecondary,
-        )
-
-        filters.forEach { filter ->
-            FilterDropdown(
-                filter = filter,
-                selectedValue = selected[filter.name] ?: "",
-                onValueChange = { value -> onFilterChange(filter.name, value) },
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Text(
+                text = "FILTROS",
+                style = MaterialTheme.typography.labelSmall,
+                color = JkTextSecondary,
             )
+
+            filters.forEach { filter ->
+                FilterDropdown(
+                    filter = filter,
+                    selectedValue = selected[filter.name] ?: "",
+                    onValueChange = { value -> onFilterChange(filter.name, value) },
+                )
+            }
         }
     }
 }
@@ -227,34 +243,38 @@ private fun TvDropdown(
         val buttonInteractionSource = remember { MutableInteractionSource() }
         val buttonFocused by buttonInteractionSource.collectIsFocusedAsState()
 
-        Box(
+        Card(
+            onClick = { expanded.value = !expanded.value },
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (buttonFocused) JkSurfaceHigh else JkSurface)
-                .border(
-                    width = if (buttonFocused) 2.dp else 0.dp,
-                    color = if (buttonFocused) JkOrange else Color.Transparent,
-                    shape = RoundedCornerShape(8.dp),
-                )
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-                .focusRequester(focusRequester)
-                .clickable(
-                    interactionSource = buttonInteractionSource,
-                    indication = null,
-                    onClick = { expanded.value = !expanded.value },
-                ),
-            contentAlignment = Alignment.CenterStart,
+                .focusRequester(focusRequester),
+            interactionSource = buttonInteractionSource,
+            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
+            colors = CardDefaults.colors(
+                containerColor = JkSurface,
+                contentColor = JkTextPrimary,
+                focusedContainerColor = JkSurfaceHigh,
+                focusedContentColor = JkOrange,
+            ),
+            // Borde visible también en reposo (no solo al enfocar): sin esto
+            // el trigger se veía como texto suelto con una flechita, no como
+            // un control — el problema reportado.
+            border = CardDefaults.border(
+                border = Border(BorderStroke(1.dp, JkSurfaceHigh), shape = RoundedCornerShape(8.dp)),
+                focusedBorder = Border(BorderStroke(2.dp, JkOrange), shape = RoundedCornerShape(8.dp)),
+            ),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = JkTextPrimary,
+                    color = if (buttonFocused) JkOrange else JkTextPrimary,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Icon(
