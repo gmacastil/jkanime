@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Genera el APK debug por demanda y lo deja listo para sideload en dist/.
+# Genera un APK versionado y lo deja listo para sideload en dist/.
 #
-#   ./tools/build-apk.sh              # build + copia a dist/ con nombre versionado
-#   ./tools/build-apk.sh --install    # además lo instala en el dispositivo/emulador conectado
-#   ./tools/build-apk.sh --clean      # ./gradlew clean antes de compilar (build limpio)
-#   ./tools/build-apk.sh --out DIR    # copiar a otro directorio en vez de dist/
+#   ./tools/build-apk.sh --version 0.1.2
+#   ./tools/build-apk.sh --version 0.1.2 --release
+#   ./tools/build-apk.sh --version 0.1.2 --release --publish
+#   ./tools/build-apk.sh --install --clean --out DIR
 #
 # Requiere: JDK 17+ (por defecto usa java-21-openjdk si existe), Android SDK
 # con platforms;android-36 y build-tools;36.0.0 (ver README.md).
@@ -16,11 +16,25 @@ cd "$ROOT"
 OUT_DIR="$ROOT/dist"
 DO_INSTALL=0
 DO_CLEAN=0
+DO_RELEASE=0
+DO_PUBLISH=0
+VERSION_NAME="${VERSION_NAME:-}"
+VERSION_CODE="${VERSION_CODE:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --install) DO_INSTALL=1 ;;
     --clean) DO_CLEAN=1 ;;
+    --release) DO_RELEASE=1 ;;
+    --publish) DO_RELEASE=1; DO_PUBLISH=1 ;;
+    --version)
+      VERSION_NAME="$2"
+      shift
+      ;;
+    --version-code)
+      VERSION_CODE="$2"
+      shift
+      ;;
     --out)
       OUT_DIR="$2"
       shift
@@ -40,23 +54,44 @@ done
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
 [ -d "$JAVA_HOME" ] || { echo "✗ JAVA_HOME inválido: $JAVA_HOME" >&2; exit 1; }
 
+if [ -z "$VERSION_NAME" ]; then
+  VERSION_NAME="0.1.0"
+fi
+if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "✗ versión inválida: $VERSION_NAME (usa X.Y.Z)" >&2
+  exit 2
+fi
+if [ -z "$VERSION_CODE" ]; then
+  VERSION_CODE="$(git rev-list --count HEAD)"
+fi
+if ! [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "✗ VERSION_CODE inválido: $VERSION_CODE" >&2
+  exit 2
+fi
+
 if [ "$DO_CLEAN" -eq 1 ]; then
   echo "→ ./gradlew clean"
   JAVA_HOME="$JAVA_HOME" ./gradlew clean
 fi
 
-echo "→ ./gradlew :app:assembleDebug"
-JAVA_HOME="$JAVA_HOME" ./gradlew :app:assembleDebug
+VARIANT="debug"
+GRADLE_TASK=":app:assembleDebug"
+if [ "$DO_RELEASE" -eq 1 ]; then
+  VARIANT="release"
+  GRADLE_TASK=":app:assembleRelease"
+fi
 
-APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
+echo "→ ./gradlew $GRADLE_TASK -PVERSION_NAME=$VERSION_NAME -PVERSION_CODE=$VERSION_CODE"
+JAVA_HOME="$JAVA_HOME" ./gradlew "$GRADLE_TASK" \
+  -PVERSION_NAME="$VERSION_NAME" \
+  -PVERSION_CODE="$VERSION_CODE"
+
+APK="$ROOT/app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
 [ -f "$APK" ] || { echo "✗ no se generó $APK" >&2; exit 1; }
 
-# versionName declarado en app/build.gradle.kts (defaultConfig.versionName = "x.y.z")
-VERSION="$(grep -m1 'versionName' "$ROOT/app/build.gradle.kts" | sed -E 's/.*"([^"]+)".*/\1/')"
-VERSION="${VERSION:-0.0.0}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$OUT_DIR"
-DEST="$OUT_DIR/jkanime-tv-${VERSION}-debug-${STAMP}.apk"
+DEST="$OUT_DIR/jkanimetv-${VERSION_NAME}-${VARIANT}-${STAMP}.apk"
 cp "$APK" "$DEST"
 
 SHA256="$(sha256sum "$DEST" | cut -d' ' -f1)"
@@ -64,6 +99,7 @@ SIZE_MB="$(du -h "$DEST" | cut -f1)"
 
 echo
 echo "✓ APK listo: $DEST"
+echo "  versión:  $VERSION_NAME ($VERSION_CODE)"
 echo "  tamaño:  $SIZE_MB"
 echo "  sha256:  $SHA256"
 
@@ -77,6 +113,19 @@ if [ "$DO_INSTALL" -eq 1 ]; then
   else
     echo "✗ no hay dispositivo/emulador conectado (adb devices vacío), se omite --install" >&2
   fi
+fi
+
+if [ "$DO_PUBLISH" -eq 1 ]; then
+  TAG="v$VERSION_NAME"
+  if git rev-parse "$TAG" >/dev/null 2>&1; then
+    echo "✗ el tag $TAG ya existe localmente" >&2
+    exit 1
+  fi
+  echo "→ publicando tag $TAG para GitHub Actions"
+  git tag -a "$TAG" -m "jkanimetv $TAG"
+  git push origin "$TAG"
+  echo "✓ tag publicado: $TAG"
+  echo "  GitHub Actions generará el APK release y el GitHub Release."
 fi
 
 echo

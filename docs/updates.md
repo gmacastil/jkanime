@@ -17,6 +17,20 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
+También se puede hacer desde el script local:
+
+```bash
+./tools/build-apk.sh --version 0.1.2 --release --publish
+```
+
+Esto construye el APK local y publica `v0.1.2`; el workflow genera después el
+APK release firmado y crea el GitHub Release. Para solo generar un APK local
+sin publicar:
+
+```bash
+./tools/build-apk.sh --version 0.1.2 --release
+```
+
 El workflow `.github/workflows/release.yml` construye el APK release y crea el
 GitHub Release automáticamente.
 
