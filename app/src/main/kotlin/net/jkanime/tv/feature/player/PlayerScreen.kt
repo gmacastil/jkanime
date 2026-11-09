@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,7 +89,9 @@ fun PlayerScreen(
     val library = remember(context) { Graph.library(context) }
     val scope = rememberCoroutineScope()
     var lastSavedMs by remember { mutableStateOf(-1L) }
+    var positionMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
+    var isPlaying by remember { mutableStateOf(true) }
     var resumeFromMs by remember { mutableStateOf<Long?>(null) }
     var playerReady by remember { mutableStateOf(false) }
 
@@ -222,18 +227,19 @@ fun PlayerScreen(
                 WebPlayer(
                     url = current.selected.url,
                     controller = controller,
-                    onProgress = { positionMs, dur ->
+                    onProgress = { pos, dur ->
+                        positionMs = pos
                         if (dur > 0) durationMs = dur
                         // "Casi al final" cuenta como visto (evita que el
                         // último 1% de créditos deje el episodio pendiente).
-                        val almostDone = dur > 0 && positionMs >= dur - 5_000
-                        if (almostDone || positionMs - lastSavedMs >= 5_000) {
-                            lastSavedMs = positionMs
+                        val almostDone = dur > 0 && pos >= dur - 5_000
+                        if (almostDone || pos - lastSavedMs >= 5_000) {
+                            lastSavedMs = pos
                             scope.launch {
                                 library.saveProgress(
                                     slug = slug,
                                     episode = episodeNumber,
-                                    positionMs = positionMs,
+                                    positionMs = pos,
                                     durationMs = dur,
                                     completed = almostDone,
                                 )
@@ -242,6 +248,7 @@ fun PlayerScreen(
                     },
                     onEnded = {
                         overlayVisible = true
+                        isPlaying = false
                         scope.launch {
                             library.saveProgress(
                                 slug = slug,
@@ -252,8 +259,8 @@ fun PlayerScreen(
                             )
                         }
                     },
-                    onReady = { playerReady = true },
-                )
+                        onReady = { playerReady = true },
+                    )
 
                 if (overlayVisible) {
                     Overlay(
@@ -266,7 +273,18 @@ fun PlayerScreen(
                         showServers = showServers,
                         fallbackSuggested = fallbackSuggested,
                         focusRequester = overlayFocus,
-                        firstServerFocus = firstServerFocus,
+                         firstServerFocus = firstServerFocus,
+                         positionMs = positionMs,
+                         durationMs = durationMs,
+                         isPlaying = isPlaying,
+                         onSeek = { target ->
+                             positionMs = target
+                             controller.seekTo(target)
+                         },
+                         onTogglePlay = {
+                             controller.togglePlayPause()
+                             isPlaying = !isPlaying
+                         },
                         onToggleServers = { showServers = !showServers },
                         onBackToPlayer = {
                             overlayHasFocus = false
@@ -298,6 +316,11 @@ private fun Overlay(
     fallbackSuggested: Boolean,
     focusRequester: FocusRequester,
     firstServerFocus: FocusRequester,
+    positionMs: Long,
+    durationMs: Long,
+    isPlaying: Boolean,
+    onSeek: (Long) -> Unit,
+    onTogglePlay: () -> Unit,
     onToggleServers: () -> Unit,
     onBackToPlayer: () -> Unit,
     onSelect: (net.jkanime.tv.model.VideoServer) -> Unit,
@@ -353,7 +376,39 @@ private fun Overlay(
             }
         }
 
-        Box(modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            if (showServers) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(300.dp)
+                        .background(Color(0xF20E0E0E))
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Servidores", style = MaterialTheme.typography.titleMedium, color = JkTextPrimary)
+                    servers
+                        .filter { it.kind != ServerKind.DOWNLOAD }
+                        .sortedBy { if (it.kind == ServerKind.JKPLAYER) 0 else 1 }
+                        .take(8)
+                        .forEachIndexed { index, server ->
+                            TvActionButton(
+                                text = server.displayName,
+                                primary = server.url == selectedUrl,
+                                compact = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(if (index == 0) Modifier.focusRequester(firstServerFocus) else Modifier),
+                                onClick = { onSelect(server) },
+                            )
+                        }
+                }
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -374,35 +429,11 @@ private fun Overlay(
                 )
             }
 
-            if (showServers) {
-                Text(
-                    text = "Fuentes",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = JkTextSecondary,
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    servers
-                        .filter { it.kind != ServerKind.DOWNLOAD }
-                        // Los players del sitio (Desu, Magi) primero: son los
-                        // más estables. sortedBy es estable, así que conserva
-                        // el orden original dentro de cada grupo.
-                        .sortedBy { if (it.kind == ServerKind.JKPLAYER) 0 else 1 }
-                        .take(6)
-                        .forEachIndexed { index, server ->
-                            TvActionButton(
-                                text = server.displayName,
-                                primary = server.url == selectedUrl,
-                                modifier = if (index == 0) {
-                                    Modifier.focusRequester(firstServerFocus)
-                                } else {
-                                    Modifier
-                                },
-                                onClick = { onSelect(server) },
-                            )
-                        }
-                }
-            }
+            SeekBar(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                onSeek = onSeek,
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -410,10 +441,15 @@ private fun Overlay(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TvActionButton(
-                    text = if (showServers) "Ocultar servidores" else "Usar otro servidor",
+                    text = if (showServers) "Cerrar servidores" else "Servidores",
                     primary = fallbackSuggested && !showServers,
                     modifier = Modifier.focusRequester(focusRequester),
                     onClick = onToggleServers,
+                )
+                TvActionButton(
+                    text = if (isPlaying) "Pausa" else "Reproducir",
+                    primary = true,
+                    onClick = onTogglePlay,
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
@@ -429,4 +465,73 @@ private fun Overlay(
             }
         }
     }
+}
+
+@Composable
+private fun SeekBar(
+    positionMs: Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+) {
+    val safeDuration = durationMs.coerceAtLeast(1L)
+    val fraction = (positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(34.dp)
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val step = 10_000L
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        onSeek((positionMs - step).coerceAtLeast(0L))
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        onSeek((positionMs + step).coerceAtMost(durationMs))
+                        true
+                    }
+                    else -> false
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .background(JkTextSecondary.copy(alpha = 0.45f)),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .height(5.dp)
+                .background(JkOrange),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .height(20.dp),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 1.dp)
+                    .background(JkOrange, androidx.compose.foundation.shape.CircleShape)
+                    .padding(6.dp),
+            )
+        }
+        Text(
+            text = "${formatTime(positionMs)} / ${formatTime(durationMs)}   ◀ ▶ 10 s",
+            style = MaterialTheme.typography.labelSmall,
+            color = JkTextPrimary,
+            modifier = Modifier.align(Alignment.BottomStart),
+        )
+    }
+}
+
+private fun formatTime(milliseconds: Long): String {
+    val totalSeconds = (milliseconds / 1000L).coerceAtLeast(0L)
+    return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
 }

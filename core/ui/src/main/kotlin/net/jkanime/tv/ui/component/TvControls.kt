@@ -278,16 +278,17 @@ fun TvNumberPad(
     onBackspace: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    compact: Boolean = false,
     focusRequester: FocusRequester? = null,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
         listOf(
             listOf("1", "2", "3"),
             listOf("4", "5", "6"),
             listOf("7", "8", "9"),
             listOf("⌫", "0", ""),
         ).forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
                 row.forEachIndexed { colIndex, key ->
                     val isFirst = rowIndex == 0 && colIndex == 0
                     val mod = if (isFirst && focusRequester != null) {
@@ -296,7 +297,7 @@ fun TvNumberPad(
                         Modifier
                     }
                     when (key) {
-                        "" -> Spacer(modifier = Modifier.width(70.dp))
+                        "" -> Spacer(modifier = Modifier.width(if (compact) 58.dp else 70.dp))
                         "⌫" -> TvActionButton(
                             text = key,
                             primary = false,

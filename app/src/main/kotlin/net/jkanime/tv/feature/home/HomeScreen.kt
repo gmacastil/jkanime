@@ -787,7 +787,7 @@ private fun AvatarMenu(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Text(
-                                text = "CÓDIGO DE VINCULACIÓN",
+                                 text = "CÓDIGO TEMPORAL DE VINCULACIÓN",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = JkTextSecondary,
                             )
@@ -805,8 +805,9 @@ private fun AvatarMenu(
                                     onModeChange(AvatarMenuMode.MAIN)
                                     onCodeChange("")
                                 },
-                                busy = busy,
-                                focusRequester = focusRequester,
+                                 busy = busy,
+                                 compact = true,
+                                 focusRequester = focusRequester,
                             )
                         }
                     }
@@ -1034,22 +1035,25 @@ private fun SyncKeypad(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     busy: Boolean,
+    compact: Boolean = false,
     focusRequester: FocusRequester? = null,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
         TvNumberPad(
             onDigit = onDigit,
             onBackspace = onBackspace,
             enabled = !busy,
+            compact = compact,
             focusRequester = focusRequester,
         )
         // Confirmar (solo con 8 dígitos) + volver, en la misma fila.
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
             if (code.length == 8) {
                 TvActionButton(
                     text = if (busy) "Vinculando…" else "Vincular",
                     primary = true,
+                    compact = compact,
                     enabled = !busy,
                     onClick = onConfirm,
                 )
@@ -1057,6 +1061,7 @@ private fun SyncKeypad(
             TvActionButton(
                 text = "Volver",
                 primary = false,
+                compact = compact,
                 onClick = onCancel,
             )
         }

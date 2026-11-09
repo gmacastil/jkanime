@@ -287,8 +287,16 @@ private const val HOOK_SCRIPT = """
   setInterval(function(){
     var v = document.querySelector('video');
     if (!v) return;
-    if (!v.__jkBound) {
+   if (!v.__jkBound) {
       v.__jkBound = true;
+      // Algunos WebView de Android TV reproducen el audio pero dejan la
+      // superficie de vídeo invisible si el elemento conserva estilos del
+      // embed. Forzamos una superficie visible y acelerada.
+      v.style.visibility = 'visible';
+      v.style.display = 'block';
+      v.style.opacity = '1';
+      v.style.transform = 'translateZ(0)';
+      v.setAttribute('playsinline', 'true');
       try { v.play(); } catch (e) {}
       v.addEventListener('timeupdate', function(){
         JkBridge.onProgress(v.currentTime * 1000, (v.duration || 0) * 1000);
@@ -317,6 +325,7 @@ fun WebPlayer(
         factory = { context ->
             NonFocusableWebView(context).apply {
                 setBackgroundColor(android.graphics.Color.BLACK)
+                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 
                 // El WebView pide el foco al cargar y se queda con TODO el
                 // D-pad: Chromium navega su propio reproductor y el overlay de

@@ -182,6 +182,8 @@ private fun friendlyError(httpCode: Int, body: String): String {
     return when {
         code == "PGRST202" || (httpCode == 404 && serverMessage.contains("Could not find the function")) ->
             "Falta ejecutar docs/supabase/schema.sql en Supabase (funcion ausente)"
+        serverMessage.contains("invalid_pairing_code", ignoreCase = true) ->
+            "Código inválido o vencido. 07951576 es el código del espacio; genera un código temporal desde el otro dispositivo."
         serverMessage.isNotBlank() -> serverMessage
         else -> "HTTP $httpCode: ${body.take(120)}"
     }

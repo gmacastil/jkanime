@@ -1038,3 +1038,18 @@ numérico.
   explícitamente el capítulo inicial en vez de dejar el foco en la estrella.
 - Verificado en emulador: orden descendente `6..1`, alternancia ascendente
   `1..6`, foco visible en el control y navegación de ida y vuelta con D-pad.
+
+## F16 — Vinculación compacta y controles del reproductor
+
+- La pantalla de vinculación usa panel, tipografías, teclado y botones compactos
+  para que las acciones inferiores quepan también en una TV real de 540 dp.
+- El texto diferencia el **código temporal de vinculación** del código del
+  espacio. `invalid_pairing_code` ahora explica que `07951576` es el código del
+  espacio y que debe generarse un pairing temporal desde el dispositivo ya
+  vinculado.
+- El reproductor mantiene el WebView acelerado por hardware y fuerza visible
+  la superficie `<video>`; esto cubre TVs donde se escuchaba el audio pero no
+  se pintaba la imagen.
+- El overlay añade barra de progreso navegable con D-pad: izquierda/derecha
+  desplazan 10 segundos, además de pausa/reproducción. Las fuentes se muestran
+  en un cajón vertical izquierdo colapsable.

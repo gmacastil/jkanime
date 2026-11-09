@@ -500,17 +500,17 @@ private fun SyncChoiceScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 36.dp, vertical = 24.dp),
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = when {
                         linked -> "Perfil sincronizado"
-                        joining -> "Código de vinculación"
+                        joining -> "Código temporal de vinculación"
                         else -> "¿Quieres sincronizar este perfil?"
                     },
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     color = JkTextPrimary,
                     textAlign = TextAlign.Center,
                 )
@@ -537,7 +537,7 @@ private fun SyncChoiceScreen(
                 } else if (!joining) {
                     Text(
                         text = "Tus favoritos y progreso se compartirán con otros dispositivos.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = JkTextSecondary,
                         textAlign = TextAlign.Center,
                     )
@@ -597,6 +597,7 @@ private fun SyncChoiceScreen(
                             joining = false
                         },
                         busy = syncBusy,
+                        compact = true,
                         focusRequester = focusRequester,
                     )
                 }
@@ -627,23 +628,26 @@ private fun SyncKeypad(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     busy: Boolean,
+    compact: Boolean = false,
     focusRequester: FocusRequester? = null,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
         TvNumberPad(
             onDigit = onDigit,
             onBackspace = onBackspace,
             enabled = !busy,
+            compact = compact,
             focusRequester = focusRequester,
         )
         // Acciones: confirmar (solo con 8 dígitos) + volver, en la misma fila
         // para no desbordar el panel en 1080p.
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
             if (code.length == 8) {
                 TvActionButton(
                     text = if (busy) "Vinculando…" else "Vincular",
                     primary = true,
+                    compact = compact,
                     enabled = !busy,
                     onClick = onConfirm,
                 )
@@ -651,6 +655,7 @@ private fun SyncKeypad(
             TvActionButton(
                 text = "Volver",
                 primary = false,
+                compact = compact,
                 onClick = onCancel,
             )
         }
