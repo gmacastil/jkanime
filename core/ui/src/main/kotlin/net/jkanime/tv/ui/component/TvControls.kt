@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -26,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -36,13 +39,15 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.ui.theme.JkGreen
+import net.jkanime.tv.ui.theme.JkRed
 import net.jkanime.tv.ui.theme.JkOrange
+import net.jkanime.tv.ui.theme.JkOrangeBright
 import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkSurfaceHigh
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
 
-/** Botón pensado para D-pad: sin ripple, feedback por borde + color. */
+/** Botón de acción pensado para D-pad: sin ripple, feedback por borde + color. */
 @Composable
 fun TvActionButton(
     text: String,
@@ -50,54 +55,90 @@ fun TvActionButton(
     modifier: Modifier = Modifier,
     primary: Boolean = true,
     enabled: Boolean = true,
+    danger: Boolean = false,
+    compact: Boolean = false,
+    icon: ImageVector? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
+    val accent = if (danger) JkRed else JkOrange
+    val filled = primary || danger
+
     val background = when {
         !enabled -> JkSurface
-        focused && primary -> JkOrange
+        danger -> if (focused) JkRed.copy(alpha = 0.88f) else JkRed
+        primary -> if (focused) JkOrangeBright else JkOrange
         focused -> JkSurfaceHigh
-        primary -> JkOrange
+        else -> JkSurface
+    }
+    // Los primarios no llevan borde en reposo; al enfocar se les pone uno
+    // claro para que el foco se lea sobre el naranja (antes no cambiaban).
+    val borderColor = when {
+        !enabled -> JkSurfaceHigh.copy(alpha = 0.6f)
+        focused && filled -> JkTextPrimary
+        focused -> accent
+        filled -> Color.Transparent
         else -> JkSurfaceHigh
     }
-    val textColor = when {
-        !enabled -> JkTextSecondary
-        focused && primary -> Color(0xFF141414)
-        primary -> Color(0xFF141414)
+    val borderWidth = when {
+        !enabled -> 1.dp
+        focused -> 2.dp
+        filled -> 0.dp
+        else -> 1.dp
+    }
+    val contentColor = when {
+        !enabled -> JkTextSecondary.copy(alpha = 0.45f)
+        filled -> Color(0xFF141414)
+        focused -> accent
         else -> JkTextPrimary
     }
+    val shape = RoundedCornerShape(if (compact) 10.dp else 12.dp)
 
-    Box(
+    Row(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .heightIn(min = if (compact) 42.dp else 52.dp)
+            .scale(if (focused) 1.04f else 1f)
+            .clip(shape)
             .background(background)
-            .border(
-                width = if (focused && !primary) 2.dp else 0.dp,
-                color = if (focused && !primary) JkOrange else Color.Transparent,
-                shape = RoundedCornerShape(8.dp),
-            )
+            .border(borderWidth, borderColor, shape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
                 onClick = onClick,
             )
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        contentAlignment = Alignment.Center,
+            .padding(
+                horizontal = if (compact) 16.dp else 26.dp,
+                vertical = if (compact) 8.dp else 14.dp,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp),
+            )
+        }
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge,
-            color = textColor,
+            style = if (compact) {
+                MaterialTheme.typography.labelLarge
+            } else {
+                MaterialTheme.typography.titleSmall
+            },
+            color = contentColor,
         )
     }
 }
 
 /**
  * Botón compacto de icono para D-pad: mismo lenguaje visual que
- * [TvActionButton] pero cuadrado y sin texto. Se usa para el menú
- * hamburguesa, la lupa del buscador y el icono de ordenamiento.
+ * [TvActionButton] (borde tenue en reposo, borde naranja al enfocar) pero
+ * cuadrado y sin texto. Se usa en la cabecera, el paginado y el orden.
  */
 @Composable
 fun TvIconButton(
@@ -106,8 +147,9 @@ fun TvIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     active: Boolean = false,
+    enabled: Boolean = true,
     focusRequester: FocusRequester? = null,
-    size: Dp = 44.dp,
+    size: Dp = 48.dp,
     iconSize: Dp = 22.dp,
     tint: Color? = null,
 ) {
@@ -115,14 +157,22 @@ fun TvIconButton(
     val focused by interactionSource.collectIsFocusedAsState()
 
     val background = when {
+        !enabled -> JkSurface.copy(alpha = 0.6f)
         focused -> JkSurfaceHigh
         active -> JkOrange
         else -> JkSurface
     }
     val contentColor = tint ?: when {
+        !enabled -> JkTextSecondary.copy(alpha = 0.4f)
         focused -> JkOrange
         active -> Color(0xFF141414)
         else -> JkTextPrimary
+    }
+    val borderColor = when {
+        !enabled -> JkSurfaceHigh.copy(alpha = 0.5f)
+        focused -> JkOrange
+        active -> Color.Transparent
+        else -> JkSurfaceHigh
     }
 
     Box(
@@ -132,16 +182,17 @@ fun TvIconButton(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
             .size(size)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(background)
             .border(
-                width = if (focused) 2.dp else 0.dp,
-                color = if (focused) JkOrange else Color.Transparent,
-                shape = RoundedCornerShape(8.dp),
+                width = if (focused) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(12.dp),
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                enabled = enabled,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
@@ -152,6 +203,120 @@ fun TvIconButton(
             tint = contentColor,
             modifier = Modifier.size(iconSize),
         )
+    }
+}
+
+/**
+ * Chip-botón para el paginado: número de página seleccionable. `selected`
+ * lo pinta naranja (página actual) y el foco lo marca con borde.
+ */
+@Composable
+fun TvChipButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    focusRequester: FocusRequester? = null,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+
+    val background = when {
+        selected -> if (focused) JkOrangeBright else JkOrange
+        focused -> JkSurfaceHigh
+        else -> JkSurface
+    }
+    val contentColor = when {
+        selected -> Color(0xFF141414)
+        focused -> JkOrange
+        else -> JkTextPrimary
+    }
+    val borderColor = when {
+        focused && selected -> JkTextPrimary
+        focused -> JkOrange
+        selected -> Color.Transparent
+        else -> JkSurfaceHigh
+    }
+
+    Box(
+        modifier = modifier
+            .then(
+                if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
+            )
+            .size(width = 52.dp, height = 42.dp)
+            .scale(if (focused) 1.06f else 1f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(background)
+            .border(
+                width = if (focused) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(10.dp),
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            color = contentColor,
+        )
+    }
+}
+
+/**
+ * Teclado numérico de 4 filas compartido por el sync (menú del avatar, alta de
+ * perfil) y el salto de página del Directorio. Solo pinta las teclas: las
+ * acciones (confirmar / volver) las pone quien lo usa.
+ */
+@Composable
+fun TvNumberPad(
+    onDigit: (String) -> Unit,
+    onBackspace: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    focusRequester: FocusRequester? = null,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            listOf("1", "2", "3"),
+            listOf("4", "5", "6"),
+            listOf("7", "8", "9"),
+            listOf("⌫", "0", ""),
+        ).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEachIndexed { colIndex, key ->
+                    val isFirst = rowIndex == 0 && colIndex == 0
+                    val mod = if (isFirst && focusRequester != null) {
+                        Modifier.focusRequester(focusRequester)
+                    } else {
+                        Modifier
+                    }
+                    when (key) {
+                        "" -> Spacer(modifier = Modifier.width(70.dp))
+                        "⌫" -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            compact = true,
+                            enabled = enabled,
+                            modifier = mod,
+                            onClick = onBackspace,
+                        )
+                        else -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            compact = true,
+                            enabled = enabled,
+                            modifier = mod,
+                            onClick = { onDigit(key) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

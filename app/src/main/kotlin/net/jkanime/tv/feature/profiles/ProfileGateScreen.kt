@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -45,11 +48,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
@@ -65,6 +70,7 @@ import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
 import net.jkanime.tv.data.local.ProfileEntity
 import net.jkanime.tv.ui.component.TvActionButton
+import net.jkanime.tv.ui.component.TvNumberPad
 import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkGreen
@@ -219,7 +225,6 @@ fun ProfileGateScreen(
                                 profile = profile,
                                 focusRequester = if (index == 0) firstProfileFocus else null,
                                 editMode = editMode,
-                                confirmDelete = confirmDeleteId == profile.id,
                                 onClick = {
                                     if (editMode) {
                                         confirmDeleteId = profile.id
@@ -231,13 +236,6 @@ fun ProfileGateScreen(
                                         }
                                     }
                                 },
-                                onConfirmDelete = {
-                                    scope.launch {
-                                        manager.delete(profile.id)
-                                        confirmDeleteId = null
-                                    }
-                                },
-                                onCancelDelete = { confirmDeleteId = null },
                             )
                         }
                         if (!editMode) {
@@ -245,6 +243,23 @@ fun ProfileGateScreen(
                                 onClick = { mode = Mode.CREATE },
                             )
                         }
+                    }
+
+                    // Confirmación de borrado fuera de la fila de tarjetas: si
+                    // viviera dentro de una tarjeta, la fila entera crecería y
+                    // las demás quedarían desalineadas.
+                    val pendingDelete = confirmDeleteId?.let { id ->
+                        list.firstOrNull { it.id == id }
+                    }
+                    if (pendingDelete != null) {
+                        DeleteProfileDialog(
+                            name = pendingDelete.name,
+                            onDismiss = { confirmDeleteId = null },
+                            onConfirm = {
+                                confirmDeleteId = null
+                                scope.launch { manager.delete(pendingDelete.id) }
+                            },
+                        )
                     }
 
                     Text(
@@ -615,40 +630,12 @@ private fun SyncKeypad(
     focusRequester: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(
-            listOf("1", "2", "3"),
-            listOf("4", "5", "6"),
-            listOf("7", "8", "9"),
-            listOf("⌫", "0", ""),
-        ).forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEachIndexed { colIndex, key ->
-                    val isFirst = rowIndex == 0 && colIndex == 0
-                    val mod = if (isFirst && focusRequester != null) {
-                        Modifier.focusRequester(focusRequester)
-                    } else {
-                        Modifier
-                    }
-                    when (key) {
-                        "" -> Spacer(modifier = Modifier.width(72.dp))
-                        "⌫" -> TvActionButton(
-                            text = key,
-                            primary = false,
-                            enabled = !busy,
-                            modifier = mod,
-                            onClick = onBackspace,
-                        )
-                        else -> TvActionButton(
-                            text = key,
-                            primary = false,
-                            enabled = !busy,
-                            modifier = mod,
-                            onClick = { onDigit(key) },
-                        )
-                    }
-                }
-            }
-        }
+        TvNumberPad(
+            onDigit = onDigit,
+            onBackspace = onBackspace,
+            enabled = !busy,
+            focusRequester = focusRequester,
+        )
         // Acciones: confirmar (solo con 8 dígitos) + volver, en la misma fila
         // para no desbordar el panel en 1080p.
         Spacer(modifier = Modifier.height(4.dp))
@@ -682,18 +669,24 @@ private fun SyncKeypad(
  * En `editMode` la tarjeta muestra una `X` roja y, al pulsarla, pide
  * confirmación (`confirmDelete`) con dos botones en vez de navegar al perfil.
  */
+/**
+ * Tile de perfil del selector: avatar en tarjeta MD3 + nombre + indicador de
+ * sincronización.
+ *
+ * El estado de borrado ya NO vive dentro de la tarjeta: se confirma en un
+ * `Dialog` aparte ([DeleteProfileDialog]) porque los dos botones inline
+ * estiraban la fila entera y descolocaban las demás tarjetas.
+ */
 @Composable
 private fun ProfileTile(
     profile: ProfileEntity,
     focusRequester: FocusRequester?,
     onClick: () -> Unit,
     editMode: Boolean = false,
-    confirmDelete: Boolean = false,
-    onConfirmDelete: () -> Unit = {},
-    onCancelDelete: () -> Unit = {},
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
+    val synced = profile.spaceCode != null
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
@@ -738,43 +731,56 @@ private fun ProfileTile(
                         // Box; sin zIndex la X roja queda tapada por la
                         // tarjeta (visible en bounds pero sin color real).
                         .zIndex(1f)
-                        .padding(6.dp)
-                        .size(28.dp)
-                        .background(JkRed, RoundedCornerShape(8.dp)),
+                        .padding(8.dp)
+                        .size(32.dp)
+                        .background(JkRed, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "Eliminar perfil",
                         tint = Color(0xFF141414),
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        if (confirmDelete) {
-            Text(
-                text = "¿Eliminar \"${profile.name}\"?",
-                style = MaterialTheme.typography.labelSmall,
-                color = JkTextPrimary,
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = profile.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (focused) JkOrange else JkTextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 168.dp),
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .background(
+                        if (synced) JkGreen else JkTextSecondary.copy(alpha = 0.45f),
+                        CircleShape,
+                    ),
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TvActionButton(text = "Eliminar", primary = false, onClick = onConfirmDelete)
-                TvActionButton(text = "Cancelar", primary = false, onClick = onCancelDelete)
-            }
-        } else {
             Text(
-                text = profile.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (focused) JkOrange else JkTextSecondary,
+                text = if (synced) "Sincronizado" else "Solo local",
+                style = MaterialTheme.typography.labelSmall,
+                color = JkTextSecondary,
             )
         }
     }
 }
 
-/** Tile "+ Nuevo perfil" al final del selector, con el mismo estilo Card. */
+/**
+ * Tile «Nuevo perfil»: mismo tamaño que las tarjetas de perfil, con borde
+ * punteado simulado (borde 2dp tenue en reposo) y un círculo con «+».
+ */
 @Composable
 private fun NewProfileTile(onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -787,13 +793,17 @@ private fun NewProfileTile(onClick: () -> Unit) {
             interactionSource = interactionSource,
             shape = CardDefaults.shape(shape = RoundedCornerShape(12.dp)),
             colors = CardDefaults.colors(
-                containerColor = JkSurface,
+                containerColor = Color.Transparent,
                 contentColor = JkTextSecondary,
                 focusedContainerColor = JkSurfaceHigh,
                 focusedContentColor = JkOrange,
             ),
             scale = CardDefaults.scale(focusedScale = 1.05f),
             border = CardDefaults.border(
+                border = Border(
+                    border = BorderStroke(2.dp, JkSurfaceHigh),
+                    shape = RoundedCornerShape(12.dp),
+                ),
                 focusedBorder = Border(
                     border = BorderStroke(3.dp, JkOrange),
                     shape = RoundedCornerShape(12.dp),
@@ -802,19 +812,110 @@ private fun NewProfileTile(onClick: () -> Unit) {
             glow = CardDefaults.glow(focusedGlow = Glow(elevationColor = JkOrange, elevation = 8.dp)),
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "+",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (focused) JkOrange else JkTextSecondary,
-                )
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(
+                            if (focused) JkOrange.copy(alpha = 0.18f) else JkSurfaceHigh,
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = if (focused) JkOrange else JkTextSecondary,
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = "Nuevo perfil",
             style = MaterialTheme.typography.bodyLarge,
             color = if (focused) JkOrange else JkTextSecondary,
         )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = " ",
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+/**
+ * Confirmación de borrado en ventana aparte: mantiene la altura de la fila
+ * del selector y confina el D-pad a los dos botones. El foco arranca en
+ * «Cancelar» para que un ENTER de más nunca borre un perfil.
+ */
+@Composable
+private fun DeleteProfileDialog(
+    name: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val cancelFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        repeat(10) {
+            withFrameNanos { }
+            if (cancelFocus.requestFocus()) return@LaunchedEffect
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.82f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                modifier = Modifier.width(460.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = SurfaceDefaults.colors(
+                    containerColor = JkSurface,
+                    contentColor = JkTextPrimary,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = "Eliminar perfil",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = JkTextPrimary,
+                    )
+                    Text(
+                        text = "Se borrarán los favoritos y el progreso de " +
+                            "\"$name\" en este dispositivo. El espacio de " +
+                            "sincronización no se toca.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JkTextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TvActionButton(
+                            text = "Cancelar",
+                            primary = false,
+                            onClick = onDismiss,
+                            modifier = Modifier.focusRequester(cancelFocus),
+                        )
+                        TvActionButton(
+                            text = "Eliminar",
+                            danger = true,
+                            onClick = onConfirm,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

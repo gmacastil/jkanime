@@ -6,6 +6,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 val JkOrange = Color(0xFFFF6B35)
+
+/** Variante clara de [JkOrange] para el estado de foco de botones primarios. */
+val JkOrangeBright = Color(0xFFFF8A5C)
 val JkBackground = Color(0xFF0E0E11)
 val JkSurface = Color(0xFF17171C)
 val JkSurfaceHigh = Color(0xFF24242C)

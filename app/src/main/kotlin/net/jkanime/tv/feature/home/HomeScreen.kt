@@ -80,6 +80,7 @@ import net.jkanime.tv.ui.component.LoadingState
 import net.jkanime.tv.ui.component.PosterCard
 import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.component.TvActionButton
+import net.jkanime.tv.ui.component.TvNumberPad
 import net.jkanime.tv.ui.theme.JkBackground
 import net.jkanime.tv.ui.theme.JkOrange
 import net.jkanime.tv.ui.theme.JkRed
@@ -911,40 +912,12 @@ private fun SyncKeypad(
     focusRequester: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(
-            listOf("1", "2", "3"),
-            listOf("4", "5", "6"),
-            listOf("7", "8", "9"),
-            listOf("⌫", "0", ""),
-        ).forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEachIndexed { colIndex, key ->
-                    val isFirst = rowIndex == 0 && colIndex == 0
-                    val mod = if (isFirst && focusRequester != null) {
-                        Modifier.focusRequester(focusRequester)
-                    } else {
-                        Modifier
-                    }
-                    when (key) {
-                        "" -> Spacer(modifier = Modifier.width(72.dp))
-                        "⌫" -> TvActionButton(
-                            text = key,
-                            primary = false,
-                            enabled = !busy,
-                            modifier = mod,
-                            onClick = onBackspace,
-                        )
-                        else -> TvActionButton(
-                            text = key,
-                            primary = false,
-                            enabled = !busy,
-                            modifier = mod,
-                            onClick = { onDigit(key) },
-                        )
-                    }
-                }
-            }
-        }
+        TvNumberPad(
+            onDigit = onDigit,
+            onBackspace = onBackspace,
+            enabled = !busy,
+            focusRequester = focusRequester,
+        )
         // Confirmar (solo con 8 dígitos) + volver, en la misma fila.
         Spacer(modifier = Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

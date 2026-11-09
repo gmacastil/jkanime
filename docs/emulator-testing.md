@@ -923,3 +923,100 @@ desaparece.
 - Emulador restaurado a un solo perfil ("Alejoa", espacio `07951576`, 7
   favoritos y 7 progresos intactos) tras borrar `Test3`, `Test2a` y
   `SyncTest` en el modo edición del chooser.
+
+## F14 — Rediseño de controles + paginado del Directorio — verificado 2026-11-09
+
+Pedido explícito del usuario: "mejora el diseño de los botones, o la
+distribución, propón algo más moderno para perfiles y paginado". Se acordó
+alcance **global** (un solo lenguaje visual de botón en toda la app) y
+paginado del Directorio con **chips de página + «Ir a página»** por teclado
+numérico.
+
+### Cambios
+
+- **`Theme.kt`** — nuevo token `JkOrangeBright = 0xFFFF8A5C`, usado para el
+  foco de los botones primarios (antes el foco sobre naranja no se distinguía).
+- **`core/ui/.../TvControls.kt`** (afecta a Home, Detalle, menú del avatar,
+  perfiles y Directorio):
+  - `TvActionButton`: alto mínimo 52 dp (`compact` = 42 dp), radio 12/10 dp,
+    escala 1.04 al foco, `Arrangement.spacedBy(10.dp, CenterHorizontally)`,
+    y tres parámetros nuevos: `danger` (rojo), `compact` (chips/teclados) e
+    `icon: ImageVector?`.
+    - **Secundario**: en reposo lleva borde 1 dp `JkSurfaceHigh`; al enfocar,
+      borde 2 dp naranja y texto naranja (antes era solo un relleno más
+      claro, indistinguible del fondo).
+    - **Primario**: relleno naranja y, al enfocar, fondo `JkOrangeBright` +
+      borde 2 dp blanco (visible sobre el naranja).
+  - `TvIconButton`: 48 dp, radio 12 dp, borde 1 dp tenue en reposo, 2 dp
+    naranja al enfocar, y `enabled` nuevo (flechas del paginado).
+  - `TvChipButton` (nuevo): 52×42 dp, radio 10 dp; `selected` = relleno
+    naranja; al enfocar, borde 2 dp (blanco si está seleccionado, naranja si
+    no) y escala 1.06.
+  - `TvNumberPad` (nuevo): teclado numérico de 4 filas compartido. Reemplaza
+    las dos copias locales (`HomeScreen.SyncKeypad` y
+    `ProfileGateScreen.SyncKeypad`), que ahora solo añaden la fila de
+    acciones (`Vincular` / `Volver`).
+- **`DirectorioScreen.kt`**:
+  - `Row(fillMaxSize)` → `Row(fillMaxWidth().weight(1f))`: la fila pedía toda
+    la altura y **empujaba la barra de paginado fuera de la pantalla** (se
+    veía recortada contra el borde inferior).
+  - La barra de paginado sale del `when` del estado y vive en un
+    `PaginationFooter` que recuerda la última `DirectorioPage` conocida: así
+    no se desmonta durante el `Loading` de cada salto y **no se pierde el
+    foco del D-pad**.
+  - `PaginationBar` nueva: `‹` + ventana de chips (`pageWindow(current,
+    last, radius = 2)`: primera, última y ±2 alrededor de la actual, con
+    `null` = «…») + `›` + botón compacto `Ir a página`.
+  - `JumpToPageDialog`: `Dialog` con scrim, campo de solo lectura, el
+    `TvNumberPad` compartido y `Cancelar` / `Ir` (deshabilitado sin dígitos).
+    Máx. 4 dígitos y se ignoran valores mayores que `lastPage`; al confirmar
+    hace `coerceIn(1, lastPage)`. Foco inicial en la tecla "1"; al cerrar, el
+    foco vuelve al botón `Ir a página`.
+  - `ResultsGrid`: `LaunchedEffect(page.page, page.filters) {
+    gridState.scrollToItem(0) }` para no heredar el scroll de la página
+    anterior.
+- **`ProfileGateScreen.kt`**:
+  - `ProfileTile`: nombre debajo de la tarjeta (naranja al enfocar, elipsis a
+    168 dp) + indicador de sync: punto verde + "Sincronizado" si
+    `spaceCode != null`, punto gris + "Solo local" si no.
+  - `NewProfileTile`: tarjeta con borde 2 dp tenue en reposo y 3 dp naranja
+    al enfocar, con un círculo de 64 dp y el icono `Add` (antes un "+" de
+    texto suelto).
+  - **Confirmación de borrado movida a `DeleteProfileDialog`**: los dos
+    botones inline estiraban una tarjeta y desalineaban toda la fila. El
+    diálogo muestra el aviso + `Cancelar` (foco inicial, para que un ENTER de
+    más nunca borre) y `Eliminar` en `danger`.
+
+### Trampas nuevas
+
+- **`Modifier.weight` solo existe dentro del `RowScope`/`ColumnScope` de quien
+  lo declara**: no se puede pasar `weight` a una función `@Composable` que
+  devuelve `Modifier` y aplicarlo dentro (no compila). Se pasa el modificador
+  desde el llamador (`Modifier.weight(1f).fillMaxHeight()`) y la función usa
+  `modifier.fillMaxSize()`.
+- **`Modifier.padding(horizontal = , top = , bottom = )` no existe**: hay que
+  usar la sobrecarga con los cuatro lados nombrados.
+- **Chips de paginado con ventana fija**: el número de hijos de la `Row` debe
+  mantenerse constante en el rango medio (1 … 3 4 5 6 7 … 169 = 9 hijos), si
+  no, al cambiar de página el índice del foco se corre y se pierde el foco.
+
+### Verificación en emulador
+
+- Menú del avatar: `Sincronizar ahora` en naranja con borde blanco al enfocar
+  y los secundarios con borde de 1 dp; todo cabe en el panel de 540 dp de
+  alto.
+- Perfiles: "Alejoa" con punto verde y "Sincronizado"; "Nuevo perfil" con
+  borde tenue y círculo con `+`; modo edición con `X` roja circular.
+- Borrado: la tarjeta **no** cambia de tamaño; el diálogo aparece centrado con
+  foco en `Cancelar` y `Eliminar` en rojo.
+- Directorio (169 páginas): barra completa y centrada
+  `‹ [1] 2 3 … 169 › [Ir a página]`; chip actual en naranja y foco con borde
+  blanco; `›` deshabilitada en la 169.
+- Salto directo: `Ir a página` → `169` con el teclado → carga la página 169 y
+  la ventana pasa a `1 … 167 168 [169]`.
+- Foco: `▼` desde la grilla llega a la barra, `◀/▶` mueven entre chips y el
+  foco **sobrevive** a la carga de la página siguiente (chip enfocado con
+  borde blanco tras el `Loading`).
+- Cambiar un filtro (Género = Comedia) reinicia a página 1 y la ventana se
+  recalcula a 68 páginas.
+- `./gradlew :app:assembleDebug` → `BUILD SUCCESSFUL` tras cada paso.
