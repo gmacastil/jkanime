@@ -24,7 +24,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -193,7 +193,7 @@ private fun Content(
                 .fillMaxHeight()
                 .padding(start = 8.dp, end = 28.dp, top = 20.dp, bottom = 16.dp),
         ) {
-            Row(verticalAlignment = Alignment.Top) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = detail.title,
                     style = MaterialTheme.typography.headlineSmall,
@@ -476,7 +476,7 @@ private fun SortButton(
     }
 }
 
-/** Estrella de favoritos: rellena si el anime ya está en la lista. */
+/** Corazón de favoritos, compacto y alineado con el título. */
 @Composable
 private fun FavoriteStar(
     isFavorite: Boolean,
@@ -491,7 +491,7 @@ private fun FavoriteStar(
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
-            .size(48.dp)
+            .size(38.dp)
             .clip(CircleShape)
             .background(if (focused) JkSurfaceHigh else Color.Transparent)
             .border(
@@ -507,10 +507,10 @@ private fun FavoriteStar(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = Icons.Filled.Star,
+            imageVector = Icons.Filled.Favorite,
             contentDescription = if (isFavorite) "Quitar de favoritos" else "Añadir a favoritos",
-            tint = if (isFavorite) JkOrange else JkTextSecondary,
-            modifier = Modifier.size(30.dp),
+            tint = if (isFavorite) JkOrange else JkTextSecondary.copy(alpha = 0.8f),
+            modifier = Modifier.size(24.dp),
         )
     }
 }

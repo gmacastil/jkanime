@@ -27,6 +27,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -34,6 +37,12 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
@@ -45,9 +54,21 @@ import net.jkanime.tv.model.ServerKind
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
 import net.jkanime.tv.ui.component.TvActionButton
+import net.jkanime.tv.ui.component.TvIconButton
 import net.jkanime.tv.ui.theme.JkOrange
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
+
+private val PauseIcon: ImageVector = ImageVector.Builder(
+    name = "Pause",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).addPath(
+    pathData = PathParser().parsePathString("M6,19h4V5H6v14zM14,5v14h4V5h-4z").toNodes(),
+    fill = SolidColor(Color.White),
+).build()
 
 @Composable
 fun PlayerScreen(
@@ -354,10 +375,9 @@ private fun Overlay(
                 .fillMaxWidth(),
         ) {
             if (fallbackSuggested && !showServers) {
-                TvActionButton(
-                    text = "Cambiar servidor",
-                    primary = true,
-                    compact = true,
+                TvIconButton(
+                    icon = Icons.Filled.List,
+                    contentDescription = "Cambiar servidor",
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 24.dp, top = 20.dp),
@@ -423,30 +443,36 @@ private fun Overlay(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TvActionButton(
-                    text = "−10 s",
-                    primary = false,
-                    compact = true,
+                TvIconButton(
+                    icon = Icons.Filled.ArrowBack,
+                    contentDescription = "Retroceder 10 segundos",
+                    size = 40.dp,
+                    iconSize = 21.dp,
                     onClick = { onSeek((positionMs - 10_000L).coerceAtLeast(0L)) },
                 )
-                TvActionButton(
-                    text = if (isPlaying) "Pausa" else "Reproducir",
-                    primary = true,
+                TvIconButton(
+                    icon = if (isPlaying) PauseIcon else Icons.Filled.PlayArrow,
+                    contentDescription = if (isPlaying) "Pausar" else "Reproducir",
+                    active = true,
+                    size = 48.dp,
+                    iconSize = 24.dp,
                     modifier = Modifier.focusRequester(focusRequester),
                     onClick = onTogglePlay,
                 )
-                TvActionButton(
-                    text = "+10 s",
-                    primary = false,
-                    compact = true,
+                TvIconButton(
+                    icon = Icons.Filled.ArrowForward,
+                    contentDescription = "Avanzar 10 segundos",
+                    size = 40.dp,
+                    iconSize = 21.dp,
                     onClick = {
                         onSeek((positionMs + 10_000L).coerceAtMost(durationMs))
                     },
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                TvActionButton(
-                    text = "Salir",
-                    primary = false,
+                TvIconButton(
+                    icon = Icons.Filled.Close,
+                    contentDescription = "Salir del reproductor",
+                    size = 40.dp,
                     onClick = onExit,
                 )
             }
