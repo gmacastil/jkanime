@@ -438,7 +438,7 @@ private fun Header(
         )
         Spacer(modifier = Modifier.width(16.dp))
         Image(
-            painter = painterResource(R.drawable.caiman_brand),
+            painter = painterResource(R.drawable.caiman_home),
             contentDescription = "JK TV",
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier
