@@ -95,6 +95,7 @@ fun ProfileGateScreen(onReady: () -> Unit) {
             list.size == 1 -> {
                 // Único perfil: queda por default sin preguntar.
                 manager.activate(list.first().id)
+                Graph.syncInBackground(context)
                 onReady()
             }
 
@@ -146,6 +147,7 @@ fun ProfileGateScreen(onReady: () -> Unit) {
                                 onClick = {
                                     scope.launch {
                                         manager.activate(profile.id)
+                                        Graph.syncInBackground(context)
                                         onReady()
                                     }
                                 },
@@ -224,6 +226,7 @@ fun ProfileGateScreen(onReady: () -> Unit) {
                             if (name.isNotBlank()) {
                                 scope.launch {
                                     manager.create(name)
+                                    Graph.syncInBackground(context)
                                     onReady()
                                 }
                             }
@@ -253,6 +256,7 @@ fun ProfileGateScreen(onReady: () -> Unit) {
                             onClick = {
                                 scope.launch {
                                     manager.create(name)
+                                    Graph.syncInBackground(context)
                                     onReady()
                                 }
                             },

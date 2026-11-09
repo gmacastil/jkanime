@@ -554,3 +554,49 @@ igual que Netflix.
   una instalación fresca sí vive en `owner = 0`. Para simular "0 perfiles"
   de forma fiel a una instalación nueva, los favoritos/progreso de prueba
   también deben estar en `owner = 0`, no solo vaciar `profiles`.
+
+## Sync automático al entrar a un perfil (F11.2) — verificado 2026-11-08
+
+Hueco encontrado tras F11.1: entrar a un perfil desde el gate
+(autoactivación, elegir en el chooser, o crear uno nuevo) no disparaba
+ningún sync — el único pull/push automático era el de `JkApp.onCreate()`,
+que corre **antes** de que el gate decida nada (con el `activeId` que
+hubiera en ese instante, normalmente `0`). El resultado: el perfil podía
+quedarse mostrando solo lo que había en Room local hasta sincronizar a
+mano o esperar el ciclo de 6 h del worker periódico — no es el
+comportamiento esperado tipo Netflix ("elijo perfil → veo lo último").
+
+### Decisión
+
+Auto-sync en background sin bloquear la navegación: se dispara
+`syncNow()` justo después de `activate()`/`create()`, pero se navega a
+Home de inmediato (no se espera el resultado). Si hay cambios remotos,
+los favoritos/progreso se actualizan solos en pantalla gracias al
+`flatMapLatest` ya existente de `LibraryRepository` — no hace falta
+ningún estado de "sincronizando" en el gate.
+
+### Cambios
+
+- **`Graph.appScope`** (nuevo): `CoroutineScope(SupervisorJob() +
+  Dispatchers.IO)` a nivel de aplicación, para que el sync no se cancele
+  cuando la pantalla que lo dispara (p. ej. `ProfileGateScreen`) sale de
+  composición al navegar. `Graph.syncInBackground(context)`: azúcar sobre
+  `appScope.launch { runCatching { sync(context).syncNow() } }`.
+- **`JkApp.onCreate()`**: simplificado para reutilizar
+  `Graph.syncInBackground(this)` en vez de tener su propio
+  `CoroutineScope` duplicado.
+- **`ProfileGateScreen`**: los 3 flujos de entrada (autoactivación con 1
+  perfil, elegir uno en el chooser, crear uno nuevo) llaman
+  `Graph.syncInBackground(context)` justo después de
+  `activate()`/`create()` y antes de `onReady()`.
+- **`ProfilesScreen`**: por consistencia, cambiar de perfil manualmente
+  desde la pantalla de gestión también dispara `syncInBackground()`.
+
+### Verificación en emulador
+
+Escenario "1 perfil, sin activo" (prefs con `active_profile_id=0`,
+perfil "Alejoa" real con espacio `07951576`): se leyó `last_sync_at` de
+`shared_prefs/jk-sync.xml` antes y después de reiniciar la app — cambió
+de `1794183999754` a `1794185823408`, confirmando que `syncNow()` corrió
+automáticamente al autoactivar el perfil. La app entró a Home sin demora
+visible (navegación no bloqueada por el sync).

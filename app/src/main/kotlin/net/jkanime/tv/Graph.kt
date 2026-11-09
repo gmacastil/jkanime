@@ -1,6 +1,10 @@
 package net.jkanime.tv
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import net.jkanime.tv.catalog.JkanimeRepository
 import net.jkanime.tv.data.local.JkDatabase
 import net.jkanime.tv.data.local.LibraryRepository
@@ -14,6 +18,19 @@ import net.jkanime.tv.data.sync.SyncEngine
  */
 object Graph {
     val repository: JkanimeRepository by lazy { JkanimeRepository() }
+
+    /**
+     * Scope de vida de la app para trabajo "fire and forget" que no debe
+     * cancelarse cuando una pantalla sale de composición (p. ej. el sync al
+     * entrar a un perfil: la puerta de entrada navega a Home de inmediato,
+     * pero el pull/push debe seguir corriendo en background).
+     */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Dispara un pull/push en background; no bloquea ni se cancela al navegar. */
+    fun syncInBackground(context: Context) {
+        appScope.launch { runCatching { sync(context).syncNow() } }
+    }
 
     @Volatile
     private var profileManager: ProfileManager? = null

@@ -158,6 +158,7 @@ fun ProfilesScreen(onBack: () -> Unit) {
                         ) {
                             scope.launch {
                                 manager.activate(profile.id)
+                                Graph.syncInBackground(context)
                                 status = "Perfil activo: ${profile.name}"
                             }
                         }
