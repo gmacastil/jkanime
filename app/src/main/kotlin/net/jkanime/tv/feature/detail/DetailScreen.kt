@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -262,8 +263,10 @@ private fun Content(
                 )
                 resumeEpisode?.let { episode ->
                     TvActionButton(
-                        text = "Continuar Ep ${episode.numberLabel}",
+                        text = "Ep ${episode.numberLabel}",
                         primary = true,
+                        compact = true,
+                        icon = Icons.Filled.PlayArrow,
                         onClick = {
                             onPlay(detail.slug, episode.number.toInt(), episode.url, episode.title)
                         },
