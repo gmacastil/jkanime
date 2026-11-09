@@ -16,8 +16,13 @@ android {
         applicationId = "net.jkanime.tv"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("VERSION_CODE")
+            .orElse("1")
+            .get()
+            .toInt()
+        versionName = providers.gradleProperty("VERSION_NAME")
+            .orElse("0.1.0")
+            .get()
 
         // Config del backend de sync. Se lee de gradle.properties o, mejor,
         // de local.properties (ignorado por git): así la clave del proyecto
@@ -39,6 +44,14 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.create("releaseSigning")
+                signingConfig?.storeFile = file(keystorePath)
+                signingConfig?.storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                signingConfig?.keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                signingConfig?.keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
