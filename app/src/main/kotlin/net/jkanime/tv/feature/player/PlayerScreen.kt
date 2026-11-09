@@ -153,7 +153,9 @@ fun PlayerScreen(
         delay(20_000)
         if (!playerReady) {
             fallbackSuggested = true
-            showServers = true
+            // No tapamos el vídeo ni abrimos el panel automáticamente: el
+            // usuario decide cuándo cambiar de fuente desde el botón flotante.
+            showServers = false
             overlayVisible = true
         }
     }
@@ -263,11 +265,8 @@ fun PlayerScreen(
                     )
 
                 if (overlayVisible) {
-                    Overlay(
-                        title = title,
-                        slug = slug,
-                        episodeNumber = episodeNumber,
-                        servers = current.servers,
+                        Overlay(
+                         servers = current.servers,
                         selectedUrl = current.selected.url,
                         selectedName = current.selected.displayName,
                         showServers = showServers,
@@ -306,9 +305,6 @@ fun PlayerScreen(
 
 @Composable
 private fun Overlay(
-    title: String,
-    slug: String,
-    episodeNumber: Int,
     servers: List<net.jkanime.tv.model.VideoServer>,
     selectedUrl: String,
     selectedName: String,
@@ -354,33 +350,20 @@ private fun Overlay(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xCC000000), Color.Transparent),
-                    ),
-                )
-                .padding(horizontal = 24.dp, vertical = 18.dp),
-        ) {
-            Column {
-                Text(
-                    text = title.ifBlank { slug },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = JkTextPrimary,
-                )
-                Text(
-                    text = if (episodeNumber > 0) "Episodio $episodeNumber" else "Episodio",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = JkTextSecondary,
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
+            if (fallbackSuggested && !showServers) {
+                TvActionButton(
+                    text = "Cambiar servidor",
+                    primary = true,
+                    compact = true,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 24.dp, top = 20.dp),
+                    onClick = onToggleServers,
+                )
+            }
             if (showServers) {
                 Column(
                     modifier = Modifier
@@ -421,9 +404,9 @@ private fun Overlay(
                 .padding(horizontal = 24.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (fallbackSuggested) {
+            if (fallbackSuggested && !showServers) {
                 Text(
-                    text = "$selectedName no cargó. Prueba con otro servidor.",
+                    text = "$selectedName no cargó",
                     style = MaterialTheme.typography.labelMedium,
                     color = JkOrange,
                 )
@@ -441,22 +424,26 @@ private fun Overlay(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TvActionButton(
-                    text = if (showServers) "Cerrar servidores" else "Servidores",
-                    primary = fallbackSuggested && !showServers,
-                    modifier = Modifier.focusRequester(focusRequester),
-                    onClick = onToggleServers,
+                    text = "−10 s",
+                    primary = false,
+                    compact = true,
+                    onClick = { onSeek((positionMs - 10_000L).coerceAtLeast(0L)) },
                 )
                 TvActionButton(
                     text = if (isPlaying) "Pausa" else "Reproducir",
                     primary = true,
+                    modifier = Modifier.focusRequester(focusRequester),
                     onClick = onTogglePlay,
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "OK oculta los controles · ◀ ▶ retrocede/avanza 10 s · Atrás sale",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = JkOrange,
+                TvActionButton(
+                    text = "+10 s",
+                    primary = false,
+                    compact = true,
+                    onClick = {
+                        onSeek((positionMs + 10_000L).coerceAtMost(durationMs))
+                    },
                 )
+                Spacer(modifier = Modifier.weight(1f))
                 TvActionButton(
                     text = "Salir",
                     primary = false,

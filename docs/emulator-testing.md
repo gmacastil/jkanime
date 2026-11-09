@@ -1053,3 +1053,16 @@ numérico.
 - El overlay añade barra de progreso navegable con D-pad: izquierda/derecha
   desplazan 10 segundos, además de pausa/reproducción. Las fuentes se muestran
   en un cajón vertical izquierdo colapsable.
+
+## F17 — Reproductor estilo web y servidor flotante
+
+- El estado normal del reproductor deja libre el vídeo y muestra únicamente
+  una barra inferior con tiempo, seek, `-10 s`, pausa/reproducción y `+10 s`.
+- La barra responde a izquierda/derecha del D-pad en saltos de 10 segundos y
+  también conserva el arrastre lógico mediante el control enfocable.
+- Desu continúa siendo la fuente inicial. Si no aparece `<video>` tras el
+  tiempo de vigilancia, se muestra `Cambiar servidor` como botón flotante; el
+  drawer de fuentes solo se abre al solicitarlo y ya no tapa automáticamente
+  el reproductor.
+- La pantalla se basa en el flujo observado en `jkanime.net/psyren/5/`: Desu
+  por defecto, fuentes secundarias bajo demanda y controles concentrados abajo.
