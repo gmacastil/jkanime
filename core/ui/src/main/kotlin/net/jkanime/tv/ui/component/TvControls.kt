@@ -314,8 +314,8 @@ fun TvNumberPad(
                                 TvIconButton(
                                     icon = Icons.Filled.ExitToApp,
                                     contentDescription = "Volver",
-                                    size = if (compact) 50.dp else 56.dp,
-                                    iconSize = if (compact) 23.dp else 25.dp,
+                                    size = if (compact) 52.dp else 58.dp,
+                                    iconSize = if (compact) 26.dp else 28.dp,
                                     onClick = onCancel,
                                 )
                             }
