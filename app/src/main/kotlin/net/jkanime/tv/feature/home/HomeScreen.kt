@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +64,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -77,6 +79,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
+import net.jkanime.tv.R
 import net.jkanime.tv.data.local.FavoriteEntity
 import net.jkanime.tv.data.sync.SyncEngine
 import net.jkanime.tv.data.sync.SyncResult
@@ -434,10 +437,13 @@ private fun Header(
             onClick = onToggleDrawer,
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = "JK TV",
-            style = MaterialTheme.typography.headlineSmall,
-            color = JkOrange,
+        Image(
+            painter = painterResource(R.drawable.caiman_brand),
+            contentDescription = "JK TV",
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(12.dp)),
         )
         Spacer(modifier = Modifier.width(24.dp))
 
