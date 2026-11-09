@@ -27,7 +27,10 @@ object VideoServerParser {
     )
 
     private val JKPLAYER_URL = Regex(
-        """https://jkanime\.net/jkplayer/([a-z0-9]+)\?e=[A-Za-z0-9+/=%]+""",
+        // El token actual usa base64url y puede contener `_`, `-` y `.`.
+        // Si se corta aquí, jkplayer responde 500 porque recibe un `e=`
+        // incompleto.
+        """https://jkanime\.net/jkplayer/([a-z0-9]+)\?e=[^"'\s]+""",
     )
 
     private val DOWNLOAD_HOSTS = setOf("mega", "mediafire", "1fichier", "zippyshare")

@@ -39,6 +39,21 @@ class VideoServerParserTest {
     }
 
     @Test
+    fun `conserva tokens actuales de jkplayer con guion punto y guion bajo`() {
+        val html = """
+            <script>
+            video[0] = '<iframe src="https://jkanime.net/jkplayer/um?e=abc_DEF-123.xY--&t=hash"></iframe>';
+            </script>
+        """.trimIndent()
+
+        val desu = VideoServerParser.parse(html, episodeUrl).first { it.name == "Desu" }
+        assertEquals(
+            "https://jkanime.net/jkplayer/um?e=abc_DEF-123.xY--&t=hash",
+            desu.url,
+        )
+    }
+
+    @Test
     fun `ordena primero los servidores reproducibles`() {
         val kinds = servers.map { it.kind }
         val firstDownload = kinds.indexOfFirst { it == ServerKind.DOWNLOAD }

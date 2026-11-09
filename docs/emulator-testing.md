@@ -1066,3 +1066,12 @@ numérico.
   el reproductor.
 - La pantalla se basa en el flujo observado en `jkanime.net/psyren/5/`: Desu
   por defecto, fuentes secundarias bajo demanda y controles concentrados abajo.
+
+## F18 — Corrección 500 en Desu
+
+- La web actual genera tokens `e=` de jkplayer con caracteres de base64url
+  (`_`, `-` y `.`). El parser antiguo los truncaba y Desu respondía `500 | Server
+  Error`.
+- La expresión de extracción ahora conserva el token completo hasta la comilla
+  del iframe. Se añadió prueba regresiva para `jkplayer/um` con esos caracteres.
+- Validado con `:data:catalog:test` y `:app:assembleDebug`.
