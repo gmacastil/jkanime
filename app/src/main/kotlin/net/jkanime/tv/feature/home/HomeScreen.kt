@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.home
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -87,6 +88,7 @@ import net.jkanime.tv.data.sync.SyncResult
 import net.jkanime.tv.model.AnimeCard
 import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.ProgramacionSection
+import net.jkanime.tv.feature.profiles.LanguageOptions
 import net.jkanime.tv.feature.profiles.ProfileAvatar
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
@@ -126,6 +128,7 @@ fun HomeScreen(
     val syncEngine = remember(context) { Graph.sync(context) }
     val scope = rememberCoroutineScope()
     val activeProfile by profileManager.activeProfile.collectAsStateWithLifecycle(initialValue = null)
+    val lang by profileManager.lang.collectAsStateWithLifecycle()
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(Graph.repository, library, context),
     )
@@ -195,7 +198,16 @@ fun HomeScreen(
     // Los resultados llegan por red con retraso: si el usuario ya había pedido
     // bajar a la grilla, se le lleva al primero en cuanto existe.
     LaunchedEffect(search.hits, pendingGridFocus) {
-        if (!pendingGridFocus || search.hits.isEmpty()) return@LaunchedEffect
+        if (!pendingGridFocus) return@LaunchedEffect
+        // Sin búsqueda activa no hay grilla de resultados: el destino es la
+        // grilla de programación (o favoritos), que se re-enfoca al cambiar
+        // el nonce. Sin este fallback el foco quedaba atrapado en el campo.
+        if (!searching) {
+            pendingGridFocus = false
+            focusNonce++
+            return@LaunchedEffect
+        }
+        if (search.hits.isEmpty()) return@LaunchedEffect
         repeat(10) {
             withFrameNanos { }
             if (resultsFocus.requestFocus()) {
@@ -419,6 +431,15 @@ fun HomeScreen(
                 },
                 hasSpace = activeProfile?.spaceCode != null,
                 spaceCode = activeProfile?.spaceCode.orEmpty(),
+                lang = lang,
+                onLangSelect = { code ->
+                    // Se cierra el cajón y se recrea la activity: quien aplica
+                    // el locale es attachBaseContext (AppLocale.wrap).
+                    showAvatarMenu = false
+                    avatarMenuMode = AvatarMenuMode.MAIN
+                    profileManager.setLang(code)
+                    (context as? Activity)?.recreate()
+                },
             )
         }
     }
@@ -678,10 +699,11 @@ private fun SideDrawer(
     }
 }
 
-/** Modos del menú del avatar (sync/perfil). */
+/** Modos del menú del avatar (sync/perfil/idioma). */
 private enum class AvatarMenuMode {
     MAIN,       // Menú principal: sync now, link, unlink, pairing, profile switch
     JOIN_CODE,  // Introduciendo código de 8 dígitos para vincular
+    LANGUAGE,   // Selector de idioma de la app
 }
 
 /**
@@ -712,6 +734,8 @@ private fun AvatarMenu(
     onProfileSwitch: () -> Unit,
     hasSpace: Boolean,
     spaceCode: String,
+    lang: String,
+    onLangSelect: (String) -> Unit,
 ) {
     // El cajón entra deslizando desde la derecha. El nodo existe desde el
     // primer frame (solo se traslada), así que el foco se puede pedir ya.
@@ -737,11 +761,15 @@ private fun AvatarMenu(
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = {
-            if (mode == AvatarMenuMode.JOIN_CODE) {
-                onModeChange(AvatarMenuMode.MAIN)
-                onCodeChange("")
-            } else {
-                onClose()
+            when (mode) {
+                AvatarMenuMode.JOIN_CODE -> {
+                    onModeChange(AvatarMenuMode.MAIN)
+                    onCodeChange("")
+                }
+                // En idioma, BACK vuelve al menú principal sin cerrar: el
+                // cambio de idioma recrea la activity desde la propia fila.
+                AvatarMenuMode.LANGUAGE -> onModeChange(AvatarMenuMode.MAIN)
+                else -> onClose()
             }
         },
         properties = androidx.compose.ui.window.DialogProperties(
@@ -776,7 +804,14 @@ private fun AvatarMenu(
                         profileId = profileId,
                         synced = hasSpace,
                         busy = busy,
-                        compact = mode == AvatarMenuMode.JOIN_CODE,
+                        compact = mode != AvatarMenuMode.MAIN,
+                        // En compacto el título es el del submenú: vinculación
+                        // o idioma según el modo.
+                        title = if (mode == AvatarMenuMode.LANGUAGE) {
+                            stringResource(R.string.lang_title)
+                        } else {
+                            null
+                        },
                         onBack = {
                             onModeChange(AvatarMenuMode.MAIN)
                             onCodeChange("")
@@ -803,6 +838,7 @@ private fun AvatarMenu(
                                 onClose()
                                 onProfileSwitch()
                             },
+                            onLanguage = { onModeChange(AvatarMenuMode.LANGUAGE) },
                         )
 
                         AvatarMenuMode.JOIN_CODE -> Column(
@@ -827,6 +863,20 @@ private fun AvatarMenu(
                                  busy = busy,
                                  compact = true,
                                  focusRequester = focusRequester,
+                            )
+                        }
+
+                        AvatarMenuMode.LANGUAGE -> Column(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            LanguageOptions(
+                                current = lang,
+                                onSelect = onLangSelect,
+                                modifier = Modifier.fillMaxWidth(),
+                                // El `LaunchedEffect(mode)` del cajón enfoca
+                                // este requester: cae en la opción actual.
+                                focusRequester = focusRequester,
                             )
                         }
                     }
@@ -861,6 +911,8 @@ private fun AvatarDrawerHeader(
     synced: Boolean,
     busy: Boolean,
     compact: Boolean,
+    /** Título del submenú en modo compacto (por defecto, vinculación). */
+    title: String? = null,
     onBack: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -870,9 +922,9 @@ private fun AvatarDrawerHeader(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (compact) {
-            // En el modo código no hay espacio para el avatar: título + atrás.
+            // En los submenús no hay espacio para el avatar: título + atrás.
             Text(
-                text = stringResource(R.string.sync_link_device),
+                text = title ?: stringResource(R.string.sync_link_device),
                 style = MaterialTheme.typography.titleMedium,
                 color = JkTextPrimary,
                 modifier = Modifier.weight(1f),
@@ -963,6 +1015,7 @@ private fun AvatarDrawerMain(
     onUnlink: () -> Unit,
     onJoinCode: () -> Unit,
     onProfileSwitch: () -> Unit,
+    onLanguage: () -> Unit,
 ) {
     // Código del espacio como dato de cabecera (no es una acción).
     if (hasSpace) {
@@ -1040,6 +1093,16 @@ private fun AvatarDrawerMain(
         selected = false,
         enabled = !busy,
         onClick = onProfileSwitch,
+    )
+
+    AvatarDrawerDivider()
+    AvatarDrawerSection(stringResource(R.string.lang_section))
+    DrawerItem(
+        label = stringResource(R.string.lang_title),
+        icon = Icons.Filled.Settings,
+        selected = false,
+        enabled = !busy,
+        onClick = onLanguage,
     )
 }
 

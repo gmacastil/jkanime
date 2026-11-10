@@ -113,6 +113,7 @@ fun ProfileGateScreen(
 
     // null = cargando (Room aún no emitió); después llega la lista real.
     val profiles by manager.profiles.collectAsStateWithLifecycle(initialValue = null)
+    val lang by manager.lang.collectAsStateWithLifecycle()
 
     var mode by remember { mutableStateOf(if (startInChooser) Mode.CHOOSER else Mode.LOADING) }
     var name by remember { mutableStateOf("") }
@@ -120,6 +121,7 @@ fun ProfileGateScreen(
     var syncBusy by remember { mutableStateOf(false) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
     var syncLinked by remember { mutableStateOf(false) }
+    var showLangPicker by remember { mutableStateOf(false) }
 
     // Modo edición (borrar perfiles): solo tiene sentido dentro del
     // selector, así que se resetea cada vez que se entra/sale de él.
@@ -273,6 +275,27 @@ fun ProfileGateScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                     )
+
+                    // Idioma por defecto, visible también en la puerta: el
+                    // mismo selector que el cajón del avatar en Home.
+                    TvActionButton(
+                        text = stringResource(R.string.lang_title),
+                        primary = false,
+                        onClick = { showLangPicker = true },
+                    )
+                    if (showLangPicker) {
+                        LanguagePickerDialog(
+                            current = lang,
+                            onSelect = { code ->
+                                showLangPicker = false
+                                manager.setLang(code)
+                                // attachBaseContext (AppLocale.wrap) aplica
+                                // el locale al recrear la activity.
+                                (context as? android.app.Activity)?.recreate()
+                            },
+                            onDismiss = { showLangPicker = false },
+                        )
+                    }
                 }
             }
 

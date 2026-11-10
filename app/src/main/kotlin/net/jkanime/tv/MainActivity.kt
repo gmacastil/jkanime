@@ -37,9 +37,19 @@ import net.jkanime.tv.ui.theme.JkOrange
 import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
+import net.jkanime.tv.data.local.AppLocale
 import net.jkanime.tv.ui.theme.JkTheme
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Idioma elegido en el perfil (AppLocale): hay que envolver el Context
+     * ANTES de que el Activity cree recursos, o `stringResource` seguiría
+     * resolviendo con el locale del sistema.
+     */
+    override fun attachBaseContext(newBase: android.content.Context?) {
+        super.attachBaseContext(newBase?.let { AppLocale.wrap(it) } ?: newBase)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

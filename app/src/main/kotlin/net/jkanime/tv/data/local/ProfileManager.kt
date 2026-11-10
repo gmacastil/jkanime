@@ -31,6 +31,24 @@ class ProfileManager(
 
     private val _activeId = MutableStateFlow(prefs.getInt(KEY_ACTIVE, 0))
 
+    private val _lang = MutableStateFlow(
+        prefs.getString(AppLocale.KEY_LANG, AppLocale.SYSTEM) ?: AppLocale.SYSTEM,
+    )
+
+    /** Idioma elegido para la app: "system" | "es" | "en". */
+    val lang: StateFlow<String> = _lang.asStateFlow()
+
+    /**
+     * Cambia el idioma de la app. Persiste la preferencia; para que surta
+     * efecto hay que recrear la activity ([MainActivity] la envuelve con
+     * [AppLocale.wrap] en `attachBaseContext`).
+     */
+    fun setLang(code: String) {
+        _lang.value = code
+        prefs.edit().putString(AppLocale.KEY_LANG, code).apply()
+    }
+
+
     /** Owner activo; 0 = modo legacy (sin perfil). */
     val activeId: StateFlow<Int> = _activeId.asStateFlow()
 
@@ -117,7 +135,8 @@ class ProfileManager(
     }
 
     companion object {
-        private const val PREFS = "jk-profiles"
+        /** Nombre de las SharedPreferences (también las lee [AppLocale]). */
+        const val PREFS = "jk-profiles"
         private const val KEY_ACTIVE = "active_profile_id"
     }
 }

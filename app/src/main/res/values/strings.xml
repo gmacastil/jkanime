@@ -157,4 +157,12 @@
     <string name="update_action">Actualizar</string>
     <string name="update_downloading">Descargando…</string>
     <string name="update_start_error">No se pudo iniciar la actualización</string>
+
+    <!-- Selector de idioma (menú del avatar + puerta de perfiles) -->
+    <string name="lang_title">Idioma</string>
+    <string name="lang_section">IDIOMA</string>
+    <string name="lang_hint">Se aplica a toda la app al instante.</string>
+    <string name="lang_system">Sistema (predeterminado)</string>
+    <string name="lang_es" translatable="false">Español</string>
+    <string name="lang_en" translatable="false">English</string>
 </resources>
