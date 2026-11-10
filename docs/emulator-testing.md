@@ -1075,3 +1075,66 @@ numérico.
 - La expresión de extracción ahora conserva el token completo hasta la comilla
   del iframe. Se añadió prueba regresiva para `jkplayer/um` con esos caracteres.
 - Validado con `:data:catalog:test` y `:app:assembleDebug`.
+
+## Ajustes de UI + i18n completo (6 ajustes) — verificado 2026-11-09
+
+Commits `693f142` (ajustes visuales), `2c9fe25` (i18n) y `f78a85b`
+(selector de idioma + fix de foco).
+
+### Ajustes (Fase A)
+- **Directorio**: solo dos filtros (`VISIBLE_FILTERS = {"filtro","genero"}`)
+  en un panel `Surface` de 230 dp con `verticalScroll` y opciones como
+  filas visibles (`FilterOptionRow`, sin `TvDropdown` — se eliminó). Grilla
+  de 6 columnas. Verificado con capturas: panel con scroll y foco en fila
+  de género seleccionada.
+- **Drawer Home**: "Animes" → "Recientes" con `Icons.Filled.DateRange`
+  (`Whatshot` no existe en `material-icons-core`).
+- **Favoritos**: badge `+N` (pendientes) / `Al día` en verde (`JkGreen`,
+  `PosterCard.badgeColor`) / `Ep N` de respaldo.
+- **Hamburguesa**: usa `painterResource(R.drawable.ic_launcher)` (naranja
+  sobre negro) vía la sobrecarga de `TvIconButton(painter: Painter, …)` y
+  `TvIconButtonBox`. `Painter` está en
+  `androidx.compose.ui.graphics.painter.Painter` (**singular**, no
+  `painting`).
+
+### i18n (Fase B) y selector de idioma (Fase C)
+- `values/` = español (default; literales byte-a-byte idénticos a los
+  pre-i18n, así los dumps con `uiautomator` en español siguen válidos) y
+  `values-en/` = inglés: 136 claves (130 app + 6 core/ui), 17 archivos
+  Kotlin migrados a `stringResource`/`getString`.
+- **Mecanismo de idioma**: `AppLocale.wrap()` en
+  `MainActivity.attachBaseContext` (`createConfigurationContext` desde
+  SharedPreferences `jk-profiles`/`lang`: `system|es|en`). No hay
+  appcompat ni per-app locales: para aplicar un cambio,
+  `ProfileManager.setLang(code)` + `(context as? Activity)?.recreate()`.
+- **Selector**: `feature/profiles/LanguagePicker.kt`
+  (`LanguageOptions` filas con check + `LanguagePickerDialog`). Entrada
+  "Idioma" (icono `Settings`) en la sección `LANGUAGE` del cajón del
+  avatar (tras "Cambiar perfil") y botón "Idioma" en el `CHOOSER` del
+  gate. Strings `lang_title/lang_section/lang_hint/lang_system/lang_es/
+  lang_en` (`Español`/`English` con `translatable="false"`).
+
+### Trampas nuevas
+- **El emulador está en inglés de sistema**: con `lang=system` la UI se
+  ve en INGLES y los dumps devuelven textos EN. Para pruebas en español,
+  elegir "Español" en el picker (queda persistido; el emulador ya quedó
+  en `es`) o leer `values/` directamente. En un dispositivo en español,
+  "Sistema" muestra español.
+- **`DPAD_DOWN` desde el campo de búsqueda estaba atrapado en modo
+  normal**: el fallback del `pendingGridFocus` solo existía cuando había
+  resultados de búsqueda (con `search.hits` vacío el `LaunchedEffect` no
+  hacía nada). Fix en `f78a85b`: si `!searching` se hace `focusNonce++`
+  para re-enfocar la primera tarjeta (o el primer favorito). Verificado:
+  campo → DOWN → primera tarjeta.
+- **El `BasicTextField` del buscador abre el IME** al ganar foco en el
+  emulador: con el teclado en pantalla el D-pad es del IME. `BACK`
+  cierra el IME y conserva el foco en el campo.
+- **Ruta al avatar del header** (menú con "Idioma"): primera tarjeta →
+  `RIGHT`×5 (columna 6) → `UP` → avatar (`[1780,32][1876,128]`) →
+  `CENTER`. El foco inicial del picker de idioma cae en la opción actual
+  (el `FocusRequester` externo del cajón se engancha a la fila
+  `selectedIndex`).
+- Verificado end-to-end en `emulator-5554`: cajón → "Idioma" → filas
+  "System (default)/Español/English" → elegir Español → recreate → UI en
+  español ("Menú", "Buscar anime en jkanime…", "¿Quién está viendo?") →
+  gate con botón "Idioma" → diálogo con check + foco en "Español".
