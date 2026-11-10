@@ -44,15 +44,25 @@ misma clave. Configurar en GitHub Actions estos secretos:
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-Para generar una clave permanente una sola vez:
+Para generar una clave permanente una sola vez (PKCS12, el formato por
+defecto: exige que la contraseña de la clave sea **la misma** que la del
+almacén, y el alias queda como se indique aquí — el actual es
+`jkanimetv_release`):
 
 ```bash
 keytool -genkeypair -v \
   -keystore jkanimetv-release.keystore \
-  -alias jkanimetv \
-  -keyalg RSA -keysize 2048 -validity 10000
+  -alias jkanimetv_release \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass '<contraseña>' -keypass '<misma contraseña>'
 base64 -w0 jkanimetv-release.keystore
 ```
+
+Si el alias o la contraseña no coinciden con los secretos, el workflow falla
+en `packageRelease` con `KeytoolException: Failed to read key ...`.
+
+El `versionCode` de los builds (local y CI) es `100 + nº de commits`, para
+que siempre crezca y supere al ya instalado en cada TV.
 
 La primera instalación que vaya a recibir actualizaciones debe ser el APK
 firmado con esta clave. Si la TV ya tiene instalada una versión debug firmada

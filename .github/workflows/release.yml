@@ -40,9 +40,13 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
+          # versionCode = 100 + nº de commits: siempre crece con el repo y
+          # supera a los builds locales de sideload (GITHUB_RUN_NUMBER se
+          # reinicia por repo y podía quedar por debajo de una TV ya actualizada).
+          VERSION_CODE=$((100 + $(git rev-list --count HEAD)))
           ./gradlew :app:assembleRelease \
             -PVERSION_NAME="$VERSION_NAME" \
-            -PVERSION_CODE="$GITHUB_RUN_NUMBER"
+            -PVERSION_CODE="$VERSION_CODE"
 
       - name: Publicar GitHub Release
         env:

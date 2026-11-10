@@ -62,7 +62,9 @@ if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 2
 fi
 if [ -z "$VERSION_CODE" ]; then
-  VERSION_CODE="$(git rev-list --count HEAD)"
+  # Misma fórmula que el workflow de release (100 + commits) para que un
+  # build local no quede por debajo del versionCode ya instalado en la TV.
+  VERSION_CODE="$((100 + $(git rev-list --count HEAD)))"
 fi
 if ! [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
   echo "✗ VERSION_CODE inválido: $VERSION_CODE" >&2
