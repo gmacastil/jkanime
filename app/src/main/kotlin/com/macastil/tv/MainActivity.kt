@@ -130,7 +130,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        VersionLabel(modifier = Modifier.align(Alignment.BottomEnd))
                     }
                 }
             }
