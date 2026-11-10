@@ -471,21 +471,17 @@ private fun Header(
             .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // El menú es el caimán de la app en círculo: es a la vez marca y
+        // hamburguesa (antes había un icono aparte a su lado; se quitó
+        // para que quedara solo este).
         TvIconButton(
-            painter = painterResource(R.drawable.ic_launcher),
+            painter = painterResource(R.drawable.caiman_home),
             contentDescription = stringResource(R.string.home_menu_cd),
             active = drawerOpen,
             focusRequester = menuFocus,
+            circle = true,
+            imageSize = 36.dp,
             onClick = onToggleDrawer,
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Image(
-            painter = painterResource(R.drawable.caiman_home),
-            contentDescription = stringResource(R.string.home_brand_cd),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(10.dp)),
         )
         Spacer(modifier = Modifier.width(24.dp))
 

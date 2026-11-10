@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -180,8 +181,9 @@ fun TvIconButton(
 
 /**
  * Sobrecarga para iconos gráficos (drawables de la app, p. ej. el logo
- * `ic_launcher`) en vez de un [ImageVector]: mismo comportamiento de foco
- * y estados, solo cambia qué se pinta dentro.
+ * `caiman_home`) en vez de un [ImageVector]: mismo comportamiento de foco
+ * y estados, solo cambia qué se pinta dentro. `circle = true` lo deja
+ * como círculo.
  */
 @Composable
 fun TvIconButton(
@@ -194,6 +196,8 @@ fun TvIconButton(
     focusRequester: FocusRequester? = null,
     size: Dp = 48.dp,
     imageSize: Dp = 30.dp,
+    /** true = contenedor e imagen en círculo (logo de la app, p. ej. el caimán). */
+    circle: Boolean = false,
 ) {
     TvIconButtonBox(
         onClick = onClick,
@@ -203,6 +207,7 @@ fun TvIconButton(
         focusRequester = focusRequester,
         size = size,
         tint = null,
+        circle = circle,
     ) {
         Image(
             painter = painter,
@@ -210,7 +215,7 @@ fun TvIconButton(
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(imageSize)
-                .clip(RoundedCornerShape(6.dp)),
+                .clip(if (circle) CircleShape else RoundedCornerShape(6.dp)),
         )
     }
 }
@@ -225,8 +230,10 @@ private fun TvIconButtonBox(
     focusRequester: FocusRequester?,
     size: Dp,
     tint: Color?,
+    circle: Boolean = false,
     content: @Composable (Color) -> Unit,
 ) {
+    val shape = if (circle) CircleShape else RoundedCornerShape(12.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
@@ -256,12 +263,12 @@ private fun TvIconButtonBox(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
             .size(size)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(shape)
             .background(background)
             .border(
                 width = if (focused) 2.dp else 1.dp,
                 color = borderColor,
-                shape = RoundedCornerShape(12.dp),
+                shape = shape,
             )
             .clickable(
                 interactionSource = interactionSource,
