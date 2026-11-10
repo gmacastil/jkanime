@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.directorio
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -29,6 +30,8 @@ sealed interface DirectorioUiState {
 class DirectorioViewModel(
     private val repository: JkanimeRepository,
     private val library: LibraryRepository,
+    // Solo para localizar mensajes de error fuera de la composición.
+    private val context: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<DirectorioUiState>(DirectorioUiState.Loading)
@@ -68,7 +71,7 @@ class DirectorioViewModel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                _state.value = DirectorioUiState.Error(error.friendlyMessage())
+                _state.value = DirectorioUiState.Error(error.friendlyMessage(context))
             }
         }
     }
@@ -77,8 +80,9 @@ class DirectorioViewModel(
         fun factory(
             repository: JkanimeRepository,
             library: LibraryRepository,
+            context: Context,
         ) = viewModelFactory {
-            initializer { DirectorioViewModel(repository, library) }
+            initializer { DirectorioViewModel(repository, library, context.applicationContext) }
         }
     }
 }

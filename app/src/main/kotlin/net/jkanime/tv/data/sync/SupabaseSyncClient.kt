@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.jkanime.tv.BuildConfig
+import net.jkanime.tv.R
 import net.jkanime.tv.data.local.FavoriteEntity
 import net.jkanime.tv.data.local.ProgressEntity
 import okhttp3.MediaType.Companion.toMediaType
@@ -40,7 +41,12 @@ data class RemoteSnapshot(
 class SupabaseSyncClient(
     private val baseUrl: String,
     private val anonKey: String,
+    context: Context,
 ) {
+
+    // applicationContext: el cliente vive en un singleton de Graph y no
+    // debe retener una Activity.
+    private val appContext = context.applicationContext
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -161,7 +167,7 @@ class SupabaseSyncClient(
                 // PostgREST devuelve {"code":..,"message":..}. Se muestra solo
                 // el `message` (p.ej. "invalid_credentials") en vez del JSON
                 // crudo, que en pantalla de TV es ilegible.
-                throw SyncException(friendlyError(response.code, text))
+                throw SyncException(friendlyError(appContext, response.code, text))
             }
             return if (text.isBlank()) JSONObject() else JSONObject(text)
         }
@@ -173,19 +179,22 @@ class SyncException(message: String) : Exception(message)
 /**
  * Traduce la respuesta de error de PostgREST a algo que quepa en pantalla.
  * Si la función no existe (PGRST202) es que falta ejecutar el schema.sql.
+ *
+ * Recibe `Context` para resolver el texto desde recursos (es/en): el
+ * mensaje acaba en pantalla (menú del avatar / elección de sync).
  */
-private fun friendlyError(httpCode: Int, body: String): String {
+private fun friendlyError(context: Context, httpCode: Int, body: String): String {
     val parsed = runCatching { JSONObject(body) }.getOrNull()
     val serverMessage = parsed?.optString("message").orEmpty()
     val code = parsed?.optString("code").orEmpty()
 
     return when {
         code == "PGRST202" || (httpCode == 404 && serverMessage.contains("Could not find the function")) ->
-            "Falta ejecutar docs/supabase/schema.sql en Supabase (funcion ausente)"
+            context.getString(R.string.sync_err_schema)
         serverMessage.contains("invalid_pairing_code", ignoreCase = true) ->
-            "Código inválido o vencido. 07951576 es el código del espacio; genera un código temporal desde el otro dispositivo."
+            context.getString(R.string.sync_err_pairing)
         serverMessage.isNotBlank() -> serverMessage
-        else -> "HTTP $httpCode: ${body.take(120)}"
+        else -> context.getString(R.string.sync_err_http, httpCode.toString(), body.take(120))
     }
 }
 
@@ -258,10 +267,11 @@ class SyncCredentialsStore(context: Context) {
         private const val KEY_TOKEN = "token"
         private const val KEY_LAST_SYNC = "last_sync_at"
 
-        fun client(): SupabaseSyncClient =
+        fun client(context: Context): SupabaseSyncClient =
             SupabaseSyncClient(
                 baseUrl = BuildConfig.SUPABASE_URL,
                 anonKey = BuildConfig.SUPABASE_ANON_KEY,
+                context = context,
             )
     }
 }

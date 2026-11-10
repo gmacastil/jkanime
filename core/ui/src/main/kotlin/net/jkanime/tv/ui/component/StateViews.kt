@@ -12,21 +12,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import net.jkanime.tv.ui.R
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
 
+/**
+ * `message` es `null` por defecto para poder resolver el texto desde
+ * recursos sin meter una llamada composable en un argumento por defecto
+ * (los defaults se evalúan fuera del contexto composable).
+ */
 @Composable
 fun LoadingState(
     modifier: Modifier = Modifier,
-    message: String = "Cargando…",
+    message: String? = null,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = message,
+            text = message ?: stringResource(R.string.state_loading),
             style = MaterialTheme.typography.titleMedium,
             color = JkTextSecondary,
         )
@@ -56,7 +63,7 @@ fun ErrorState(
             modifier = Modifier.padding(32.dp),
         ) {
             Text(
-                text = "Algo salió mal",
+                text = stringResource(R.string.state_error_title),
                 style = MaterialTheme.typography.titleLarge,
                 color = JkTextPrimary,
             )
@@ -67,7 +74,7 @@ fun ErrorState(
                 textAlign = TextAlign.Center,
             )
             TvActionButton(
-                text = "Reintentar",
+                text = stringResource(R.string.state_retry),
                 onClick = onRetry,
                 modifier = Modifier.focusRequester(focusRequester),
             )

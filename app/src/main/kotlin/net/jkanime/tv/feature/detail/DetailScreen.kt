@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +50,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import net.jkanime.tv.Graph
+import net.jkanime.tv.R
 import net.jkanime.tv.data.local.ProgressEntity
 import net.jkanime.tv.model.AiringStatus
 import net.jkanime.tv.model.AnimeDetail
@@ -82,7 +84,7 @@ fun DetailScreen(
     val library = remember(context) { Graph.library(context) }
     val viewModel: DetailViewModel = viewModel(
         key = slug,
-        factory = DetailViewModel.factory(Graph.repository, library, slug),
+        factory = DetailViewModel.factory(Graph.repository, library, slug, context),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
@@ -243,7 +245,7 @@ private fun Content(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Capítulos (${episodes.size})",
+                    text = stringResource(R.string.detail_chapters, episodes.size),
                     style = MaterialTheme.typography.titleMedium,
                     color = JkTextPrimary,
                 )
@@ -263,7 +265,7 @@ private fun Content(
                 )
                 resumeEpisode?.let { episode ->
                     TvActionButton(
-                        text = "Ep ${episode.numberLabel}",
+                        text = stringResource(R.string.detail_episode_resume, episode.numberLabel),
                         primary = true,
                         compact = true,
                         icon = Icons.Filled.PlayArrow,
@@ -274,7 +276,11 @@ private fun Content(
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = if (descending) "Nuevos primero" else "Antiguos primero",
+                    text = if (descending) {
+                        stringResource(R.string.detail_sort_newest_first)
+                    } else {
+                        stringResource(R.string.detail_sort_oldest_first)
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = JkTextSecondary,
                 )
@@ -285,7 +291,7 @@ private fun Content(
             if (sorted.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Todavía no hay capítulos publicados",
+                        text = stringResource(R.string.detail_no_chapters),
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                     )
@@ -329,7 +335,11 @@ private fun Content(
                         item {
                             Box(modifier = Modifier.padding(top = 8.dp)) {
                                 TvActionButton(
-                                    text = if (loadingMore) "Cargando…" else "Cargar más",
+                                    text = if (loadingMore) {
+                                        stringResource(R.string.common_loading)
+                                    } else {
+                                        stringResource(R.string.detail_load_more)
+                                    },
                                     primary = false,
                                     enabled = !loadingMore,
                                     onClick = onLoadMore,
@@ -347,7 +357,12 @@ private fun Content(
  * Título del capítulo sin el nombre del anime delante: el sitio publica
  * "Hyouken no Majutsushi ga Sekai wo Suberu II - 5", y repetir el título del
  * anime en cada fila es ruido (ya está arriba).
+ *
+ * Es `@Composable` (y no una función pura) para poder resolver "Episodio …"
+ * desde recursos; se llama desde el contenido de `itemsIndexed`, que sí está
+ * en contexto de composición.
  */
+@Composable
 private fun chapterTitle(episode: Episode, animeTitle: String): String {
     val raw = episode.title.trim()
     val stripped = listOf("$animeTitle - ", "$animeTitle – ", "$animeTitle: ")
@@ -356,8 +371,9 @@ private fun chapterTitle(episode: Episode, animeTitle: String): String {
         ?.trim()
         ?: raw
     return when {
-        stripped.isBlank() -> "Episodio ${episode.numberLabel}"
-        stripped.matches(Regex("""\d+(\.\d+)?""")) -> "Episodio $stripped"
+        stripped.isBlank() -> stringResource(R.string.chapter_episode, episode.numberLabel)
+        stripped.matches(Regex("""\d+(\.\d+)?""")) ->
+            stringResource(R.string.chapter_episode, stripped)
         else -> stripped
     }
 }
@@ -386,7 +402,7 @@ private fun LeftPanel(detail: AnimeDetail) {
 
         detail.statusLabel?.let { status ->
             MetaLine(
-                label = "Estado",
+                label = stringResource(R.string.detail_meta_status),
                 value = status,
                 valueColor = if (detail.status == AiringStatus.CURRENTLY) {
                     JkGreen
@@ -395,9 +411,15 @@ private fun LeftPanel(detail: AnimeDetail) {
                 },
             )
         }
-        detail.type?.let { MetaLine(label = "Tipo", value = it) }
-        detail.nextEpisodeLabel?.let { MetaLine(label = "Próx. cap", value = it) }
-        detail.totalEpisodes?.takeIf { it > 0 }?.let { MetaLine(label = "Capítulos", value = "$it") }
+        detail.type?.let {
+            MetaLine(label = stringResource(R.string.detail_meta_type), value = it)
+        }
+        detail.nextEpisodeLabel?.let {
+            MetaLine(label = stringResource(R.string.detail_meta_next_episode), value = it)
+        }
+        detail.totalEpisodes?.takeIf { it > 0 }?.let {
+            MetaLine(label = stringResource(R.string.detail_meta_episodes), value = "$it")
+        }
 
         Spacer(modifier = Modifier.height(14.dp))
 
@@ -511,7 +533,11 @@ private fun FavoriteStar(
     ) {
         Icon(
             imageVector = Icons.Filled.Favorite,
-            contentDescription = if (isFavorite) "Quitar de favoritos" else "Añadir a favoritos",
+            contentDescription = if (isFavorite) {
+                stringResource(R.string.detail_favorite_remove_cd)
+            } else {
+                stringResource(R.string.detail_favorite_add_cd)
+            },
             tint = if (isFavorite) JkOrange else JkTextSecondary.copy(alpha = 0.8f),
             modifier = Modifier.size(24.dp),
         )

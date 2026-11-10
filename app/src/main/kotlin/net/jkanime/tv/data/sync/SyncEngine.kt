@@ -1,5 +1,7 @@
 package net.jkanime.tv.data.sync
 
+import android.content.Context
+import net.jkanime.tv.R
 import net.jkanime.tv.data.local.LibraryRepository
 import net.jkanime.tv.data.local.ProfileManager
 
@@ -25,7 +27,12 @@ class SyncEngine(
     private val client: SupabaseSyncClient,
     private val store: SyncCredentialsStore,
     private val profiles: ProfileManager,
+    // Solo para localizar mensajes de error que llegan a la UI (menú del
+    // avatar / elección de sync), nunca para abrir pantallas.
+    context: Context,
 ) {
+
+    private val appContext = context.applicationContext
 
     val isConfigured: Boolean get() = client.isConfigured
 
@@ -63,7 +70,7 @@ class SyncEngine(
     /** Genera un código temporal para vincular otro dispositivo. */
     suspend fun createPairingCode(): PairingCode {
         val credentials = currentCredentials()
-            ?: throw IllegalStateException("Este dispositivo no está vinculado")
+            ?: throw IllegalStateException(appContext.getString(R.string.sync_device_not_linked))
         return client.newPairingCode(credentials)
     }
 

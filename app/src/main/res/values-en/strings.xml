@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  English UI strings. Must keep the SAME keys and placeholders as
+  values/strings.xml (Spanish, the default locale).
+-->
+<resources>
+    <!-- General -->
+    <string name="app_name">jkanimetv</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_back">Back</string>
+    <string name="common_now">Not now</string>
+    <string name="common_continue">Continue</string>
+    <string name="common_go">Go</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_error">Error: %1$s</string>
+
+    <!-- Network errors (util/Errors.kt → ErrorState) -->
+    <string name="error_http_403">The site blocked the request (403). Wait a moment and try again.</string>
+    <string name="error_http_404">Content not found (404).</string>
+    <string name="error_http_419">The site session expired (419). Try again.</string>
+    <string name="error_http_429">Too many requests (429). Wait a minute.</string>
+    <string name="error_http_5xx">The site is down (HTTP %1$d).</string>
+    <string name="error_http_other">HTTP error %1$d.</string>
+    <string name="error_csrf">The site did not provide a session token. Try again in a few minutes.</string>
+    <string name="error_parse">The site changed its structure and the page could not be read.</string>
+    <string name="error_no_network">No internet connection.</string>
+    <string name="error_timeout">The site took too long to respond.</string>
+    <string name="error_unknown">Unknown error.</string>
+
+    <!-- Episodes and sections (card badges, chapter titles) -->
+    <string name="episode_badge">Ep %1$d</string>
+    <string name="episode_badge_text">Ep %1$s</string>
+    <string name="chapter_episode">Episode %1$s</string>
+    <string name="section_animes">Animes</string>
+    <string name="section_donghuas">Donghuas</string>
+    <string name="section_ovas">OVAs</string>
+
+    <!-- Multi-device sync (shared: Home + profiles) -->
+    <string name="sync_create_space">Create sync space</string>
+    <string name="sync_have_pairing_code">I have a pairing code</string>
+    <string name="sync_link_device">Link device</string>
+    <string name="sync_pairing_title">TEMPORARY PAIRING CODE</string>
+    <string name="sync_code_title">SYNC CODE</string>
+    <string name="sync_not_linked_cloud">This profile isn\'t linked to the cloud.</string>
+    <string name="sync_status_synced">Synced</string>
+    <string name="sync_status_local">Local only</string>
+    <string name="sync_status_syncing">Syncing…</string>
+    <string name="sync_device_linked">Device linked</string>
+    <string name="sync_link_failed">Couldn\'t link: %1$s</string>
+    <string name="sync_space_created">Space created: %1$s</string>
+    <string name="sync_pairing_created">Pairing code (15 min): %1$s</string>
+    <string name="sync_result">Synced: %1$d favorites, %2$d progress</string>
+    <string name="sync_no_space">No linked space</string>
+    <string name="sync_not_configured">Backend not configured</string>
+    <string name="sync_unlinked">Unlinked</string>
+    <string name="sync_device_not_linked">This device is not linked</string>
+    <string name="sync_err_schema">Run docs/supabase/schema.sql in Supabase (missing function)</string>
+    <string name="sync_err_pairing">Invalid or expired code. 07951576 is the space code; generate a temporary code from the other device.</string>
+    <string name="sync_err_http">HTTP %1$s: %2$s</string>
+
+    <!-- Home -->
+    <string name="home_menu_cd">Menu</string>
+    <string name="home_brand_cd">JK TV</string>
+    <string name="home_menu_title">MENU</string>
+    <string name="home_search_placeholder">Search anime on jkanime…</string>
+    <string name="home_searching">searching…</string>
+    <string name="home_search_no_results">no results</string>
+    <string name="home_drawer_recientes">Recent</string>
+    <string name="home_drawer_directorio">Browse</string>
+    <string name="home_drawer_favoritos">Favorites</string>
+    <string name="home_drawer_group_sync">SYNC</string>
+    <string name="home_drawer_group_profile">PROFILE</string>
+    <string name="home_drawer_sync_now">Sync now</string>
+    <string name="home_drawer_generate_pairing">Generate pairing code</string>
+    <string name="home_drawer_unlink">Unlink</string>
+    <string name="home_drawer_change_profile">Switch profile</string>
+    <string name="home_close_menu_cd">Close menu</string>
+    <string name="home_back_cd">Back</string>
+    <string name="home_section_empty">No new releases in this section</string>
+    <string name="home_favorites_empty">You don\'t have any favorites yet</string>
+    <string name="home_search_min_query">Type at least %1$d letters to search on jkanime</string>
+    <string name="home_search_query_loading">Searching \"%1$s\"…</string>
+    <string name="home_search_query_none">No results for \"%1$s\"</string>
+    <string name="home_badge_up_to_date">Up to date</string>
+
+    <!-- Directory -->
+    <string name="directorio_title">Browse</string>
+    <string name="directorio_clear_filters">Clear filters</string>
+    <string name="directorio_filters_title">FILTERS</string>
+    <string name="directorio_loading">Loading directory…</string>
+    <string name="directorio_loading_filters">Loading filters…</string>
+    <string name="directorio_no_results">No results for the current filters</string>
+    <string name="directorio_prev_page_cd">Previous page</string>
+    <string name="directorio_next_page_cd">Next page</string>
+    <string name="directorio_go_to_page">Go to page</string>
+    <string name="directorio_page_current_of">Current %1$d of %2$d</string>
+
+    <!-- Anime detail -->
+    <string name="detail_chapters">Episodes (%1$d)</string>
+    <string name="detail_no_chapters">No episodes published yet</string>
+    <string name="detail_meta_status">Status</string>
+    <string name="detail_meta_type">Type</string>
+    <string name="detail_meta_next_episode">Next ep.</string>
+    <string name="detail_meta_episodes">Episodes</string>
+    <string name="detail_sort_newest_first">Newest first</string>
+    <string name="detail_sort_oldest_first">Oldest first</string>
+    <string name="detail_load_more">Load more</string>
+    <string name="detail_episode_resume">Ep %1$s</string>
+    <string name="detail_favorite_add_cd">Add to favorites</string>
+    <string name="detail_favorite_remove_cd">Remove from favorites</string>
+
+    <!-- Player -->
+    <string name="player_finding_servers">Finding servers…</string>
+    <string name="player_preparing">Preparing player…</string>
+    <string name="player_servers">Servers</string>
+    <string name="player_server_failed">%1$s didn\'t load</string>
+    <string name="player_change_server_cd">Change server</string>
+    <string name="player_rewind_cd">Rewind 10 seconds</string>
+    <string name="player_forward_cd">Forward 10 seconds</string>
+    <string name="player_pause_cd">Pause</string>
+    <string name="player_play_cd">Play</string>
+    <string name="player_exit_cd">Exit player</string>
+    <string name="player_seek_position">%1$s / %2$s   ◀ ▶ 10 s</string>
+
+    <!-- Profile gate / profile management -->
+    <string name="profiles_who_watching">Who\'s watching?</string>
+    <string name="profiles_edit_done_cd">Done editing</string>
+    <string name="profiles_manage_cd">Manage profiles</string>
+    <string name="profiles_select_delete">Select a profile to delete it.</string>
+    <string name="profiles_own_data">Each profile has its own favorites, progress and cloud.</string>
+    <string name="profiles_create_first_title">Create your profile to get started</string>
+    <string name="profiles_create_title">Create profile</string>
+    <string name="profiles_first_profile_note">The first profile will take your current favorites and progress.</string>
+    <string name="profiles_name_hint">Profile name</string>
+    <string name="profiles_sync_title">Do you want to sync this profile?</string>
+    <string name="profiles_sync_linked_title">Profile synced</string>
+    <string name="profiles_sync_join_title">Temporary pairing code</string>
+    <string name="profiles_sync_note">Your favorites and progress will be shared with other devices.</string>
+    <string name="profiles_sync_creating">Creating…</string>
+    <string name="profiles_sync_save_code">Save this code: %1$s</string>
+    <string name="profiles_sync_linked_ok">Device linked to the space</string>
+    <string name="profiles_delete">Delete profile</string>
+    <string name="profiles_delete_message">Favorites and progress of \"%1$s\" will be deleted on this device. The sync space will not be touched.</string>
+    <string name="profiles_new">New profile</string>
+
+    <!-- Update dialog (MainActivity) -->
+    <string name="update_new_version">New version available</string>
+    <string name="update_version_label">jkanimetv %1$s</string>
+    <string name="update_downloading_body">Downloading update…</string>
+    <string name="update_body">You can install it now or continue with the current version.</string>
+    <string name="update_action">Update</string>
+    <string name="update_downloading">Downloading…</string>
+    <string name="update_start_error">Couldn\'t start the update</string>
+</resources>

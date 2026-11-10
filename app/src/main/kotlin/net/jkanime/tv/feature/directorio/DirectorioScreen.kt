@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
+import net.jkanime.tv.R
 import net.jkanime.tv.model.AnimeSearchHit
 import net.jkanime.tv.model.DirectorioOption
 import net.jkanime.tv.model.DirectorioPage
@@ -89,7 +91,7 @@ fun DirectorioScreen(
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
     val viewModel: DirectorioViewModel = viewModel(
-        factory = DirectorioViewModel.factory(Graph.repository, library),
+        factory = DirectorioViewModel.factory(Graph.repository, library, context),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val selectedFilters by viewModel.selectedFilters.collectAsStateWithLifecycle()
@@ -106,14 +108,14 @@ fun DirectorioScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Directorio",
+                text = stringResource(R.string.directorio_title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = JkOrange,
             )
             Spacer(modifier = Modifier.weight(1f))
             if (selectedFilters.any { it.value.isNotBlank() }) {
                 TvActionButton(
-                    text = "Limpiar filtros",
+                    text = stringResource(R.string.directorio_clear_filters),
                     primary = false,
                     onClick = { viewModel.clearFilters() },
                 )
@@ -134,7 +136,7 @@ fun DirectorioScreen(
             when (val current = state) {
                 is DirectorioUiState.Loading -> LoadingState(
                     modifier = Modifier.weight(1f),
-                    message = "Cargando directorio…",
+                    message = stringResource(R.string.directorio_loading),
                 )
                 is DirectorioUiState.Error -> ErrorState(
                     message = current.message,
@@ -172,7 +174,7 @@ private fun FiltersPanel(
         .filter { it.name in VISIBLE_FILTERS }
 
     if (filters.isEmpty()) {
-        LoadingState(message = "Cargando filtros…")
+        LoadingState(message = stringResource(R.string.directorio_loading_filters))
         return
     }
 
@@ -200,7 +202,7 @@ private fun FiltersPanel(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = "FILTROS",
+                text = stringResource(R.string.directorio_filters_title),
                 style = MaterialTheme.typography.labelSmall,
                 color = JkTextSecondary,
                 modifier = Modifier.padding(bottom = 6.dp),
@@ -303,7 +305,7 @@ private fun ResultsGrid(
     if (page.hits.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text = "Sin resultados para los filtros actuales",
+                text = stringResource(R.string.directorio_no_results),
                 style = MaterialTheme.typography.bodyMedium,
                 color = JkTextSecondary,
             )
@@ -397,7 +399,7 @@ private fun PaginationBar(
     ) {
         TvIconButton(
             icon = Icons.Filled.KeyboardArrowLeft,
-            contentDescription = "Página anterior",
+            contentDescription = stringResource(R.string.directorio_prev_page_cd),
             enabled = currentPage > 1,
             onClick = { onGoToPage(currentPage - 1) },
         )
@@ -422,7 +424,7 @@ private fun PaginationBar(
 
         TvIconButton(
             icon = Icons.Filled.KeyboardArrowRight,
-            contentDescription = "Página siguiente",
+            contentDescription = stringResource(R.string.directorio_next_page_cd),
             enabled = currentPage < lastPage,
             onClick = { onGoToPage(currentPage + 1) },
         )
@@ -430,7 +432,7 @@ private fun PaginationBar(
         Spacer(modifier = Modifier.width(8.dp))
 
         TvActionButton(
-            text = "Ir a página",
+            text = stringResource(R.string.directorio_go_to_page),
             primary = false,
             compact = true,
             modifier = Modifier.focusRequester(jumpFocus),
@@ -517,12 +519,16 @@ private fun JumpToPageDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "Ir a página",
+                        text = stringResource(R.string.directorio_go_to_page),
                         style = MaterialTheme.typography.titleMedium,
                         color = JkOrange,
                     )
                     Text(
-                        text = "Actual $currentPage de $lastPage",
+                        text = stringResource(
+                            R.string.directorio_page_current_of,
+                            currentPage,
+                            lastPage,
+                        ),
                         style = MaterialTheme.typography.labelMedium,
                         color = JkTextSecondary,
                     )
@@ -556,12 +562,12 @@ private fun JumpToPageDialog(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TvActionButton(
-                            text = "Cancelar",
+                            text = stringResource(R.string.common_cancel),
                             primary = false,
                             onClick = onDismiss,
                         )
                         TvActionButton(
-                            text = "Ir",
+                            text = stringResource(R.string.common_go),
                             primary = true,
                             enabled = digits.isNotEmpty(),
                             onClick = { onGo(digits.toInt().coerceIn(1, lastPage)) },

@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.detail
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -36,6 +37,8 @@ class DetailViewModel(
     private val repository: JkanimeRepository,
     private val library: LibraryRepository,
     private val slug: String,
+    // Solo para localizar mensajes de error fuera de la composición.
+    private val context: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
@@ -109,7 +112,7 @@ class DetailViewModel(
                         lastPage = page.lastPage,
                     )
                 },
-                onFailure = { DetailUiState.Error(it.friendlyMessage()) },
+                onFailure = { DetailUiState.Error(it.friendlyMessage(context)) },
             )
         }
     }
@@ -143,8 +146,11 @@ class DetailViewModel(
             repository: JkanimeRepository,
             library: LibraryRepository,
             slug: String,
+            context: Context,
         ) = viewModelFactory {
-            initializer { DetailViewModel(repository, library, slug) }
+            initializer {
+                DetailViewModel(repository, library, slug, context.applicationContext)
+            }
         }
     }
 }

@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -50,6 +51,7 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
+import net.jkanime.tv.R
 import net.jkanime.tv.model.ServerKind
 import net.jkanime.tv.ui.component.ErrorState
 import net.jkanime.tv.ui.component.LoadingState
@@ -78,9 +80,12 @@ fun PlayerScreen(
     title: String,
     onExit: () -> Unit,
 ) {
+    // El contexto se pide antes del ViewModel: hace falta en el factory
+    // para localizar los mensajes de error (fuera de la composición).
+    val context = LocalContext.current
     val viewModel: PlayerViewModel = viewModel(
         key = episodeUrl,
-        factory = PlayerViewModel.factory(Graph.repository, episodeUrl),
+        factory = PlayerViewModel.factory(Graph.repository, episodeUrl, context),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -106,7 +111,6 @@ fun PlayerScreen(
 
     // F4: progreso persistente. Se guarda cada ~5 s de avance real (no en cada
     // `timeupdate`, que dispara ~4 veces por segundo y machacaría Room).
-    val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
     val scope = rememberCoroutineScope()
     var lastSavedMs by remember { mutableStateOf(-1L) }
@@ -242,7 +246,8 @@ fun PlayerScreen(
             },
     ) {
         when (val current = state) {
-            is PlayerUiState.Loading -> LoadingState(message = "Buscando servidores…")
+            is PlayerUiState.Loading ->
+                LoadingState(message = stringResource(R.string.player_finding_servers))
             is PlayerUiState.Error -> ErrorState(
                 message = current.message,
                 onRetry = { viewModel.load(force = true) },
@@ -329,7 +334,7 @@ fun PlayerScreen(
                         onReady = { playerReady = true },
                     )
 
-                    else -> LoadingState(message = "Preparando reproductor…")
+                    else -> LoadingState(message = stringResource(R.string.player_preparing))
                 }
 
                 if (overlayVisible) {
@@ -424,7 +429,7 @@ private fun Overlay(
             if (fallbackSuggested && !showServers) {
                 TvIconButton(
                     icon = Icons.Filled.List,
-                    contentDescription = "Cambiar servidor",
+                    contentDescription = stringResource(R.string.player_change_server_cd),
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 24.dp, top = 20.dp),
@@ -440,7 +445,11 @@ private fun Overlay(
                         .padding(horizontal = 18.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Servidores", style = MaterialTheme.typography.titleMedium, color = JkTextPrimary)
+                    Text(
+                        stringResource(R.string.player_servers),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = JkTextPrimary,
+                    )
                     servers
                         .filter { it.kind != ServerKind.DOWNLOAD }
                         .sortedBy { if (it.kind == ServerKind.JKPLAYER) 0 else 1 }
@@ -473,7 +482,7 @@ private fun Overlay(
         ) {
             if (fallbackSuggested && !showServers) {
                 Text(
-                    text = "$selectedName no cargó",
+                    text = stringResource(R.string.player_server_failed, selectedName),
                     style = MaterialTheme.typography.labelMedium,
                     color = JkOrange,
                 )
@@ -492,14 +501,18 @@ private fun Overlay(
             ) {
                 TvIconButton(
                     icon = Icons.Filled.ArrowBack,
-                    contentDescription = "Retroceder 10 segundos",
+                    contentDescription = stringResource(R.string.player_rewind_cd),
                     size = 40.dp,
                     iconSize = 21.dp,
                     onClick = { onSeek((positionMs - 10_000L).coerceAtLeast(0L)) },
                 )
                 TvIconButton(
                     icon = if (isPlaying) PauseIcon else Icons.Filled.PlayArrow,
-                    contentDescription = if (isPlaying) "Pausar" else "Reproducir",
+                    contentDescription = if (isPlaying) {
+                        stringResource(R.string.player_pause_cd)
+                    } else {
+                        stringResource(R.string.player_play_cd)
+                    },
                     active = true,
                     size = 48.dp,
                     iconSize = 24.dp,
@@ -508,7 +521,7 @@ private fun Overlay(
                 )
                 TvIconButton(
                     icon = Icons.Filled.ArrowForward,
-                    contentDescription = "Avanzar 10 segundos",
+                    contentDescription = stringResource(R.string.player_forward_cd),
                     size = 40.dp,
                     iconSize = 21.dp,
                     onClick = {
@@ -518,7 +531,7 @@ private fun Overlay(
                 Spacer(modifier = Modifier.weight(1f))
                 TvIconButton(
                     icon = Icons.Filled.ExitToApp,
-                    contentDescription = "Salir del reproductor",
+                    contentDescription = stringResource(R.string.player_exit_cd),
                     size = 40.dp,
                     onClick = onExit,
                 )
@@ -583,7 +596,11 @@ private fun SeekBar(
             )
         }
         Text(
-            text = "${formatTime(positionMs)} / ${formatTime(durationMs)}   ◀ ▶ 10 s",
+            text = stringResource(
+                R.string.player_seek_position,
+                formatTime(positionMs),
+                formatTime(durationMs),
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = JkTextPrimary,
             modifier = Modifier.align(Alignment.BottomStart),

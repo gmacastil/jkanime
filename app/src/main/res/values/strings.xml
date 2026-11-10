@@ -1,8 +1,160 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Textos visibles de la UI en español (idioma por defecto).
+  Reglas del repo:
+  - Claves en snake_case, agrupadas por pantalla con comentarios.
+  - values-en/strings.xml debe tener TODAS las mismas claves y placeholders.
+  - NO van aquí: logs, etiquetas de datos del sitio (statusLabel, filtros del
+    Directorio, títulos de anime) ni claves de SharedPreferences.
+-->
 <resources>
+    <!-- General -->
     <string name="app_name">jkanimetv</string>
-    <string name="home_title">Programación</string>
-    <string name="loading">Cargando…</string>
-    <string name="retry">Reintentar</string>
-    <string name="favorite">Favorito</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_back">Atrás</string>
+    <string name="common_now">Ahora no</string>
+    <string name="common_continue">Continuar</string>
+    <string name="common_go">Ir</string>
+    <string name="common_delete">Eliminar</string>
+    <string name="common_loading">Cargando…</string>
+    <string name="common_retry">Reintentar</string>
+    <string name="common_error">Error: %1$s</string>
+
+    <!-- Errores de red (util/Errors.kt → ErrorState) -->
+    <string name="error_http_403">El sitio bloqueó la petición (403). Espera un momento y reintenta.</string>
+    <string name="error_http_404">No se encontró el contenido (404).</string>
+    <string name="error_http_419">La sesión del sitio expiró (419). Reintenta.</string>
+    <string name="error_http_429">Demasiadas peticiones (429). Espera un minuto.</string>
+    <string name="error_http_5xx">El sitio está caído (HTTP %1$d).</string>
+    <string name="error_http_other">Error HTTP %1$d.</string>
+    <string name="error_csrf">El sitio no entregó el token de sesión. Reintenta en unos minutos.</string>
+    <string name="error_parse">El sitio cambió su estructura y no se pudo leer la página.</string>
+    <string name="error_no_network">Sin conexión a internet.</string>
+    <string name="error_timeout">El sitio tardó demasiado en responder.</string>
+    <string name="error_unknown">Error desconocido.</string>
+
+    <!-- Episodios y secciones (badges de tarjeta, títulos de capítulo) -->
+    <string name="episode_badge">Ep %1$d</string>
+    <string name="episode_badge_text">Ep %1$s</string>
+    <string name="chapter_episode">Episodio %1$s</string>
+    <string name="section_animes">Animes</string>
+    <string name="section_donghuas">Donghuas</string>
+    <string name="section_ovas">OVAs</string>
+
+    <!-- Sincronización multi-dispositivo (compartido: Home + perfiles) -->
+    <string name="sync_create_space">Crear espacio de sync</string>
+    <string name="sync_have_pairing_code">Tengo un código de vinculación</string>
+    <string name="sync_link_device">Vincular dispositivo</string>
+    <string name="sync_pairing_title">CÓDIGO TEMPORAL DE VINCULACIÓN</string>
+    <string name="sync_code_title">CÓDIGO DE SINCRONIZACIÓN</string>
+    <string name="sync_not_linked_cloud">Este perfil no está vinculado a la nube.</string>
+    <string name="sync_status_synced">Sincronizado</string>
+    <string name="sync_status_local">Solo local</string>
+    <string name="sync_status_syncing">Sincronizando…</string>
+    <string name="sync_device_linked">Dispositivo vinculado</string>
+    <string name="sync_link_failed">No se pudo vincular: %1$s</string>
+    <string name="sync_space_created">Espacio creado: %1$s</string>
+    <string name="sync_pairing_created">Código para vincular (15 min): %1$s</string>
+    <string name="sync_result">Sincronizado: %1$d favoritos, %2$d progresos</string>
+    <string name="sync_no_space">No hay espacio vinculado</string>
+    <string name="sync_not_configured">Backend sin configurar</string>
+    <string name="sync_unlinked">Desvinculado</string>
+    <string name="sync_device_not_linked">Este dispositivo no está vinculado</string>
+    <string name="sync_err_schema">Falta ejecutar docs/supabase/schema.sql en Supabase (funcion ausente)</string>
+    <string name="sync_err_pairing">Código inválido o vencido. 07951576 es el código del espacio; genera un código temporal desde el otro dispositivo.</string>
+    <string name="sync_err_http">HTTP %1$s: %2$s</string>
+
+    <!-- Home -->
+    <string name="home_menu_cd">Menú</string>
+    <string name="home_brand_cd">JK TV</string>
+    <string name="home_menu_title">MENÚ</string>
+    <string name="home_search_placeholder">Buscar anime en jkanime…</string>
+    <string name="home_searching">buscando…</string>
+    <string name="home_search_no_results">sin resultados</string>
+    <string name="home_drawer_recientes">Recientes</string>
+    <string name="home_drawer_directorio">Directorio</string>
+    <string name="home_drawer_favoritos">Favoritos</string>
+    <string name="home_drawer_group_sync">SINCRONIZACIÓN</string>
+    <string name="home_drawer_group_profile">PERFIL</string>
+    <string name="home_drawer_sync_now">Sincronizar ahora</string>
+    <string name="home_drawer_generate_pairing">Generar código de vinculación</string>
+    <string name="home_drawer_unlink">Desvincular</string>
+    <string name="home_drawer_change_profile">Cambiar perfil</string>
+    <string name="home_close_menu_cd">Cerrar menú</string>
+    <string name="home_back_cd">Volver</string>
+    <string name="home_section_empty">Sin novedades en esta sección</string>
+    <string name="home_favorites_empty">Aún no tienes favoritos</string>
+    <string name="home_search_min_query">Escribe al menos %1$d letras para buscar en jkanime</string>
+    <string name="home_search_query_loading">Buscando \"%1$s\"…</string>
+    <string name="home_search_query_none">Sin resultados para \"%1$s\"</string>
+    <string name="home_badge_up_to_date">Al día</string>
+
+    <!-- Directorio -->
+    <string name="directorio_title">Directorio</string>
+    <string name="directorio_clear_filters">Limpiar filtros</string>
+    <string name="directorio_filters_title">FILTROS</string>
+    <string name="directorio_loading">Cargando directorio…</string>
+    <string name="directorio_loading_filters">Cargando filtros…</string>
+    <string name="directorio_no_results">Sin resultados para los filtros actuales</string>
+    <string name="directorio_prev_page_cd">Página anterior</string>
+    <string name="directorio_next_page_cd">Página siguiente</string>
+    <string name="directorio_go_to_page">Ir a página</string>
+    <string name="directorio_page_current_of">Actual %1$d de %2$d</string>
+
+    <!-- Detalle del anime -->
+    <string name="detail_chapters">Capítulos (%1$d)</string>
+    <string name="detail_no_chapters">Todavía no hay capítulos publicados</string>
+    <string name="detail_meta_status">Estado</string>
+    <string name="detail_meta_type">Tipo</string>
+    <string name="detail_meta_next_episode">Próx. cap</string>
+    <string name="detail_meta_episodes">Capítulos</string>
+    <string name="detail_sort_newest_first">Nuevos primero</string>
+    <string name="detail_sort_oldest_first">Antiguos primero</string>
+    <string name="detail_load_more">Cargar más</string>
+    <string name="detail_episode_resume">Ep %1$s</string>
+    <string name="detail_favorite_add_cd">Añadir a favoritos</string>
+    <string name="detail_favorite_remove_cd">Quitar de favoritos</string>
+
+    <!-- Reproductor -->
+    <string name="player_finding_servers">Buscando servidores…</string>
+    <string name="player_preparing">Preparando reproductor…</string>
+    <string name="player_servers">Servidores</string>
+    <string name="player_server_failed">%1$s no cargó</string>
+    <string name="player_change_server_cd">Cambiar servidor</string>
+    <string name="player_rewind_cd">Retroceder 10 segundos</string>
+    <string name="player_forward_cd">Avanzar 10 segundos</string>
+    <string name="player_pause_cd">Pausar</string>
+    <string name="player_play_cd">Reproducir</string>
+    <string name="player_exit_cd">Salir del reproductor</string>
+    <string name="player_seek_position">%1$s / %2$s   ◀ ▶ 10 s</string>
+
+    <!-- Puerta de perfiles / gestión de perfiles -->
+    <string name="profiles_who_watching">¿Quién está viendo?</string>
+    <string name="profiles_edit_done_cd">Terminar edición</string>
+    <string name="profiles_manage_cd">Administrar perfiles</string>
+    <string name="profiles_select_delete">Elige un perfil para eliminarlo.</string>
+    <string name="profiles_own_data">Cada perfil tiene sus favoritos, su progreso y su nube propios.</string>
+    <string name="profiles_create_first_title">Crea tu perfil para empezar</string>
+    <string name="profiles_create_title">Crear perfil</string>
+    <string name="profiles_first_profile_note">El primer perfil tomará tus favoritos y progreso actuales.</string>
+    <string name="profiles_name_hint">Nombre del perfil</string>
+    <string name="profiles_sync_title">¿Quieres sincronizar este perfil?</string>
+    <string name="profiles_sync_linked_title">Perfil sincronizado</string>
+    <string name="profiles_sync_join_title">Código temporal de vinculación</string>
+    <string name="profiles_sync_note">Tus favoritos y progreso se compartirán con otros dispositivos.</string>
+    <string name="profiles_sync_creating">Creando…</string>
+    <string name="profiles_sync_save_code">Guarda este código: %1$s</string>
+    <string name="profiles_sync_linked_ok">Dispositivo vinculado al espacio</string>
+    <string name="profiles_delete">Eliminar perfil</string>
+    <string name="profiles_delete_message">Se borrarán los favoritos y el progreso de \"%1$s\" en este dispositivo. El espacio de sincronización no se toca.</string>
+    <string name="profiles_new">Nuevo perfil</string>
+
+    <!-- Diálogo de actualización (MainActivity) -->
+    <string name="update_new_version">Nueva versión disponible</string>
+    <string name="update_version_label">jkanimetv %1$s</string>
+    <string name="update_downloading_body">Descargando actualización…</string>
+    <string name="update_body">Puedes instalarla ahora o continuar con la versión actual.</string>
+    <string name="update_action">Actualizar</string>
+    <string name="update_downloading">Descargando…</string>
+    <string name="update_start_error">No se pudo iniciar la actualización</string>
 </resources>

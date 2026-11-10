@@ -62,9 +62,10 @@ object Graph {
         syncEngine ?: synchronized(this) {
             syncEngine ?: SyncEngine(
                 library = library(context),
-                client = SyncCredentialsStore.client(),
+                client = SyncCredentialsStore.client(context),
                 store = SyncCredentialsStore(context),
                 profiles = profiles(context),
+                context = context,
             ).also { syncEngine = it }
         }
 }

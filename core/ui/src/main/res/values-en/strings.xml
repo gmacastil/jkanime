@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English strings for the shared components (core:ui). Same keys as values/strings.xml. -->
+<resources>
+    <!-- States (LoadingState / ErrorState) -->
+    <string name="state_loading">Loading…</string>
+    <string name="state_error_title">Something went wrong</string>
+    <string name="state_retry">Retry</string>
+
+    <!-- Chapter row (ChapterRow) -->
+    <string name="chapter_watched">Watched</string>
+    <string name="chapter_in_progress">In progress</string>
+
+    <!-- Number pad (TvNumberPad) -->
+    <string name="keypad_link_cd">Link</string>
+</resources>

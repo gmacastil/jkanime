@@ -47,6 +47,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +69,7 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 import net.jkanime.tv.Graph
+import net.jkanime.tv.R
 import net.jkanime.tv.data.local.ProfileEntity
 import net.jkanime.tv.ui.component.TvActionButton
 import net.jkanime.tv.ui.component.TvNumberPad
@@ -196,7 +198,7 @@ fun ProfileGateScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(
-                            text = "¿Quién está viendo?",
+                            text = stringResource(R.string.profiles_who_watching),
                             style = MaterialTheme.typography.headlineMedium,
                             color = JkTextPrimary,
                         )
@@ -204,9 +206,9 @@ fun ProfileGateScreen(
                             TvIconButton(
                                 icon = if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
                                 contentDescription = if (editMode) {
-                                    "Terminar edición"
+                                    stringResource(R.string.profiles_edit_done_cd)
                                 } else {
-                                    "Administrar perfiles"
+                                    stringResource(R.string.profiles_manage_cd)
                                 },
                                 active = editMode,
                                 focusRequester = editToggleFocus,
@@ -264,9 +266,9 @@ fun ProfileGateScreen(
 
                     Text(
                         text = if (editMode) {
-                            "Elige un perfil para eliminarlo."
+                            stringResource(R.string.profiles_select_delete)
                         } else {
-                            "Cada perfil tiene sus favoritos, su progreso y su nube propios."
+                            stringResource(R.string.profiles_own_data)
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
@@ -296,16 +298,16 @@ fun ProfileGateScreen(
                     ) {
                         Text(
                             text = if (profiles.isNullOrEmpty()) {
-                                "Crea tu perfil para empezar"
+                                stringResource(R.string.profiles_create_first_title)
                             } else {
-                                "Crear perfil"
+                                stringResource(R.string.profiles_create_title)
                             },
                             style = MaterialTheme.typography.headlineMedium,
                             color = JkOrange,
                         )
                         if (profiles.isNullOrEmpty()) {
                             Text(
-                                text = "El primer perfil tomará tus favoritos y progreso actuales.",
+                                text = stringResource(R.string.profiles_first_profile_note),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = JkTextSecondary,
                             )
@@ -365,7 +367,7 @@ fun ProfileGateScreen(
                                 ) {
                                     if (name.isEmpty()) {
                                         Text(
-                                            text = "Nombre del perfil",
+                                            text = stringResource(R.string.profiles_name_hint),
                                             color = JkTextSecondary,
                                             style = MaterialTheme.typography.bodyLarge,
                                         )
@@ -377,7 +379,7 @@ fun ProfileGateScreen(
 
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             TvActionButton(
-                                text = "Crear perfil",
+                                text = stringResource(R.string.profiles_create_title),
                                 onClick = {
                                     if (name.isNotBlank()) {
                                         scope.launch {
@@ -394,7 +396,7 @@ fun ProfileGateScreen(
                             )
                             if (!profiles.isNullOrEmpty()) {
                                 TvActionButton(
-                                    text = "Cancelar",
+                                    text = stringResource(R.string.common_cancel),
                                     primary = false,
                                     onClick = { mode = Mode.CHOOSER },
                                 )
@@ -418,12 +420,19 @@ fun ProfileGateScreen(
                         scope.launch {
                             runCatching { Graph.sync(context).createSpace() }
                                 .onSuccess { creds ->
-                                    syncStatus = "Guarda este código: " +
-                                        creds.code.chunked(4).joinToString(" ")
+                                    // Fuera de la composición: `context` en
+                                    // vez de `stringResource`.
+                                    syncStatus = context.getString(
+                                        R.string.profiles_sync_save_code,
+                                        creds.code.chunked(4).joinToString(" "),
+                                    )
                                     syncLinked = true
                                     Graph.syncInBackground(context)
                                 }
-                                .onFailure { syncStatus = "Error: ${it.message}" }
+                                .onFailure {
+                                    syncStatus =
+                                        context.getString(R.string.common_error, it.message)
+                                }
                             syncBusy = false
                         }
                     },
@@ -433,12 +442,16 @@ fun ProfileGateScreen(
                         scope.launch {
                             runCatching { Graph.sync(context).joinSpace(syncCode) }
                                 .onSuccess {
-                                    syncStatus = "Dispositivo vinculado al espacio"
+                                    syncStatus =
+                                        context.getString(R.string.profiles_sync_linked_ok)
                                     syncLinked = true
                                     Graph.syncInBackground(context)
                                 }
                                 .onFailure {
-                                    syncStatus = "No se pudo vincular: ${it.message}"
+                                    syncStatus = context.getString(
+                                        R.string.sync_link_failed,
+                                        it.message,
+                                    )
                                 }
                             syncBusy = false
                         }
@@ -506,9 +519,9 @@ private fun SyncChoiceScreen(
             ) {
                 Text(
                     text = when {
-                        linked -> "Perfil sincronizado"
-                        joining -> "Código temporal de vinculación"
-                        else -> "¿Quieres sincronizar este perfil?"
+                        linked -> stringResource(R.string.profiles_sync_linked_title)
+                        joining -> stringResource(R.string.profiles_sync_join_title)
+                        else -> stringResource(R.string.profiles_sync_title)
                     },
                     style = MaterialTheme.typography.titleMedium,
                     color = JkTextPrimary,
@@ -526,7 +539,7 @@ private fun SyncChoiceScreen(
                         )
                     }
                     TvActionButton(
-                        text = "Continuar",
+                        text = stringResource(R.string.common_continue),
                         primary = true,
                         enabled = !syncBusy,
                         modifier = Modifier
@@ -536,7 +549,7 @@ private fun SyncChoiceScreen(
                     )
                 } else if (!joining) {
                     Text(
-                        text = "Tus favoritos y progreso se compartirán con otros dispositivos.",
+                        text = stringResource(R.string.profiles_sync_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = JkTextSecondary,
                         textAlign = TextAlign.Center,
@@ -545,7 +558,11 @@ private fun SyncChoiceScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     TvActionButton(
-                        text = if (syncBusy) "Creando…" else "Crear espacio de sync",
+                        text = if (syncBusy) {
+                            stringResource(R.string.profiles_sync_creating)
+                        } else {
+                            stringResource(R.string.sync_create_space)
+                        },
                         primary = true,
                         enabled = !syncBusy,
                         modifier = Modifier
@@ -554,7 +571,7 @@ private fun SyncChoiceScreen(
                         onClick = onCreateSpace,
                     )
                     TvActionButton(
-                        text = "Tengo un código de vinculación",
+                        text = stringResource(R.string.sync_have_pairing_code),
                         primary = false,
                         enabled = !syncBusy,
                         onClick = {
@@ -564,12 +581,16 @@ private fun SyncChoiceScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TvActionButton(
-                            text = "Ahora no",
+                            text = stringResource(R.string.common_now),
                             primary = false,
                             enabled = !syncBusy,
                             onClick = onSkip,
                         )
-                        TvActionButton(text = "Atrás", primary = false, onClick = onBack)
+                        TvActionButton(
+                            text = stringResource(R.string.common_back),
+                            primary = false,
+                            onClick = onBack,
+                        )
                     }
                 } else {
                     Text(
@@ -721,7 +742,7 @@ private fun ProfileTile(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = "Eliminar perfil",
+                        contentDescription = stringResource(R.string.profiles_delete),
                         tint = Color(0xFF141414),
                         modifier = Modifier.size(18.dp),
                     )
@@ -752,7 +773,11 @@ private fun ProfileTile(
                     ),
             )
             Text(
-                text = if (synced) "Sincronizado" else "Solo local",
+                text = if (synced) {
+                    stringResource(R.string.sync_status_synced)
+                } else {
+                    stringResource(R.string.sync_status_local)
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = JkTextSecondary,
             )
@@ -815,7 +840,7 @@ private fun NewProfileTile(onClick: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Nuevo perfil",
+            text = stringResource(R.string.profiles_new),
             style = MaterialTheme.typography.bodyLarge,
             color = if (focused) JkOrange else JkTextSecondary,
         )
@@ -871,14 +896,12 @@ private fun DeleteProfileDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
-                        text = "Eliminar perfil",
+                        text = stringResource(R.string.profiles_delete),
                         style = MaterialTheme.typography.titleMedium,
                         color = JkTextPrimary,
                     )
                     Text(
-                        text = "Se borrarán los favoritos y el progreso de " +
-                            "\"$name\" en este dispositivo. El espacio de " +
-                            "sincronización no se toca.",
+                        text = stringResource(R.string.profiles_delete_message, name),
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                         textAlign = TextAlign.Center,
@@ -886,13 +909,13 @@ private fun DeleteProfileDialog(
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TvActionButton(
-                            text = "Cancelar",
+                            text = stringResource(R.string.common_cancel),
                             primary = false,
                             onClick = onDismiss,
                             modifier = Modifier.focusRequester(cancelFocus),
                         )
                         TvActionButton(
-                            text = "Eliminar",
+                            text = stringResource(R.string.common_delete),
                             danger = true,
                             onClick = onConfirm,
                         )

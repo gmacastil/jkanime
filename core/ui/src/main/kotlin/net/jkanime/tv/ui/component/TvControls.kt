@@ -38,11 +38,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import net.jkanime.tv.ui.R
 import net.jkanime.tv.ui.theme.JkGreen
 import net.jkanime.tv.ui.theme.JkRed
 import net.jkanime.tv.ui.theme.JkOrange
@@ -379,7 +381,7 @@ fun TvNumberPad(
                             ) {
                                 TvIconButton(
                                     icon = Icons.Filled.Check,
-                                    contentDescription = "Vincular",
+                                    contentDescription = stringResource(R.string.keypad_link_cd),
                                     size = if (compact) 42.dp else 48.dp,
                                     iconSize = if (compact) 22.dp else 24.dp,
                                     onClick = onConfirm,
@@ -539,8 +541,8 @@ fun ChapterRow(
         }
 
         val label = when {
-            watched -> "Visto"
-            inProgress -> progressLabel ?: "En curso"
+            watched -> stringResource(R.string.chapter_watched)
+            inProgress -> progressLabel ?: stringResource(R.string.chapter_in_progress)
             else -> null
         }
         if (label != null) {

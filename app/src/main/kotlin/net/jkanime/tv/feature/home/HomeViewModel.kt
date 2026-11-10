@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.home
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -44,6 +45,9 @@ data class SearchUiState(
 class HomeViewModel(
     private val repository: JkanimeRepository,
     private val library: LibraryRepository,
+    // Contexto solo para localizar los mensajes de error (fuera de la
+    // composición no hay `stringResource`), nunca para abrir la UI.
+    private val context: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
@@ -123,7 +127,7 @@ class HomeViewModel(
                 _search.value = _search.value.copy(
                     query = trimmed,
                     loading = false,
-                    error = error.friendlyMessage(),
+                    error = error.friendlyMessage(context),
                 )
             }
         }
@@ -145,7 +149,7 @@ class HomeViewModel(
                 _search.value = _search.value.copy(
                     query = current,
                     loading = false,
-                    error = error.friendlyMessage(),
+                    error = error.friendlyMessage(context),
                 )
             }
         }
@@ -175,7 +179,7 @@ class HomeViewModel(
             _state.value = runCatching { repository.programacion(force) }
                 .fold(
                     onSuccess = { HomeUiState.Success(it) },
-                    onFailure = { HomeUiState.Error(it.friendlyMessage()) },
+                    onFailure = { HomeUiState.Error(it.friendlyMessage(context)) },
                 )
         }
     }
@@ -187,9 +191,12 @@ class HomeViewModel(
         /** El sitio devuelve 30 fichas ya con una sola letra; no vale la pena. */
         const val MIN_QUERY_LENGTH = 2
 
-        fun factory(repository: JkanimeRepository, library: LibraryRepository) =
-            viewModelFactory {
-                initializer { HomeViewModel(repository, library) }
-            }
+        fun factory(
+            repository: JkanimeRepository,
+            library: LibraryRepository,
+            context: Context,
+        ) = viewModelFactory {
+            initializer { HomeViewModel(repository, library, context.applicationContext) }
+        }
     }
 }

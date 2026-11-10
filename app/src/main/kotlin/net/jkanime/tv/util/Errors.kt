@@ -1,26 +1,34 @@
 package net.jkanime.tv.util
 
+import android.content.Context
+import net.jkanime.tv.R
 import net.jkanime.tv.network.JkCsrfTokenMissingException
 import net.jkanime.tv.network.JkHttpException
 import net.jkanime.tv.network.JkParseException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
-/** Traduce errores técnicos a algo que un usuario de TV pueda entender. */
-fun Throwable.friendlyMessage(): String = when (this) {
+/**
+ * Traduce errores técnicos a algo que un usuario de TV pueda entender.
+ *
+ * Recibe `Context` (y no es `@Composable`) porque se llama desde los
+ * ViewModel, fuera de la composición: así el mensaje sale ya localizado
+ * (es/en) según la configuración del dispositivo.
+ */
+fun Throwable.friendlyMessage(context: Context): String = when (this) {
     is JkHttpException -> when (val code = statusCode) {
-        403 -> "El sitio bloqueó la petición (403). Espera un momento y reintenta."
-        404 -> "No se encontró el contenido (404)."
-        419 -> "La sesión del sitio expiró (419). Reintenta."
-        429 -> "Demasiadas peticiones (429). Espera un minuto."
-        in 500..599 -> "El sitio está caído (HTTP $code)."
-        else -> "Error HTTP $code."
+        403 -> context.getString(R.string.error_http_403)
+        404 -> context.getString(R.string.error_http_404)
+        419 -> context.getString(R.string.error_http_419)
+        429 -> context.getString(R.string.error_http_429)
+        in 500..599 -> context.getString(R.string.error_http_5xx, code)
+        else -> context.getString(R.string.error_http_other, code)
     }
     is JkCsrfTokenMissingException ->
-        "El sitio no entregó el token de sesión. Reintenta en unos minutos."
+        context.getString(R.string.error_csrf)
     is JkParseException ->
-        "El sitio cambió su estructura y no se pudo leer la página."
-    is UnknownHostException -> "Sin conexión a internet."
-    is SocketTimeoutException -> "El sitio tardó demasiado en responder."
-    else -> message ?: "Error desconocido."
+        context.getString(R.string.error_parse)
+    is UnknownHostException -> context.getString(R.string.error_no_network)
+    is SocketTimeoutException -> context.getString(R.string.error_timeout)
+    else -> message ?: context.getString(R.string.error_unknown)
 }

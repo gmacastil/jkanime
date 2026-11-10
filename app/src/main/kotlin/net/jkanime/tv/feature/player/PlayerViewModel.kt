@@ -1,5 +1,6 @@
 package net.jkanime.tv.feature.player
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -25,6 +26,8 @@ sealed interface PlayerUiState {
 class PlayerViewModel(
     private val repository: JkanimeRepository,
     private val episodeUrl: String,
+    // Solo para localizar mensajes de error fuera de la composición.
+    private val context: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
@@ -51,7 +54,7 @@ class PlayerViewModel(
                             ?: servers.first()
                         PlayerUiState.Ready(servers = servers, selected = selected)
                     },
-                    onFailure = { PlayerUiState.Error(it.friendlyMessage()) },
+                    onFailure = { PlayerUiState.Error(it.friendlyMessage(context)) },
                 )
         }
     }
@@ -62,8 +65,14 @@ class PlayerViewModel(
     }
 
     companion object {
-        fun factory(repository: JkanimeRepository, episodeUrl: String) = viewModelFactory {
-            initializer { PlayerViewModel(repository, episodeUrl) }
+        fun factory(
+            repository: JkanimeRepository,
+            episodeUrl: String,
+            context: Context,
+        ) = viewModelFactory {
+            initializer {
+                PlayerViewModel(repository, episodeUrl, context.applicationContext)
+            }
         }
     }
 }

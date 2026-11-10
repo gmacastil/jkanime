@@ -65,6 +65,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -126,7 +127,7 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val activeProfile by profileManager.activeProfile.collectAsStateWithLifecycle(initialValue = null)
     val viewModel: HomeViewModel = viewModel(
-        factory = HomeViewModel.factory(Graph.repository, library),
+        factory = HomeViewModel.factory(Graph.repository, library, context),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val section by viewModel.section.collectAsStateWithLifecycle()
@@ -263,7 +264,7 @@ fun HomeScreen(
                     )
                     is HomeUiState.Success -> CardsGrid(
                         cards = current.sections[section].orEmpty(),
-                        emptyMessage = "Sin novedades en esta sección",
+                        emptyMessage = stringResource(R.string.home_section_empty),
                         resetKey = section,
                         showSection = false,
                         focusNonce = focusNonce,
@@ -329,12 +330,20 @@ fun HomeScreen(
                         avatarMenuStatus = null
                         val result = syncEngine.syncNow()
                         avatarMenuBusy = false
+                        // Fuera de la composición: no hay `stringResource`,
+                        // se resuelve con el Context capturado.
                         avatarMenuStatus = when (result) {
                             is SyncResult.Success ->
-                                "Sincronizado: ${result.favorites} favoritos, ${result.progress} progresos"
-                            is SyncResult.Failure -> "Error: ${result.message}"
-                            SyncResult.NotPaired -> "No hay espacio vinculado"
-                            SyncResult.NotConfigured -> "Backend sin configurar"
+                                context.getString(
+                                    R.string.sync_result,
+                                    result.favorites,
+                                    result.progress,
+                                )
+                            is SyncResult.Failure ->
+                                context.getString(R.string.common_error, result.message)
+                            SyncResult.NotPaired -> context.getString(R.string.sync_no_space)
+                            SyncResult.NotConfigured ->
+                                context.getString(R.string.sync_not_configured)
                         }
                     }
                 },
@@ -344,11 +353,16 @@ fun HomeScreen(
                         avatarMenuStatus = null
                         runCatching { syncEngine.createSpace() }
                             .onSuccess { creds ->
-                                avatarMenuStatus =
-                                    "Espacio creado: ${creds.code.chunked(4).joinToString(" ")}"
+                                avatarMenuStatus = context.getString(
+                                    R.string.sync_space_created,
+                                    creds.code.chunked(4).joinToString(" "),
+                                )
                                 avatarMenuMode = AvatarMenuMode.MAIN
                             }
-                            .onFailure { avatarMenuStatus = "Error: ${it.message}" }
+                            .onFailure {
+                                avatarMenuStatus =
+                                    context.getString(R.string.common_error, it.message)
+                            }
                         avatarMenuBusy = false
                     }
                 },
@@ -358,12 +372,15 @@ fun HomeScreen(
                         avatarMenuStatus = null
                         runCatching { syncEngine.joinSpace(avatarMenuSyncCode) }
                             .onSuccess {
-                                avatarMenuStatus = "Dispositivo vinculado"
+                                avatarMenuStatus = context.getString(R.string.sync_device_linked)
                                 avatarMenuMode = AvatarMenuMode.MAIN
                                 avatarMenuSyncCode = ""
                             }
                             .onFailure {
-                                avatarMenuStatus = "No se pudo vincular: ${it.message}"
+                                avatarMenuStatus = context.getString(
+                                    R.string.sync_link_failed,
+                                    it.message,
+                                )
                             }
                         avatarMenuBusy = false
                     }
@@ -373,7 +390,7 @@ fun HomeScreen(
                         avatarMenuBusy = true
                         avatarMenuStatus = null
                         syncEngine.clearSpace()
-                        avatarMenuStatus = "Desvinculado"
+                        avatarMenuStatus = context.getString(R.string.sync_unlinked)
                         avatarMenuMode = AvatarMenuMode.MAIN
                         avatarMenuBusy = false
                     }
@@ -384,11 +401,15 @@ fun HomeScreen(
                         avatarMenuStatus = null
                         runCatching { syncEngine.createPairingCode() }
                             .onSuccess { pairing ->
-                                avatarMenuStatus =
-                                    "Código para vincular (15 min): " +
-                                    pairing.code.chunked(4).joinToString(" ")
+                                avatarMenuStatus = context.getString(
+                                    R.string.sync_pairing_created,
+                                    pairing.code.chunked(4).joinToString(" "),
+                                )
                             }
-                            .onFailure { avatarMenuStatus = "Error: ${it.message}" }
+                            .onFailure {
+                                avatarMenuStatus =
+                                    context.getString(R.string.common_error, it.message)
+                            }
                         avatarMenuBusy = false
                     }
                 },
@@ -431,7 +452,7 @@ private fun Header(
     ) {
         TvIconButton(
             painter = painterResource(R.drawable.ic_launcher),
-            contentDescription = "Menú",
+            contentDescription = stringResource(R.string.home_menu_cd),
             active = drawerOpen,
             focusRequester = menuFocus,
             onClick = onToggleDrawer,
@@ -439,7 +460,7 @@ private fun Header(
         Spacer(modifier = Modifier.width(16.dp))
         Image(
             painter = painterResource(R.drawable.caiman_home),
-            contentDescription = "JK TV",
+            contentDescription = stringResource(R.string.home_brand_cd),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier
                 .size(48.dp)
@@ -568,7 +589,7 @@ private fun SearchField(
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
                         Text(
-                            text = "Buscar anime en jkanime…",
+                            text = stringResource(R.string.home_search_placeholder),
                             style = MaterialTheme.typography.bodyMedium,
                             color = JkTextSecondary,
                         )
@@ -581,8 +602,8 @@ private fun SearchField(
         if (searching) {
             Text(
                 text = when {
-                    loading -> "buscando…"
-                    resultCount == 0 -> "sin resultados"
+                    loading -> stringResource(R.string.home_searching)
+                    resultCount == 0 -> stringResource(R.string.home_search_no_results)
                     else -> "$resultCount"
                 },
                 style = MaterialTheme.typography.labelSmall,
@@ -613,7 +634,7 @@ private fun SideDrawer(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = "MENÚ",
+            text = stringResource(R.string.home_menu_title),
             style = MaterialTheme.typography.labelSmall,
             color = JkTextSecondary,
             modifier = Modifier.padding(start = 28.dp, bottom = 8.dp),
@@ -623,7 +644,7 @@ private fun SideDrawer(
         // episodios que acaban de salir), con icono de fecha.
         val animesItem = ProgramacionSection.ANIMES
         DrawerItem(
-            label = "Recientes",
+            label = stringResource(R.string.home_drawer_recientes),
             icon = Icons.Filled.DateRange,
             selected = animesItem == selected && !showFavorites,
             focusRequester = firstItemFocus,
@@ -632,7 +653,7 @@ private fun SideDrawer(
 
         // Directorio: la navegación al catálogo filtrado del sitio
         DrawerItem(
-            label = "Directorio",
+            label = stringResource(R.string.home_drawer_directorio),
             icon = Icons.AutoMirrored.Filled.List,
             selected = false,
             onClick = onDirectorio,
@@ -649,7 +670,7 @@ private fun SideDrawer(
         Spacer(modifier = Modifier.height(6.dp))
 
         DrawerItem(
-            label = "Favoritos",
+            label = stringResource(R.string.home_drawer_favoritos),
             icon = Icons.Filled.Star,
             selected = showFavorites,
             onClick = onFavorites,
@@ -789,7 +810,7 @@ private fun AvatarMenu(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Text(
-                                 text = "CÓDIGO TEMPORAL DE VINCULACIÓN",
+                                 text = stringResource(R.string.sync_pairing_title),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = JkTextSecondary,
                             )
@@ -851,7 +872,7 @@ private fun AvatarDrawerHeader(
         if (compact) {
             // En el modo código no hay espacio para el avatar: título + atrás.
             Text(
-                text = "Vincular dispositivo",
+                text = stringResource(R.string.sync_link_device),
                 style = MaterialTheme.typography.titleMedium,
                 color = JkTextPrimary,
                 modifier = Modifier.weight(1f),
@@ -880,9 +901,9 @@ private fun AvatarDrawerHeader(
                     )
                     Text(
                         text = when {
-                            busy -> "Sincronizando…"
-                            synced -> "Sincronizado"
-                            else -> "Solo local"
+                            busy -> stringResource(R.string.sync_status_syncing)
+                            synced -> stringResource(R.string.sync_status_synced)
+                            else -> stringResource(R.string.sync_status_local)
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = JkTextSecondary,
@@ -894,13 +915,13 @@ private fun AvatarDrawerHeader(
         if (compact) {
             TvIconButton(
                 icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Volver",
+                contentDescription = stringResource(R.string.home_back_cd),
                 onClick = onBack,
             )
         }
         TvIconButton(
             icon = Icons.Filled.Close,
-            contentDescription = "Cerrar menú",
+            contentDescription = stringResource(R.string.home_close_menu_cd),
             onClick = onClose,
         )
     }
@@ -950,7 +971,7 @@ private fun AvatarDrawerMain(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = "CÓDIGO DE SINCRONIZACIÓN",
+                text = stringResource(R.string.sync_code_title),
                 style = MaterialTheme.typography.labelSmall,
                 color = JkTextSecondary,
             )
@@ -962,17 +983,17 @@ private fun AvatarDrawerMain(
         }
     } else {
         Text(
-            text = "Este perfil no está vinculado a la nube.",
+            text = stringResource(R.string.sync_not_linked_cloud),
             style = MaterialTheme.typography.bodySmall,
             color = JkTextSecondary,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
     }
 
-    AvatarDrawerSection("SINCRONIZACIÓN")
+    AvatarDrawerSection(stringResource(R.string.home_drawer_group_sync))
     if (hasSpace) {
         DrawerItem(
-            label = "Sincronizar ahora",
+            label = stringResource(R.string.home_drawer_sync_now),
             icon = Icons.Filled.Refresh,
             selected = false,
             enabled = !busy,
@@ -980,14 +1001,14 @@ private fun AvatarDrawerMain(
             onClick = onSyncNow,
         )
         DrawerItem(
-            label = "Generar código de vinculación",
+            label = stringResource(R.string.home_drawer_generate_pairing),
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,
             onClick = onGeneratePairing,
         )
         DrawerItem(
-            label = "Desvincular",
+            label = stringResource(R.string.home_drawer_unlink),
             icon = Icons.Filled.Clear,
             selected = false,
             enabled = !busy,
@@ -995,7 +1016,7 @@ private fun AvatarDrawerMain(
         )
     } else {
         DrawerItem(
-            label = "Crear espacio de sync",
+            label = stringResource(R.string.sync_create_space),
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,
@@ -1003,7 +1024,7 @@ private fun AvatarDrawerMain(
             onClick = onCreateSpace,
         )
         DrawerItem(
-            label = "Tengo un código de vinculación",
+            label = stringResource(R.string.sync_have_pairing_code),
             icon = Icons.Filled.Edit,
             selected = false,
             enabled = !busy,
@@ -1012,9 +1033,9 @@ private fun AvatarDrawerMain(
     }
 
     AvatarDrawerDivider()
-    AvatarDrawerSection("PERFIL")
+    AvatarDrawerSection(stringResource(R.string.home_drawer_group_profile))
     DrawerItem(
-        label = "Cambiar perfil",
+        label = stringResource(R.string.home_drawer_change_profile),
         icon = Icons.Filled.AccountBox,
         selected = false,
         enabled = !busy,
@@ -1130,17 +1151,19 @@ private fun SearchGrid(
     when {
         !state.hasQuery -> {
             LoadingState(
-                message = "Escribe al menos ${HomeViewModel.MIN_QUERY_LENGTH} letras " +
-                    "para buscar en jkanime",
+                message = stringResource(
+                    R.string.home_search_min_query,
+                    HomeViewModel.MIN_QUERY_LENGTH,
+                ),
             )
             return
         }
         state.loading && state.hits.isEmpty() -> {
-            LoadingState(message = "Buscando \"${state.query}\"…")
+            LoadingState(message = stringResource(R.string.home_search_query_loading, state.query))
             return
         }
         state.hits.isEmpty() -> {
-            LoadingState(message = "Sin resultados para \"${state.query}\"")
+            LoadingState(message = stringResource(R.string.home_search_query_none, state.query))
             return
         }
     }
@@ -1233,9 +1256,20 @@ private fun CardsGrid(
             PosterCard(
                 title = card.title,
                 posterUrl = card.posterUrl ?: card.thumbUrl,
-                badge = card.episodeNumber?.let { "Ep $it" },
+                badge = card.episodeNumber?.let { stringResource(R.string.episode_badge, it) },
                 subtitle = listOfNotNull(
-                    card.section.label.takeIf { showSection },
+                    // La sección es un dato del enum; aquí se traduce solo la
+                    // etiqueta visible (el enum no se toca: lo usan los tests).
+                    card.section.takeIf { showSection }?.let { s ->
+                        when (s) {
+                            ProgramacionSection.ANIMES ->
+                                stringResource(R.string.section_animes)
+                            ProgramacionSection.DONGHUAS ->
+                                stringResource(R.string.section_donghuas)
+                            ProgramacionSection.OVAS ->
+                                stringResource(R.string.section_ovas)
+                        }
+                    },
                     card.dateLabel,
                 ).joinToString(" · ").ifBlank { null },
                 width = null,
@@ -1257,7 +1291,7 @@ private fun FavoritesGrid(
     onOpenAnime: (String) -> Unit,
 ) {
     if (favorites.isEmpty()) {
-        LoadingState(message = "Aún no tienes favoritos")
+        LoadingState(message = stringResource(R.string.home_favorites_empty))
         return
     }
 
@@ -1282,8 +1316,10 @@ private fun FavoritesGrid(
             // cuando el último emitido ya está visto; sin datos, "Ep N".
             val badge = when {
                 pending != null && pending > 0 -> "+$pending"
-                pending == 0 -> "Al día"
-                else -> fav.lastWatchedEpisode?.let { "Ep $it" }
+                pending == 0 -> stringResource(R.string.home_badge_up_to_date)
+                else -> fav.lastWatchedEpisode?.let {
+                    stringResource(R.string.episode_badge, it)
+                }
             }
             PosterCard(
                 title = fav.title,

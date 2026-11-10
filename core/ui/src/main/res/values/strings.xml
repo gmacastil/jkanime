@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Textos visibles de los componentes compartidos (core:ui), español por
+  defecto. Deben existir las mismas claves en values-en/strings.xml.
+-->
+<resources>
+    <!-- Estados (LoadingState / ErrorState) -->
+    <string name="state_loading">Cargando…</string>
+    <string name="state_error_title">Algo salió mal</string>
+    <string name="state_retry">Reintentar</string>
+
+    <!-- Fila de capítulo (ChapterRow) -->
+    <string name="chapter_watched">Visto</string>
+    <string name="chapter_in_progress">En curso</string>
+
+    <!-- Teclado numérico (TvNumberPad) -->
+    <string name="keypad_link_cd">Vincular</string>
+</resources>

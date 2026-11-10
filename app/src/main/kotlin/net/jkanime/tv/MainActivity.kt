@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -77,7 +78,10 @@ class MainActivity : ComponentActivity() {
                                         UpdateManager.downloadAndInstall(this@MainActivity, candidate)
                                     }.onFailure {
                                         installing = false
-                                        updateError = it.message ?: "No se pudo iniciar la actualización"
+                                        // `getString` directo: este lambda se
+                                        // ejecuta al pulsar, fuera de composición.
+                                        updateError = it.message
+                                            ?: getString(R.string.update_start_error)
                                     }
                                 }
                             },
@@ -115,18 +119,21 @@ private fun UpdatePrompt(
             ),
         ) {
             Column(modifier = Modifier.padding(30.dp)) {
-                Text("Nueva versión disponible", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    text = "jkanimetv ${update.versionName}",
+                    stringResource(R.string.update_new_version),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    text = stringResource(R.string.update_version_label, update.versionName),
                     color = JkOrange,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
                     text = if (installing) {
-                        "Descargando actualización…"
+                        stringResource(R.string.update_downloading_body)
                     } else {
-                        "Puedes instalarla ahora o continuar con la versión actual."
+                        stringResource(R.string.update_body)
                     },
                     color = JkTextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
@@ -145,14 +152,18 @@ private fun UpdatePrompt(
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
                 ) {
                     TvActionButton(
-                        text = if (installing) "Descargando…" else "Actualizar",
+                        text = if (installing) {
+                            stringResource(R.string.update_downloading)
+                        } else {
+                            stringResource(R.string.update_action)
+                        },
                         primary = true,
                         enabled = !installing,
                         modifier = Modifier.focusRequester(installFocus),
                         onClick = onInstall,
                     )
                     TvActionButton(
-                        text = "Ahora no",
+                        text = stringResource(R.string.common_now),
                         primary = false,
                         enabled = !installing,
                         onClick = onDismiss,
