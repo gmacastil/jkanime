@@ -55,6 +55,7 @@ import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
 import net.jkanime.tv.R
 import net.jkanime.tv.model.AnimeSearchHit
+import net.jkanime.tv.model.DirectorioFilter
 import net.jkanime.tv.model.DirectorioOption
 import net.jkanime.tv.model.DirectorioPage
 import net.jkanime.tv.ui.component.ErrorState
@@ -95,6 +96,15 @@ fun DirectorioScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val selectedFilters by viewModel.selectedFilters.collectAsStateWithLifecycle()
+    // El ViewModel pasa por Loading en cada cambio de filtro. Conservamos las
+    // definiciones de opciones de la última página para no desmontar el panel
+    // ni perder el foco del D-pad mientras llega la nueva respuesta.
+    var availableFilters by remember { mutableStateOf<List<DirectorioFilter>>(emptyList()) }
+    LaunchedEffect(state) {
+        if (state is DirectorioUiState.Success) {
+            availableFilters = (state as DirectorioUiState.Success).page.filters
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -127,7 +137,7 @@ fun DirectorioScreen(
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
             // Panel de filtros (lateral izquierdo)
             FiltersPanel(
-                state = state,
+                filters = availableFilters,
                 selected = selectedFilters,
                 onFilterChange = { name, value -> viewModel.setFilter(name, value) },
             )
@@ -166,14 +176,13 @@ private val VISIBLE_FILTERS = setOf("filtro", "genero")
 
 @Composable
 private fun FiltersPanel(
-    state: DirectorioUiState,
+    filters: List<DirectorioFilter>,
     selected: Map<String, String>,
     onFilterChange: (String, String) -> Unit,
 ) {
-    val filters = (state as? DirectorioUiState.Success)?.page?.filters.orEmpty()
-        .filter { it.name in VISIBLE_FILTERS }
+    val visibleFilters = filters.filter { it.name in VISIBLE_FILTERS }
 
-    if (filters.isEmpty()) {
+    if (visibleFilters.isEmpty()) {
         LoadingState(message = stringResource(R.string.directorio_loading_filters))
         return
     }
@@ -208,7 +217,7 @@ private fun FiltersPanel(
                 modifier = Modifier.padding(bottom = 6.dp),
             )
 
-            filters.forEach { filter ->
+            visibleFilters.forEach { filter ->
                 Text(
                     text = filter.label,
                     style = MaterialTheme.typography.labelLarge,
