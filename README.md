@@ -2,7 +2,7 @@
 
 App de Android TV (Leanback + Compose for TV) que lista la sección **Programación**
 de jkanime.net como tarjetas, muestra descripción y capítulos, reproduce los
-episodios con un reproductor WebView, guarda favoritos/progreso, sincroniza
+episodios con Media3/ExoPlayer y fuentes HLS, guarda favoritos/progreso, sincroniza
 entre dispositivos (Supabase) y soporta varios perfiles locales en la misma TV
 (estilo Netflix).
 
@@ -17,7 +17,7 @@ entre dispositivos (Supabase) y soporta varios perfiles locales en la misma TV
 | F0 | Esqueleto multi-módulo, tema TV, navegación D-pad, manifest Leanback | ✅ |
 | F1 | Parser de Programación + grilla de tarjetas + caché 10 min | ✅ |
 | F2 | Parser de detalle + `ajax/episodes` (CSRF) + grilla de capítulos | ✅ |
-| F3 | Player WebView + puente JS + controles D-pad + selector de fuente | ✅ |
+| F3 | Player Media3/ExoPlayer + fallback de fuentes + controles D-pad | ✅ |
 | — | Bloqueo de anuncios/overlays en el reproductor (hit-test sweep) | ✅ |
 | F4 | Favoritos + progreso persistente (Room) + "Continuar viendo" | ✅ |
 | F5 | Worker de 6h (WorkManager) + badge de capítulos pendientes | ✅ |
@@ -30,10 +30,71 @@ entre dispositivos (Supabase) y soporta varios perfiles locales en la misma TV
 | F11.1 | Puerta de entrada de perfiles ("¿Quién está viendo?") al arrancar | ✅ |
 | F11.2 | Sync automático en background al entrar a un perfil | ✅ |
 | F11.3 | Tarjetas Material Design 3 en el selector/creación de perfiles | ✅ |
+| F12 | Ajustes de UI: Directorio simplificado, Recientes, badges de favoritos e icono de menú | ✅ |
+| F13 | Internacionalización completa español/inglés y selector de idioma por perfil | ✅ |
+| F14 | Release firmado, actualización en línea y correcciones de filtros/foco | ✅ |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo
 físico).
+
+## Funciones desarrolladas
+
+### Catálogo y navegación
+
+- Home con la programación reciente del sitio en tarjetas TV.
+- Búsqueda contra el buscador real de jkanime, con debounce, estados de carga,
+  errores, reintento y hasta 30 resultados.
+- Directorio real con paginación y filtros visibles para **Por fecha**, **Por
+  nombre**, **Por popularidad** y géneros.
+- Panel de filtros angosto, scrollable y compatible con D-pad; las opciones se
+  conservan durante la carga para permitir seleccionar varios filtros seguidos.
+- Detalle del anime con descripción, estado, tipo, próximos capítulos y lista
+  ordenable de episodios.
+- Foco inicial del detalle en el último episodio empezado o visto.
+- Navegación completa con mando/D-pad, incluyendo foco inicial, recuperación de
+  foco al cambiar de sección y soporte para teclado virtual.
+
+### Biblioteca personal
+
+- Favoritos por perfil.
+- Progreso persistente por episodio con posición, estado iniciado/completado y
+  reanudación.
+- Botón de continuar viendo.
+- Badges de favoritos con capítulos pendientes (`+N`), estado **Al día** y
+  episodio visto como respaldo.
+- WorkManager actualiza cada seis horas los datos de emisión de favoritos.
+
+### Perfiles y sincronización
+
+- Perfiles locales múltiples en la misma TV, con selector tipo Netflix.
+- Aislamiento de favoritos, progreso y credenciales de sincronización por perfil.
+- Creación, activación, eliminación y cambio de perfil.
+- Sincronización multi-dispositivo mediante Supabase.
+- Merge last-write-wins con `updated_at` y tombstones para borrados.
+- Emparejamiento mediante código temporal de un solo uso, válido durante 15
+  minutos; el token completo nunca se introduce en el mando.
+- Sincronización automática al arrancar y al entrar/cambiar de perfil.
+
+### Idiomas
+
+- UI completa extraída a recursos Android: español por defecto e inglés.
+- Selector **Sistema / Español / English** en el menú del avatar y en la puerta
+  de perfiles.
+- Aplicación inmediata del idioma mediante `AppLocale` y recreación de la
+  Activity.
+- La preferencia se guarda en `SharedPreferences` (`jk-profiles`, clave
+  `lang`).
+
+### Reproducción
+
+- Reproducción de fuentes directas HLS mediante Media3/ExoPlayer para evitar la
+  pantalla negra observada en algunos televisores con WebView.
+- Fallback entre servidores Desu y Magi cuando una fuente falla o no inicia.
+- Controles TV de reproducción, pausa, avance/retroceso y cambio de servidor.
+- Guardado periódico del progreso y reanudación en la posición anterior.
+- Bloqueo de anuncios y overlays en los embeds mediante interceptación de red y
+  hit-test sweep cuando aplica al reproductor web.
 
 ## Módulos
 
@@ -71,6 +132,40 @@ JK_LIVE=1 ./gradlew :data:catalog:test --tests "*LiveSmokeTest*"
 adb connect <IP-DEL-TV>:5555
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+### Release firmado y publicación
+
+El workflow `.github/workflows/release.yml` se ejecuta únicamente cuando se
+publica un tag `v*`. Construye el APK release con la clave permanente, crea el
+GitHub Release y adjunta el APK:
+
+```bash
+git tag -a v0.1.4 -m "jkanimetv v0.1.4"
+git push origin v0.1.4
+```
+
+Para un build release local:
+
+```bash
+./tools/build-apk.sh --version 0.1.4 --release
+```
+
+La firma release actual usa el alias `jkanimetv_release`. No se debe cambiar
+la clave, porque Android no permite actualizar una instalación firmada con
+otra.
+
+### Actualizaciones en línea
+
+Al iniciar la app, `UpdateManager` consulta cada seis horas el release más
+reciente de:
+
+```text
+https://api.github.com/repos/gmacastil/jkanime/releases/latest
+```
+
+Si encuentra un tag semver superior al instalado y un APK adjunto, muestra el
+diálogo de actualización. Al aceptarlo, descarga el APK y abre el instalador
+del sistema Android; la instalación requiere confirmación del usuario.
 
 Un APK de debug ya compilado (listo para sideload) vive en `dist/` — no se
 versiona en git (`*.apk` está en `.gitignore`). Para generarlo por demanda,
@@ -142,11 +237,11 @@ adb logcat -s JkBridge chromium AndroidRuntime
 > no significa que falle en el TV: compara con `adb logcat chromium`. Arranca con
 > `-gpu host` (lo hace el script) para tener decodificación por GPU.
 
-Todas las fases (F0–F11.3) están verificadas end-to-end en emulador: Home,
+Todas las fases (F0–F14) están verificadas end-to-end en emulador: Home,
 tabs, búsqueda real del sitio, Directorio, Detail, selector/fallback de
 servidor del Player, bloqueo de anuncios, favoritos/progreso con Room, sync
-multi-dispositivo con Supabase (incluido emparejamiento por código), y el
-gate de perfiles con tarjetas Material Design 3. Detalle completo, bugs
+multi-dispositivo con Supabase (incluido emparejamiento por código), idiomas
+español/inglés y el gate de perfiles con tarjetas Material Design 3. Detalle completo, bugs
 encontrados/corregidos y trampas de cada fase en
 [docs/emulator-testing.md](docs/emulator-testing.md).
 
@@ -170,10 +265,11 @@ Resumen:
 
 ## Decisiones de arquitectura
 
-- **WebView para reproducir, no ExoPlayer.** Los servidores entregan reproductores
-  JS con ofuscado propio; no hay MP4 ni m3u8 público. Un extractor por host se
-  rompe cada semana. El WebView cubre el 100% desde el día uno y el puente JS
-  (`JkBridge.onProgressEvent/onEndedEvent`) integra favoritos y progreso.
+- **Media3/ExoPlayer para reproducir fuentes HLS.** La reproducción directa de
+  m3u8 evita la pantalla negra observada en algunos televisores al usar WebView.
+  El player conserva fallback entre servidores, controles D-pad, guardado de
+  progreso y reanudación. El WebView sigue disponible para embeds o diagnóstico
+  de hosts cuando la fuente directa no está disponible.
 - **Bloqueo de anuncios por hit-test, no por recorrido de DOM.** Los overlays
   publicitarios se pintan en shadow-DOM/iframes invisibles a `querySelectorAll`.
   El fix real es un sweep periódico con `document.elementFromPoint(x, y)`
@@ -216,7 +312,8 @@ ProfileGateScreen ──perfil──▶ HomeScreen ──card──▶ DetailScr
 
 - `jkplayer` (player propio del sitio) puede responder **500** en algunos
   episodios (fallo del sitio, no de la app); por eso el player arranca con
-  Desu y cae a Magi como fallback automático tras 20s sin `<video>`.
+  Desu y cae a Magi como fallback automático cuando no obtiene una fuente HLS
+  reproducible.
 - Sin descargas offline: las fuentes son embeds de terceros.
 - El anti-bot puede devolver 403 si se hacen muchas peticiones seguidas: hay caché
   y backoff, pero no hay proxy.
