@@ -42,7 +42,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          JK_SUPABASE_URL: ${{ secrets.JK_SUPABASE_URL }}
+          JK_SUPABASE_URL: ${{ vars.JK_SUPABASE_URL }}
           JK_SUPABASE_ANON_KEY: ${{ secrets.JK_SUPABASE_ANON_KEY }}
         run: |
           test -n "$JK_SUPABASE_URL" || {
