@@ -57,8 +57,8 @@ export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
 if [ -z "$VERSION_NAME" ]; then
   VERSION_NAME="0.1.0"
 fi
-if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "✗ versión inválida: $VERSION_NAME (usa X.Y.Z)" >&2
+if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "✗ versión inválida: $VERSION_NAME (usa X.Y o X.Y.Z)" >&2
   exit 2
 fi
 if [ -z "$VERSION_CODE" ]; then
