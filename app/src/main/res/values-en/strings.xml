@@ -84,6 +84,8 @@
     <string name="home_search_query_loading">Searching \"%1$s\"…</string>
     <string name="home_search_query_none">No results for \"%1$s\"</string>
     <string name="home_badge_up_to_date">Up to date</string>
+    <string name="favorites_section_pending">Pending</string>
+    <string name="favorites_section_up_to_date">Up to date</string>
 
     <!-- Directory -->
     <string name="directorio_title">Browse</string>

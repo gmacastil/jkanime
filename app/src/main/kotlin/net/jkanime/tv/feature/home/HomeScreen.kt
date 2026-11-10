@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -1343,8 +1344,9 @@ private fun CardsGrid(
  * Favoritos en tarjetas. El badge "N pend." sale de comparar el último
  * episodio emitido (refrescado por el sync de F5) con el último visto.
  *
- * Orden: 1) con episodios pendientes (+N), 2) "Al día" (pending == 0),
- * 3) sin datos de emisión (fallback a último visto).
+ * Dos grupos separados por línea horizontal:
+ * 1) Con episodios pendientes (+N)
+ * 2) "Al día" (pending == 0) + sin datos (fallback a último visto)
  */
 @Composable
 private fun FavoritesGrid(
@@ -1357,14 +1359,17 @@ private fun FavoritesGrid(
         return
     }
 
-    // Orden: pendientes > 0 primero, luego "Al día", luego sin datos.
-    val sorted = favorites.sortedWith(
+    // Partición: pendientes > 0 | resto (Al día + sin datos)
+    val (pendientes, alDia) = favorites.partition { (it.pendingEpisodes ?: -1) > 0 }
+
+    val sortedPendientes = pendientes.sortedBy { it.title.lowercase() }
+    val sortedAlDia = alDia.sortedWith(
         compareByDescending<FavoriteEntity> { it.pendingEpisodes ?: -1 }
             .thenBy { it.title.lowercase() },
     )
 
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(sorted.first().slug, focusNonce) {
+    LaunchedEffect((sortedPendientes + sortedAlDia).firstOrNull()?.slug, focusNonce) {
         repeat(10) {
             withFrameNanos { }
             if (firstFocus.requestFocus()) return@LaunchedEffect
@@ -1378,10 +1383,65 @@ private fun FavoritesGrid(
         verticalArrangement = Arrangement.spacedBy(22.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        items(favorites, key = { it.slug }) { fav ->
+        if (sortedPendientes.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeader(stringResource(R.string.favorites_section_pending))
+            }
+            items(sortedPendientes, key = { it.slug }) { fav ->
+                FavoriteCard(
+                    favorite = fav,
+                    focusRequester = if (fav === (sortedPendientes + sortedAlDia).first()) firstFocus else null,
+                    onOpenAnime = onOpenAnime,
+                )
+            }
+        }
+
+        if (sortedPendientes.isNotEmpty() && sortedAlDia.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .height(1.dp)
+                        .background(JkSurfaceHigh),
+                )
+            }
+        }
+
+        if (sortedAlDia.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeader(stringResource(R.string.favorites_section_up_to_date))
+            }
+            items(sortedAlDia, key = { it.slug }) { fav ->
+                FavoriteCard(
+                    favorite = fav,
+                    focusRequester = if (fav === (sortedPendientes + sortedAlDia).first()) firstFocus else null,
+                    onOpenAnime = onOpenAnime,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = JkTextSecondary,
+        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun FavoriteCard(
+    favorite: FavoriteEntity,
+    focusRequester: FocusRequester?,
+    onOpenAnime: (String) -> Unit,
+) {
+    val fav = favorite
+    run {
             val pending = fav.pendingEpisodes
-            // "+N" mientras queden episodios por ver; badge verde "Al día"
-            // cuando el último emitido ya está visto; sin datos, "Ep N".
             val badge = when {
                 pending != null && pending > 0 -> "+$pending"
                 pending == 0 -> stringResource(R.string.home_badge_up_to_date)
@@ -1396,9 +1456,8 @@ private fun FavoritesGrid(
                 badgeColor = if (pending == 0) JkGreen else JkOrange,
                 subtitle = fav.statusLabel,
                 width = null,
-                focusRequester = if (fav === favorites.first()) firstFocus else null,
+                focusRequester = focusRequester,
                 onClick = { onOpenAnime(fav.slug) },
             )
         }
-    }
 }

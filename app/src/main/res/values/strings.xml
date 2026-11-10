@@ -88,6 +88,8 @@
     <string name="home_search_query_loading">Buscando \"%1$s\"…</string>
     <string name="home_search_query_none">Sin resultados para \"%1$s\"</string>
     <string name="home_badge_up_to_date">Al día</string>
+    <string name="favorites_section_pending">Pendientes</string>
+    <string name="favorites_section_up_to_date">Al día</string>
 
     <!-- Directorio -->
     <string name="directorio_title">Directorio</string>
