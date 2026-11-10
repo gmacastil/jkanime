@@ -54,6 +54,8 @@ fun PosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     badge: String? = null,
+    /** Color del badge: naranja por defecto; verde para "al día". */
+    badgeColor: Color = JkOrange,
     subtitle: String? = null,
     /** null = ocupa el ancho del contenedor (grillas). */
     width: Dp? = 168.dp,
@@ -110,7 +112,7 @@ fun PosterCard(
                         .align(Alignment.TopStart)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(JkOrange)
+                        .background(badgeColor)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }

@@ -1,5 +1,6 @@
 package net.jkanime.tv.ui.component
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +36,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -155,6 +158,73 @@ fun TvIconButton(
     iconSize: Dp = 22.dp,
     tint: Color? = null,
 ) {
+    TvIconButtonBox(
+        onClick = onClick,
+        modifier = modifier,
+        active = active,
+        enabled = enabled,
+        focusRequester = focusRequester,
+        size = size,
+        tint = tint,
+    ) { contentColor ->
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(iconSize),
+        )
+    }
+}
+
+/**
+ * Sobrecarga para iconos gráficos (drawables de la app, p. ej. el logo
+ * `ic_launcher`) en vez de un [ImageVector]: mismo comportamiento de foco
+ * y estados, solo cambia qué se pinta dentro.
+ */
+@Composable
+fun TvIconButton(
+    painter: Painter,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    enabled: Boolean = true,
+    focusRequester: FocusRequester? = null,
+    size: Dp = 48.dp,
+    imageSize: Dp = 30.dp,
+) {
+    TvIconButtonBox(
+        onClick = onClick,
+        modifier = modifier,
+        active = active,
+        enabled = enabled,
+        focusRequester = focusRequester,
+        size = size,
+        tint = null,
+    ) {
+        Image(
+            painter = painter,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(imageSize)
+                .clip(RoundedCornerShape(6.dp)),
+        )
+    }
+}
+
+/** Contenedor (borde/fondo/foco) común a las dos sobrecargas de [TvIconButton]. */
+@Composable
+private fun TvIconButtonBox(
+    onClick: () -> Unit,
+    modifier: Modifier,
+    active: Boolean,
+    enabled: Boolean,
+    focusRequester: FocusRequester?,
+    size: Dp,
+    tint: Color?,
+    content: @Composable (Color) -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
@@ -199,12 +269,7 @@ fun TvIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = contentColor,
-            modifier = Modifier.size(iconSize),
-        )
+        content(contentColor)
     }
 }
 

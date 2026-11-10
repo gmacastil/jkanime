@@ -33,7 +33,7 @@ import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -430,7 +430,7 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TvIconButton(
-            icon = Icons.Filled.Menu,
+            painter = painterResource(R.drawable.ic_launcher),
             contentDescription = "Menú",
             active = drawerOpen,
             focusRequester = menuFocus,
@@ -619,10 +619,12 @@ private fun SideDrawer(
             modifier = Modifier.padding(start = 28.dp, bottom = 8.dp),
         )
 
-        // Solo "Animes" (antes había Donghuas y OVAs)
+        // La sección de programación se muestra como "Recientes" (los
+        // episodios que acaban de salir), con icono de fecha.
         val animesItem = ProgramacionSection.ANIMES
         DrawerItem(
-            label = animesItem.label,
+            label = "Recientes",
+            icon = Icons.Filled.DateRange,
             selected = animesItem == selected && !showFavorites,
             focusRequester = firstItemFocus,
             onClick = { onSelectSection(animesItem) },
@@ -1276,11 +1278,18 @@ private fun FavoritesGrid(
     ) {
         items(favorites, key = { it.slug }) { fav ->
             val pending = fav.pendingEpisodes
+            // "+N" mientras queden episodios por ver; badge verde "Al día"
+            // cuando el último emitido ya está visto; sin datos, "Ep N".
+            val badge = when {
+                pending != null && pending > 0 -> "+$pending"
+                pending == 0 -> "Al día"
+                else -> fav.lastWatchedEpisode?.let { "Ep $it" }
+            }
             PosterCard(
                 title = fav.title,
                 posterUrl = fav.posterUrl,
-                badge = pending?.takeIf { it > 0 }?.let { "+$it" }
-                    ?: fav.lastWatchedEpisode?.let { "Ep $it" },
+                badge = badge,
+                badgeColor = if (pending == 0) JkGreen else JkOrange,
                 subtitle = fav.statusLabel,
                 width = null,
                 focusRequester = if (fav === favorites.first()) firstFocus else null,

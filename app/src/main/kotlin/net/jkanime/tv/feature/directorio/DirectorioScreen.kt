@@ -1,6 +1,5 @@
 package net.jkanime.tv.feature.directorio
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,7 +17,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -36,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -46,9 +46,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.tv.material3.Border
-import androidx.tv.material3.Card
-import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -56,7 +53,6 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
 import net.jkanime.tv.model.AnimeSearchHit
-import net.jkanime.tv.model.DirectorioFilter
 import net.jkanime.tv.model.DirectorioOption
 import net.jkanime.tv.model.DirectorioPage
 import net.jkanime.tv.ui.component.ErrorState
@@ -73,7 +69,6 @@ import net.jkanime.tv.ui.theme.JkSurfaceHigh
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -163,14 +158,18 @@ fun DirectorioScreen(
     }
 }
 
-/** Panel lateral con los `<select>` del formulario del sitio. */
+/** Panel lateral angosto: solo orden y género, sin combos — las opciones
+ *  quedan visibles y el panel entero hace scroll vertical. */
+private val VISIBLE_FILTERS = setOf("filtro", "genero")
+
 @Composable
 private fun FiltersPanel(
     state: DirectorioUiState,
     selected: Map<String, String>,
     onFilterChange: (String, String) -> Unit,
 ) {
-    val filters = (state as? DirectorioUiState.Success)?.page?.filters ?: emptyList()
+    val filters = (state as? DirectorioUiState.Success)?.page?.filters.orEmpty()
+        .filter { it.name in VISIBLE_FILTERS }
 
     if (filters.isEmpty()) {
         LoadingState(message = "Cargando filtros…")
@@ -182,7 +181,7 @@ private fun FiltersPanel(
     // contenedor más claro + sombra/borde el panel se fundía con el fondo.
     Surface(
         modifier = Modifier
-            .width(320.dp)
+            .width(230.dp)
             .fillMaxHeight()
             .padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         shape = RoundedCornerShape(16.dp),
@@ -192,176 +191,98 @@ private fun FiltersPanel(
         ),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                // ~50 opciones en total (3 de orden + ~46 de género): sin
+                // scroll el panel no cabría en pantalla.
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = "FILTROS",
                 style = MaterialTheme.typography.labelSmall,
                 color = JkTextSecondary,
+                modifier = Modifier.padding(bottom = 6.dp),
             )
 
             filters.forEach { filter ->
-                FilterDropdown(
-                    filter = filter,
-                    selectedValue = selected[filter.name] ?: "",
-                    onValueChange = { value -> onFilterChange(filter.name, value) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilterDropdown(
-    filter: DirectorioFilter,
-    selectedValue: String,
-    onValueChange: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = filter.label,
-            style = MaterialTheme.typography.labelLarge,
-            color = JkTextPrimary,
-        )
-        TvDropdown(
-            options = filter.options,
-            selectedValue = selectedValue,
-            onSelect = onValueChange,
-        )
-    }
-}
-
-/**
- * Dropdown estilo TV: lista de opciones en un `Column` que se expande al
- * recibir foco. Usa `TvIconButton` como trigger.
- */
-@Composable
-private fun TvDropdown(
-    options: List<DirectorioOption>,
-    selectedValue: String,
-    onSelect: (String) -> Unit,
-) {
-    val expanded = remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-
-    val label = options.firstOrNull { it.value == selectedValue }?.label
-        ?: options.first { it.isDefault }.label
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusRequester(focusRequester)
-            .onFocusChanged { focused ->
-                // En TV: expandir al recibir foco, colapsar al perderlo
-                expanded.value = focused.hasFocus
-            },
-    ) {
-        val buttonInteractionSource = remember { MutableInteractionSource() }
-        val buttonFocused by buttonInteractionSource.collectIsFocusedAsState()
-
-        Card(
-            onClick = { expanded.value = !expanded.value },
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(focusRequester),
-            interactionSource = buttonInteractionSource,
-            shape = CardDefaults.shape(shape = RoundedCornerShape(8.dp)),
-            colors = CardDefaults.colors(
-                containerColor = JkSurface,
-                contentColor = JkTextPrimary,
-                focusedContainerColor = JkSurfaceHigh,
-                focusedContentColor = JkOrange,
-            ),
-            // Borde visible también en reposo (no solo al enfocar): sin esto
-            // el trigger se veía como texto suelto con una flechita, no como
-            // un control — el problema reportado.
-            border = CardDefaults.border(
-                border = Border(BorderStroke(1.dp, JkSurfaceHigh), shape = RoundedCornerShape(8.dp)),
-                focusedBorder = Border(BorderStroke(2.dp, JkOrange), shape = RoundedCornerShape(8.dp)),
-            ),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (buttonFocused) JkOrange else JkTextPrimary,
-                    overflow = TextOverflow.Ellipsis,
+                    text = filter.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = JkOrange,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp),
                 )
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    tint = if (buttonFocused) JkOrange else JkTextSecondary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-
-        if (expanded.value) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(JkSurfaceHigh)
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(width = 2.dp, color = JkOrange, shape = RoundedCornerShape(8.dp))
-                    .padding(vertical = 8.dp),
-            ) {
-                options.forEach { option ->
-                    val isSelected = option.value == selectedValue
-                    val optInteractionSource = remember { MutableInteractionSource() }
-                    val optFocused by optInteractionSource.collectIsFocusedAsState()
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                when {
-                                    optFocused -> JkOrange
-                                    isSelected -> JkOrange.copy(alpha = 0.2f)
-                                    else -> Color.Transparent
-                                }
-                            )
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                            .clickable(
-                                interactionSource = optInteractionSource,
-                                indication = null,
-                                onClick = {
-                                    onSelect(option.value)
-                                    expanded.value = false
-                                },
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = JkOrange,
-                                modifier = Modifier.size(20.dp).padding(end = 12.dp),
-                            )
-                        }
-                        Text(
-                            text = option.label,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isSelected) JkOrange else JkTextPrimary,
-                        )
-                    }
+                filter.options.forEach { option ->
+                    FilterOptionRow(
+                        option = option,
+                        selected = option.value == (selected[filter.name] ?: ""),
+                        onSelect = { onFilterChange(filter.name, option.value) },
+                    )
                 }
             }
         }
     }
 }
+
+/**
+ * Opción de filtro como fila siempre visible (antes era un combo que se
+ * expandía al enfocar): fondo naranja al enfocar, tinte naranja si está
+ * seleccionada.
+ */
+@Composable
+private fun FilterOptionRow(
+    option: DirectorioOption,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+
+    val background = when {
+        focused -> JkOrange
+        selected -> JkOrange.copy(alpha = 0.2f)
+        else -> Color.Transparent
+    }
+    // Con el fondo naranja completo el texto/tinte naranja sería ilegible:
+    // al enfocar pasan a tinta oscura (mismo contraste que TvIconButton).
+    val contentColor = when {
+        focused -> Color(0xFF141414)
+        selected -> JkOrange
+        else -> JkTextPrimary
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(background)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onSelect,
+            )
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(14.dp).padding(end = 6.dp),
+            )
+        }
+        Text(
+            text = option.label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 
 /** Grilla de resultados del directorio (misma que SearchGrid pero con paginación). */
 @Composable
@@ -390,7 +311,7 @@ private fun ResultsGrid(
     } else {
         LazyVerticalGrid(
             state = gridState,
-            columns = GridCells.Fixed(5),
+            columns = GridCells.Fixed(6),
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp),
