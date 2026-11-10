@@ -296,6 +296,9 @@ private const val HOOK_SCRIPT = """
       v.style.display = 'block';
       v.style.opacity = '1';
       v.style.transform = 'translateZ(0)';
+      v.style.width = '100%';
+      v.style.height = '100%';
+      v.style.objectFit = 'contain';
       v.setAttribute('playsinline', 'true');
       try { v.play(); } catch (e) {}
       v.addEventListener('timeupdate', function(){
@@ -325,7 +328,11 @@ fun WebPlayer(
         factory = { context ->
             NonFocusableWebView(context).apply {
                 setBackgroundColor(android.graphics.Color.BLACK)
-                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                // Dejamos que la ventana acelerada gestione la capa de vídeo.
+                // Forzar LAYER_TYPE_HARDWARE en WebView puede crear una capa
+                // separada que reproduce audio/tiempo pero no compone los
+                // frames de vídeo en algunos Android TV.
+                setLayerType(android.view.View.LAYER_TYPE_NONE, null)
 
                 // El WebView pide el foco al cargar y se queda con TODO el
                 // D-pad: Chromium navega su propio reproductor y el overlay de

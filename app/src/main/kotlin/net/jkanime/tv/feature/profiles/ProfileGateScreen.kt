@@ -592,10 +592,6 @@ private fun SyncChoiceScreen(
                         onDigit = { if (syncCode.length < 8) onCodeChange(syncCode + it) },
                         onBackspace = { onCodeChange(syncCode.dropLast(1)) },
                         onConfirm = { if (syncCode.length == 8) onJoinSpace() },
-                        onCancel = {
-                            onCodeChange("")
-                            joining = false
-                        },
                         busy = syncBusy,
                         compact = true,
                         focusRequester = focusRequester,
@@ -626,7 +622,6 @@ private fun SyncKeypad(
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onConfirm: () -> Unit,
-    onCancel: () -> Unit,
     busy: Boolean,
     compact: Boolean = false,
     focusRequester: FocusRequester? = null,
@@ -635,25 +630,13 @@ private fun SyncKeypad(
         TvNumberPad(
             onDigit = onDigit,
             onBackspace = onBackspace,
-            onCancel = onCancel,
+            onConfirm = if (code.length == 8 && !busy) onConfirm else null,
             enabled = !busy,
             compact = compact,
             focusRequester = focusRequester,
         )
         // Acciones: confirmar (solo con 8 dígitos) + volver, en la misma fila
         // para no desbordar el panel en 1080p.
-        Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
-            if (code.length == 8) {
-                TvActionButton(
-                    text = if (busy) "Vinculando…" else "Vincular",
-                    primary = true,
-                    compact = compact,
-                    enabled = !busy,
-                    onClick = onConfirm,
-                )
-            }
-        }
     }
 }
 
