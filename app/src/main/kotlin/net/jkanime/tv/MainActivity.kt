@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -139,21 +137,12 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SplashScreen() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(JkBackground),
-        contentAlignment = Alignment.Center,
-    ) {
-        Image(
-            painter = painterResource(R.drawable.caiman_home),
-            contentDescription = stringResource(R.string.home_brand_cd),
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(180.dp)
-                .clip(RoundedCornerShape(20.dp)),
-        )
-    }
+    Image(
+        painter = painterResource(R.drawable.splash_background),
+        contentDescription = stringResource(R.string.home_brand_cd),
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 @Composable
