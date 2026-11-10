@@ -304,8 +304,9 @@ private const val HOOK_SCRIPT = """
       v.addEventListener('timeupdate', function(){
         JkBridge.onProgress(v.currentTime * 1000, (v.duration || 0) * 1000);
       });
-      v.addEventListener('ended', function(){ JkBridge.onEnded(); });
-      JkBridge.onReady();
+       v.addEventListener('ended', function(){ JkBridge.onEnded(); });
+       JkBridge.onVideoInfo(v.videoWidth, v.videoHeight, v.readyState, v.currentSrc || '');
+       JkBridge.onReady();
     }
   }, 1200);
 })();
@@ -380,7 +381,7 @@ fun WebPlayer(
                         view?.evaluateJavascript(HOOK_SCRIPT, null)
                     }
 
-                    override fun shouldInterceptRequest(
+                     override fun shouldInterceptRequest(
                         view: WebView?,
                         request: WebResourceRequest?,
                     ): android.webkit.WebResourceResponse? {
@@ -398,9 +399,33 @@ fun WebPlayer(
                             )
                         } else {
                             null
-                        }
-                    }
-                }
+                         }
+                     }
+
+                     override fun onReceivedError(
+                         view: WebView?,
+                         request: android.webkit.WebResourceRequest?,
+                         error: android.webkit.WebResourceError?,
+                     ) {
+                         android.util.Log.e(
+                             "JkPlayer",
+                             "error WebView ${request?.url}: ${error?.errorCode} ${error?.description}",
+                         )
+                         super.onReceivedError(view, request, error)
+                     }
+
+                     override fun onReceivedHttpError(
+                         view: WebView?,
+                         request: WebResourceRequest?,
+                         errorResponse: android.webkit.WebResourceResponse?,
+                     ) {
+                         android.util.Log.e(
+                             "JkPlayer",
+                             "HTTP ${errorResponse?.statusCode} ${request?.url}",
+                         )
+                         super.onReceivedHttpError(view, request, errorResponse)
+                     }
+                 }
 
                 controller.webView = this
                 loadUrl(url)
@@ -465,6 +490,14 @@ private class Bridge(
     @JavascriptInterface
     fun onReady() {
         handler.post { onReadyEvent() }
+    }
+
+    @JavascriptInterface
+    fun onVideoInfo(width: Int, height: Int, readyState: Int, source: String?) {
+        android.util.Log.i(
+            "JkPlayer",
+            "video info: ${width}x${height}, readyState=$readyState, source=$source",
+        )
     }
 
     @JavascriptInterface
