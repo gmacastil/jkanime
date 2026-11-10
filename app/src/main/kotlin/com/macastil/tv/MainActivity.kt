@@ -129,9 +129,9 @@ class MainActivity : ComponentActivity() {
                                 onDismiss = { update = null },
                             )
                         }
-                    }
 
-                    VersionLabel(modifier = Modifier.align(Alignment.BottomEnd))
+                        VersionLabel(modifier = Modifier.align(Alignment.BottomEnd))
+                    }
                 }
             }
         }
@@ -140,12 +140,15 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SplashScreen() {
-    Image(
-        painter = painterResource(R.drawable.splash_background),
-        contentDescription = stringResource(R.string.home_brand_cd),
-        contentScale = ContentScale.Crop,
-        modifier = Modifier.fillMaxSize(),
-    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(R.drawable.splash_background),
+            contentDescription = stringResource(R.string.home_brand_cd),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        VersionLabel(modifier = Modifier.align(Alignment.BottomEnd))
+    }
 }
 
 /** Versión visible permanentemente en la esquina inferior derecha. */
