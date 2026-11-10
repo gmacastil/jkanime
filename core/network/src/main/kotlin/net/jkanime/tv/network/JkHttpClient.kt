@@ -35,10 +35,13 @@ class JkHttpClient(
             val request = chain.request().newBuilder()
                 .header("User-Agent", userAgent)
                 .header("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
-                .header(
-                    "Accept",
-                    "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-                )
+                .apply {
+                    // No pisar un Accept explícito (getText usa `*/*` para
+                    // pedir m3u8/manifests, no HTML).
+                    if (chain.request().header("Accept") == null) {
+                        header("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
+                    }
+                }
                 .build()
             chain.proceed(request)
         }
@@ -46,6 +49,15 @@ class JkHttpClient(
 
     suspend fun getHtml(url: String, referer: String? = null): String =
         execute(Request.Builder().url(url).get(), referer)
+
+    /**
+     * GET genérico (Accept todo) para assets que no son HTML: m3u8,
+     * manifests, JSON de APIs de terceros.
+     */
+    suspend fun getText(url: String, referer: String? = null): String {
+        val request = Request.Builder().url(url).get().header("Accept", "*/*")
+        return execute(request, referer)
+    }
 
     suspend fun postForm(
         url: String,

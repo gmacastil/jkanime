@@ -20,40 +20,17 @@ import net.jkanime.tv.model.Jk
 /**
  * Reproductor MVP: WebView sobre el embed del servidor.
  *
- * ¿Por qué WebView y no ExoPlayer? Los servidores de jkanime (Streamwish, VOE,
- * Filemoon, Vidhide...) no exponen MP4 ni m3u8: entregan un reproductor JS con
+ * ¿Por qué sigue existiendo? Los embeds de terceros (Streamwish, VOE,
+ * Filemoon, Vidhide…) no exponen MP4 ni m3u8: entregan un reproductor JS con
  * su propio ofuscado. Un extractor por host se rompe cada semana; el WebView
  * reproduce el 100% desde el día uno. El puente JS nos da progreso y "ended"
  * para la fase de favoritos / continuar viendo.
+ *
+ * Los players propios del sitio (Desu/Magi) sí exponen el `m3u8` y van por el
+ * reproductor nativo (`NativePlayer` + `PlayerController`); el WebView queda
+ * aquí solo como fallback de esos mismos servidores si la resolución del
+ * stream falla.
  */
-class WebPlayerController {
-
-    internal var webView: WebView? = null
-
-    fun seekBy(seconds: Int) = evaluate(
-        "(()=>{const v=document.querySelector('video');" +
-            "if(v){v.currentTime=Math.max(0,(v.currentTime||0)+($seconds));}})()",
-    )
-
-    /** Salta a una posición absoluta (usado para reanudar donde quedó). */
-    fun seekTo(positionMs: Long) = evaluate(
-        "(()=>{const v=document.querySelector('video');" +
-            "if(v){v.currentTime=$positionMs/1000;}})()",
-    )
-
-    fun togglePlayPause() = evaluate(
-        "(()=>{const v=document.querySelector('video');" +
-            "if(v){v.paused?v.play():v.pause();}})()",
-    )
-
-    fun reload() {
-        webView?.reload()
-    }
-
-    private fun evaluate(script: String) {
-        runCatching { webView?.evaluateJavascript(script, null) }
-    }
-}
 
 private val AD_HOSTS = listOf(
     "doubleclick.net",
@@ -289,24 +266,38 @@ private const val HOOK_SCRIPT = """
     if (!v) return;
    if (!v.__jkBound) {
       v.__jkBound = true;
-      // Algunos WebView de Android TV reproducen el audio pero dejan la
-      // superficie de vídeo invisible si el elemento conserva estilos del
-      // embed. Forzamos una superficie visible y acelerada.
+      // Forzar `transform: translateZ(0)` (o dimensiones) crea una capa de
+      // composición independiente que en muchas TV no se pinta: el audio y el
+      // tiempo avanzan pero la pantalla queda negra. Solo garantizamos que el
+      // elemento sea visible; el layout lo maneja DPlayer, igual que en el
+      // navegador.
       v.style.visibility = 'visible';
       v.style.display = 'block';
       v.style.opacity = '1';
-      v.style.transform = 'translateZ(0)';
-      v.style.width = '100%';
-      v.style.height = '100%';
-      v.style.objectFit = 'contain';
       v.setAttribute('playsinline', 'true');
       try { v.play(); } catch (e) {}
       v.addEventListener('timeupdate', function(){
         JkBridge.onProgress(v.currentTime * 1000, (v.duration || 0) * 1000);
       });
        v.addEventListener('ended', function(){ JkBridge.onEnded(); });
-       JkBridge.onVideoInfo(v.videoWidth, v.videoHeight, v.readyState, v.currentSrc || '');
        JkBridge.onReady();
+    }
+    // Diagnóstico periódico: si readyState/videoWidth nunca avanzan, el
+    // stream no se está decodificando; si avanzan pero la pantalla queda
+    // negra, es un problema de composición de la superficie.
+    v.__jkDiag = (v.__jkDiag || 0) + 1;
+    if (v.__jkDiag % 2 === 0) {
+      var r = v.getBoundingClientRect();
+      var cs = window.getComputedStyle(v);
+      JkBridge.onVideoInfo(
+        v.videoWidth, v.videoHeight, v.readyState,
+        'ct=' + v.currentTime.toFixed(1) +
+        ' dur=' + (v.duration || 0).toFixed(1) +
+        ' paused=' + v.paused +
+        ' rect=' + Math.round(r.width) + 'x' + Math.round(r.height) +
+        ' vis=' + cs.visibility + '/' + cs.display + '/' + cs.opacity +
+        ' src=' + (v.currentSrc || '').slice(0, 60)
+      );
     }
   }, 1200);
 })();
@@ -316,7 +307,7 @@ private const val HOOK_SCRIPT = """
 @Composable
 fun WebPlayer(
     url: String,
-    controller: WebPlayerController,
+    controller: PlayerController,
     onProgress: (positionMs: Long, durationMs: Long) -> Unit,
     onEnded: () -> Unit,
     onReady: () -> Unit,

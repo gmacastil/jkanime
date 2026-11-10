@@ -2,6 +2,7 @@ package net.jkanime.tv.catalog
 
 import net.jkanime.tv.catalog.parser.AnimeDetailParser
 import net.jkanime.tv.catalog.parser.DirectorioParser
+import net.jkanime.tv.catalog.parser.EmbedStreamParser
 import net.jkanime.tv.catalog.parser.EpisodeJsonParser
 import net.jkanime.tv.catalog.parser.ProgramacionParser
 import net.jkanime.tv.catalog.parser.SearchParser
@@ -61,6 +62,28 @@ class JkanimeCatalogDataSource(private val http: JkHttpClient = JkHttpClient()) 
 
     suspend fun loadServers(episodeUrl: String, referer: String? = null): List<VideoServer> =
         VideoServerParser.parse(http.getHtml(episodeUrl, referer = referer), episodeUrl)
+
+    /**
+     * Resuelve el `m3u8` real de un embed de jkplayer (Desu/Magi): el HTML del
+     * embed trae la URL del CDN codificada y hay que validarla contra el
+     * servidor antes de darla por buena.
+     *
+     * Devuelve `null` cuando el embed no expone stream directo (embeds de
+     * terceros con reproductor JS ofuscado): en ese caso el caller cae al
+     * WebView, que sigue siendo el fallback.
+     */
+    suspend fun loadStream(embedUrl: String, referer: String? = null): String? {
+        val html = runCatching { http.getHtml(embedUrl, referer = referer) }.getOrNull()
+            ?: return null
+
+        for (candidate in EmbedStreamParser.candidates(html)) {
+            val manifest = runCatching {
+                http.getText(candidate, referer = referer)
+            }.getOrNull() ?: continue
+            if (manifest.contains("#EXTM3U")) return candidate
+        }
+        return null
+    }
 
     /** Buscador del sitio: HTML server-rendered con hasta 30 fichas. */
     suspend fun loadSearch(query: String): List<AnimeSearchHit> =

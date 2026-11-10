@@ -108,5 +108,12 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime)
 
+    // Reproductor nativo para el m3u8 de los players propios del sitio
+    // (Desu/Magi): el WebView de la TV decodifica el stream pero no compone
+    // la superficie (audio sí, vídeo negro).
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.ui)
+
     debugImplementation(libs.compose.ui.tooling)
 }

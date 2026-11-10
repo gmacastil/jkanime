@@ -84,7 +84,7 @@ fun PlayerScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    val controller = remember { WebPlayerController() }
+    val controller = remember { PlayerController() }
     val rootFocus = remember { FocusRequester() }
     // El WebView se queda con el foco del sistema (Chromium lo pide al
     // cargar), así que el D-pad no llega solo a los botones del overlay: hay
@@ -206,6 +206,7 @@ fun PlayerScreen(
                     }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
                         controller.togglePlayPause()
+                        isPlaying = !isPlaying
                         overlayVisible = true
                         true
                     }
@@ -247,43 +248,89 @@ fun PlayerScreen(
                 onRetry = { viewModel.load(force = true) },
             )
             is PlayerUiState.Ready -> {
-                WebPlayer(
-                    url = current.selected.url,
-                    controller = controller,
-                    onProgress = { pos, dur ->
-                        positionMs = pos
-                        if (dur > 0) durationMs = dur
-                        // "Casi al final" cuenta como visto (evita que el
-                        // último 1% de créditos deje el episodio pendiente).
-                        val almostDone = dur > 0 && pos >= dur - 5_000
-                        if (almostDone || pos - lastSavedMs >= 5_000) {
-                            lastSavedMs = pos
-                            scope.launch {
-                                library.saveProgress(
-                                    slug = slug,
-                                    episode = episodeNumber,
-                                    positionMs = pos,
-                                    durationMs = dur,
-                                    completed = almostDone,
-                                )
-                            }
-                        }
-                    },
-                    onEnded = {
-                        overlayVisible = true
-                        isPlaying = false
+                // Los players propios del sitio (Desu/Magi) exponen el m3u8 en
+                // su embed: se resuelve aquí y se reproduce con ExoPlayer. En
+                // la TV el WebView decodifica pero no compone el vídeo (pantalla
+                // negra con audio), así que el nativo es el camino principal y
+                // el WebView queda como fallback si la resolución falla.
+                var streamUrl by remember(current.selected.url) { mutableStateOf<String?>(null) }
+                var streamFailed by remember(current.selected.url) { mutableStateOf(false) }
+
+                LaunchedEffect(current.selected.url) {
+                    streamUrl = null
+                    streamFailed = false
+                    val resolved = runCatching {
+                        Graph.repository.stream(current.selected.url, referer = episodeUrl)
+                    }.getOrNull()
+                    if (resolved != null) {
+                        streamUrl = resolved
+                    } else {
+                        streamFailed = true
+                    }
+                }
+
+                val onProgress: (Long, Long) -> Unit = { pos, dur ->
+                    positionMs = pos
+                    if (dur > 0) durationMs = dur
+                    // "Casi al final" cuenta como visto (evita que el
+                    // último 1% de créditos deje el episodio pendiente).
+                    val almostDone = dur > 0 && pos >= dur - 5_000
+                    if (almostDone || pos - lastSavedMs >= 5_000) {
+                        lastSavedMs = pos
                         scope.launch {
                             library.saveProgress(
                                 slug = slug,
                                 episode = episodeNumber,
-                                positionMs = durationMs,
-                                durationMs = durationMs,
-                                completed = true,
+                                positionMs = pos,
+                                durationMs = dur,
+                                completed = almostDone,
                             )
                         }
-                    },
+                    }
+                }
+                val onEnded: () -> Unit = {
+                    overlayVisible = true
+                    isPlaying = false
+                    scope.launch {
+                        library.saveProgress(
+                            slug = slug,
+                            episode = episodeNumber,
+                            positionMs = durationMs,
+                            durationMs = durationMs,
+                            completed = true,
+                        )
+                    }
+                }
+
+                val resolvedStream = streamUrl
+                when {
+                    resolvedStream != null -> NativePlayer(
+                        url = resolvedStream,
+                        referer = episodeUrl,
+                        controller = controller,
+                        onProgress = onProgress,
+                        onEnded = onEnded,
+                        onReady = { playerReady = true },
+                        onPlayingChanged = { playing -> isPlaying = playing },
+                        onError = {
+                            // El stream murió o el CDN rechazó: se cae al
+                            // WebView con el mismo servidor.
+                            streamUrl = null
+                            streamFailed = true
+                            playerReady = false
+                        },
+                    )
+
+                    streamFailed -> WebPlayer(
+                        url = current.selected.url,
+                        controller = controller,
+                        onProgress = onProgress,
+                        onEnded = onEnded,
                         onReady = { playerReady = true },
                     )
+
+                    else -> LoadingState(message = "Preparando reproductor…")
+                }
 
                 if (overlayVisible) {
                         Overlay(

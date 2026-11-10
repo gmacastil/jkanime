@@ -85,6 +85,17 @@ class JkanimeRepository(
         }
 
     /**
+     * URL directa de reproducción (m3u8) de un embed de jkplayer, o `null`
+     * si el embed no la expone (fallback al WebView).
+     *
+     * Sin caché a propósito: el CDN firma el manifest con un token con
+     * caducidad (`&e=<unix>`), así que una URL guardada puede morir entre
+     * sesiones. La resolución cuesta ~1 petición al abrir el capítulo.
+     */
+    suspend fun stream(embedUrl: String, referer: String): String? =
+        dataSource.loadStream(embedUrl, referer = referer)
+
+    /**
      * Buscador del sitio. La clave de caché va en minúsculas para que
      * "Naruto" y "naruto" no gasten dos peticiones (el sitio es
      * case-insensitive).
