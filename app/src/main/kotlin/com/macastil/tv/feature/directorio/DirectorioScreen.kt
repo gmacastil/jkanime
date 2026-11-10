@@ -171,10 +171,8 @@ fun DirectorioScreen(
     }
 }
 
-/** Panel lateral angosto: solo orden y género, sin combos — las opciones
- *  quedan visibles y el panel entero hace scroll vertical. */
-private val VISIBLE_FILTERS = setOf("filtro", "genero")
-
+/** Panel lateral con todos los filtros del sitio; las opciones quedan visibles
+ * y el panel entero hace scroll vertical. */
 @Composable
 private fun FiltersPanel(
     filters: List<DirectorioFilter>,
@@ -182,7 +180,9 @@ private fun FiltersPanel(
     onFilterChange: (String, String) -> Unit,
     onClearFilters: () -> Unit,
 ) {
-    val visibleFilters = filters.filter { it.name in VISIBLE_FILTERS }
+    // El formulario real publica diez filtros. El panel tiene scroll vertical,
+    // por lo que todos deben permanecer disponibles en la TV.
+    val visibleFilters = filters
 
     if (visibleFilters.isEmpty()) {
         LoadingState(message = stringResource(R.string.directorio_loading_filters))

@@ -125,7 +125,8 @@ class JkanimeRepository(
         page: Int = 1,
         force: Boolean = false,
     ): DirectorioPage = mutex.withLock {
-        val key = filters.filterValues { it.isNotBlank() }
+        val normalizedFilters = filters.filterValues { it.isNotBlank() }
+        val key = normalizedFilters
             .toSortedMap()
             .entries
             .joinToString("&") { "${'$'}{it.key}=${'$'}{it.value}" } + "#p$page"
@@ -134,7 +135,7 @@ class JkanimeRepository(
         if (!force && cached != null && isFresh(cached.storedAt, DIRECTORIO_TTL_MS)) {
             return@withLock cached.value
         }
-        val loaded = runCatching { dataSource.loadDirectorio(filters, page) }
+        val loaded = runCatching { dataSource.loadDirectorio(normalizedFilters, page) }
             .getOrElse { error -> cached?.value ?: throw error }
         directorioCache[key] = Entry(loaded, now())
         loaded

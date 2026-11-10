@@ -48,9 +48,9 @@ class DirectorioViewModel(
     }
 
     fun setFilter(name: String, value: String) {
-        _filters.value = _filters.value
-            .filterValues { it.isNotBlank() }
-            .plus(name to value)
+        _filters.value = _filters.value.toMutableMap().apply {
+            if (value.isBlank()) remove(name) else put(name, value)
+        }
         loadPage(1) // cualquier cambio de filtro reinicia la paginación
     }
 
