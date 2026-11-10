@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-    namespace = "net.jkanime.tv"
+    namespace = "com.macastil.tv"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "net.jkanime.tv"
+        applicationId = "com.macastil.tv"
         minSdk = 23
         targetSdk = 36
         versionCode = providers.gradleProperty("VERSION_CODE")

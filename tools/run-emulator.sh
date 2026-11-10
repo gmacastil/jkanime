@@ -16,8 +16,8 @@ TAG=android-tv
 ABI=x86_64
 IMAGE="system-images;android-$API;$TAG;$ABI"
 DEVICE="tv_1080p"
-PKG="net.jkanime.tv"
-ACTIVITY="net.jkanime.tv/.MainActivity"
+PKG="com.macastil.tv"
+ACTIVITY="com.macastil.tv/.MainActivity"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
 

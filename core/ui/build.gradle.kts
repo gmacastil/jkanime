@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "net.jkanime.tv.ui"
+    namespace = "com.macastil.tv.ui"
     compileSdk = 36
 
     defaultConfig {
