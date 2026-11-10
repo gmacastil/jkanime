@@ -79,6 +79,7 @@ import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.List
@@ -129,13 +130,6 @@ fun DirectorioScreen(
                 color = JkOrange,
             )
             Spacer(modifier = Modifier.weight(1f))
-            if (selectedFilters.any { it.value.isNotBlank() }) {
-                TvActionButton(
-                    text = stringResource(R.string.directorio_clear_filters),
-                    primary = false,
-                    onClick = { viewModel.clearFilters() },
-                )
-            }
         }
 
         // fillMaxWidth().weight(1f) en vez de fillMaxSize(): si la fila pide
@@ -146,6 +140,7 @@ fun DirectorioScreen(
                 filters = availableFilters,
                 selected = selectedFilters,
                 onFilterChange = { name, value -> viewModel.setFilter(name, value) },
+                onClearFilters = viewModel::clearFilters,
             )
 
             // Grilla de resultados
@@ -185,6 +180,7 @@ private fun FiltersPanel(
     filters: List<DirectorioFilter>,
     selected: Map<String, String>,
     onFilterChange: (String, String) -> Unit,
+    onClearFilters: () -> Unit,
 ) {
     val visibleFilters = filters.filter { it.name in VISIBLE_FILTERS }
 
@@ -216,12 +212,26 @@ private fun FiltersPanel(
                 .padding(horizontal = 12.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = stringResource(R.string.directorio_filters_title),
-                style = MaterialTheme.typography.labelSmall,
-                color = JkTextSecondary,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.directorio_filters_title),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = JkTextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                if (selected.any { it.value.isNotBlank() }) {
+                    TvIconButton(
+                        icon = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.directorio_clear_filters),
+                        size = 32.dp,
+                        iconSize = 17.dp,
+                        onClick = onClearFilters,
+                    )
+                }
+            }
 
             visibleFilters.forEach { filter ->
                 Text(
@@ -542,9 +552,9 @@ private fun JumpToPageDialog(
                 ),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.directorio_go_to_page),
@@ -564,8 +574,8 @@ private fun JumpToPageDialog(
                     // Campo de solo lectura: el valor entra por el teclado.
                     Box(
                         modifier = Modifier
-                            .width(180.dp)
-                            .height(58.dp)
+                            .width(140.dp)
+                            .height(46.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(JkSurfaceHigh)
                             .border(1.dp, JkSurfaceHigh, RoundedCornerShape(12.dp)),
@@ -573,7 +583,7 @@ private fun JumpToPageDialog(
                     ) {
                         Text(
                             text = digits.ifEmpty { "—" },
-                            style = MaterialTheme.typography.displaySmall,
+                         style = MaterialTheme.typography.titleLarge,
                             color = if (digits.isEmpty()) JkTextSecondary else JkTextPrimary,
                         )
                     }
@@ -585,18 +595,21 @@ private fun JumpToPageDialog(
                             if (next.length <= 4 && next.toIntOrNull()!! <= lastPage) digits = next
                         },
                         onBackspace = { digits = digits.dropLast(1) },
+                        compact = true,
                         focusRequester = padFocus,
                     )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TvActionButton(
                             text = stringResource(R.string.common_cancel),
                             primary = false,
+                            compact = true,
                             onClick = onDismiss,
                         )
                         TvActionButton(
                             text = stringResource(R.string.common_go),
                             primary = true,
+                            compact = true,
                             enabled = digits.isNotEmpty(),
                             onClick = { onGo(digits.toInt().coerceIn(1, lastPage)) },
                         )

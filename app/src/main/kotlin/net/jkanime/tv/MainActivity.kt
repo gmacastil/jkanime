@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -129,6 +130,8 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+
+                    VersionLabel(modifier = Modifier.align(Alignment.BottomEnd))
                 }
             }
         }
@@ -142,6 +145,18 @@ private fun SplashScreen() {
         contentDescription = stringResource(R.string.home_brand_cd),
         contentScale = ContentScale.Crop,
         modifier = Modifier.fillMaxSize(),
+    )
+}
+
+/** Versión visible permanentemente en la esquina inferior derecha. */
+@Composable
+private fun VersionLabel(modifier: Modifier = Modifier) {
+    Text(
+        text = stringResource(R.string.update_version_label, BuildConfig.VERSION_NAME),
+        color = Color.White.copy(alpha = 0.72f),
+        style = MaterialTheme.typography.labelSmall,
+        modifier = modifier
+            .padding(end = 18.dp, bottom = 14.dp),
     )
 }
 
@@ -159,7 +174,7 @@ private fun UpdatePrompt(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f)),
+            .background(Color.Black.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
