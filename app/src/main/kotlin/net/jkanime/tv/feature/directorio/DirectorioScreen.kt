@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -38,6 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -268,6 +274,19 @@ private fun FilterOptionRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(background)
+            // `clickable` no siempre recibe CENTER de forma consistente en
+            // una columna vertical con scroll en Compose for TV. Hacemos la
+            // fila explícitamente focusable y capturamos CENTER antes del
+            // gestor de texto/scroll.
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionCenter) {
+                    onSelect()
+                    true
+                } else {
+                    false
+                }
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
