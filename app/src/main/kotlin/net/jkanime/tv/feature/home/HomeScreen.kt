@@ -83,6 +83,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import net.jkanime.tv.Graph
 import net.jkanime.tv.R
+import net.jkanime.tv.BuildConfig
 import net.jkanime.tv.data.local.FavoriteEntity
 import net.jkanime.tv.data.sync.SyncEngine
 import net.jkanime.tv.data.sync.SyncResult
@@ -692,6 +693,16 @@ private fun SideDrawer(
             icon = Icons.Filled.Star,
             selected = showFavorites,
             onClick = onFavorites,
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = stringResource(R.string.update_version_label, BuildConfig.VERSION_NAME),
+            style = MaterialTheme.typography.labelSmall,
+            color = JkTextSecondary.copy(alpha = 0.7f),
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(end = 20.dp, top = 12.dp),
         )
     }
 }
