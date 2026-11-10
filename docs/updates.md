@@ -43,6 +43,8 @@ misma clave. Configurar en GitHub Actions estos secretos:
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
+- `JK_SUPABASE_URL`
+- `JK_SUPABASE_ANON_KEY` (publishable, nunca `sb_secret_...`)
 
 Para generar una clave permanente una sola vez (PKCS12, el formato por
 defecto: exige que la contraseña de la clave sea **la misma** que la del

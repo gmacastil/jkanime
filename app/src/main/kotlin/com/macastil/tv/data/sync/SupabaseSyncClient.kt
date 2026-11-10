@@ -56,7 +56,8 @@ class SupabaseSyncClient(
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
     val isConfigured: Boolean
-        get() = baseUrl.isNotBlank() && anonKey.isNotBlank()
+        get() = (baseUrl.startsWith("https://") || baseUrl.startsWith("http://")) &&
+            anonKey.isNotBlank()
 
     suspend fun createSpace(): SyncCredentials = withContext(Dispatchers.IO) {
         val response = rpc("sync_create", JSONObject())
@@ -153,6 +154,10 @@ class SupabaseSyncClient(
     }
 
     private fun rpc(function: String, body: JSONObject): JSONObject {
+        if (!isConfigured) {
+            throw SyncException(appContext.getString(R.string.sync_not_configured))
+        }
+
         val request = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/rest/v1/rpc/$function")
             .addHeader("apikey", anonKey)

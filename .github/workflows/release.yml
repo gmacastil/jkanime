@@ -42,7 +42,17 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          JK_SUPABASE_URL: ${{ secrets.JK_SUPABASE_URL }}
+          JK_SUPABASE_ANON_KEY: ${{ secrets.JK_SUPABASE_ANON_KEY }}
         run: |
+          test -n "$JK_SUPABASE_URL" || {
+            echo "Falta el secreto JK_SUPABASE_URL"
+            exit 1
+          }
+          test -n "$JK_SUPABASE_ANON_KEY" || {
+            echo "Falta el secreto JK_SUPABASE_ANON_KEY"
+            exit 1
+          }
           VERSION_NAME="${GITHUB_REF_NAME#v}"
           # versionCode = 100 + nº de commits: siempre crece con el repo y
           # supera a los builds locales de sideload (GITHUB_RUN_NUMBER se
@@ -50,7 +60,9 @@ jobs:
           VERSION_CODE=$((100 + $(git rev-list --count HEAD)))
           ./gradlew :app:assembleRelease \
             -PVERSION_NAME="$VERSION_NAME" \
-            -PVERSION_CODE="$VERSION_CODE"
+            -PVERSION_CODE="$VERSION_CODE" \
+            -PJK_SUPABASE_URL="$JK_SUPABASE_URL" \
+            -PJK_SUPABASE_ANON_KEY="$JK_SUPABASE_ANON_KEY"
 
       - name: Publicar GitHub Release
         env:
