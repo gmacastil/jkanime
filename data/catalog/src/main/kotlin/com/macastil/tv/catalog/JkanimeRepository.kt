@@ -129,7 +129,7 @@ class JkanimeRepository(
         val key = normalizedFilters
             .toSortedMap()
             .entries
-            .joinToString("&") { "${'$'}{it.key}=${'$'}{it.value}" } + "#p$page"
+            .joinToString("&") { "${it.key}=${it.value}" } + "#p$page"
 
         val cached = directorioCache[key]
         if (!force && cached != null && isFresh(cached.storedAt, DIRECTORIO_TTL_MS)) {
