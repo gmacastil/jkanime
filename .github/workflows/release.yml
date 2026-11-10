@@ -53,7 +53,12 @@ jobs:
             echo "Falta el secreto JK_SUPABASE_ANON_KEY"
             exit 1
           }
-          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          VERSION_NAME="$(awk -F= '$1 == "VERSION_NAME" { print $2; exit }' gradle.properties | tr -d '[:space:]')"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          test "$VERSION_NAME" = "$TAG_VERSION" || {
+            echo "El tag $TAG_VERSION no coincide con VERSION_NAME=$VERSION_NAME en gradle.properties"
+            exit 1
+          }
           # versionCode = 100 + nº de commits: siempre crece con el repo y
           # supera a los builds locales de sideload (GITHUB_RUN_NUMBER se
           # reinicia por repo y podía quedar por debajo de una TV ya actualizada).

@@ -55,7 +55,11 @@ export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
 [ -d "$JAVA_HOME" ] || { echo "✗ JAVA_HOME inválido: $JAVA_HOME" >&2; exit 1; }
 
 if [ -z "$VERSION_NAME" ]; then
-  VERSION_NAME="0.1.0"
+  VERSION_NAME="$(awk -F= '$1 == "VERSION_NAME" { print $2; exit }' gradle.properties | tr -d '[:space:]')"
+fi
+if [ -z "$VERSION_NAME" ]; then
+  echo "✗ VERSION_NAME no está definido en gradle.properties" >&2
+  exit 2
 fi
 if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
   echo "✗ versión inválida: $VERSION_NAME (usa X.Y o X.Y.Z)" >&2

@@ -21,7 +21,6 @@ android {
             .get()
             .toInt()
         versionName = providers.gradleProperty("VERSION_NAME")
-            .orElse("1.1")
             .get()
 
         // Config del backend de sync. Se lee de gradle.properties o, mejor,
