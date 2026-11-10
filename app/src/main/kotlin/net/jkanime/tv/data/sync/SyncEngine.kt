@@ -122,6 +122,22 @@ class SyncEngine(
             )
         }.getOrElse { SyncResult.Failure(it.message ?: it::class.java.simpleName) }
     }
+
+    /**
+     * Refresca los episodios emitidos de todos los favoritos del perfil
+     * activo. Solo se ejecuta si hay credenciales de sync configuradas.
+     * No bloquea la UI y se ignora cualquier error (fail-open).
+     */
+    suspend fun syncFavoritesIfConfigured() {
+        val credentials = currentCredentials() ?: return
+        if (!client.isConfigured) return
+
+        runCatching {
+            val remote = client.pull(credentials)
+            // Solo mergeamos favoritos para actualizar last_aired_episode/total/status
+            remote.favorites.forEach { library.mergeFavorite(it) }
+        }.onFailure { /* fail-open: si falla, la app sigue con datos locales */ }
+    }
 }
 
 sealed interface SyncResult {

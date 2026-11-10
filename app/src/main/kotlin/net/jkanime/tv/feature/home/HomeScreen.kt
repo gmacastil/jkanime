@@ -1342,6 +1342,9 @@ private fun CardsGrid(
 /**
  * Favoritos en tarjetas. El badge "N pend." sale de comparar el último
  * episodio emitido (refrescado por el sync de F5) con el último visto.
+ *
+ * Orden: 1) con episodios pendientes (+N), 2) "Al día" (pending == 0),
+ * 3) sin datos de emisión (fallback a último visto).
  */
 @Composable
 private fun FavoritesGrid(
@@ -1354,8 +1357,14 @@ private fun FavoritesGrid(
         return
     }
 
+    // Orden: pendientes > 0 primero, luego "Al día", luego sin datos.
+    val sorted = favorites.sortedWith(
+        compareByDescending<FavoriteEntity> { it.pendingEpisodes ?: -1 }
+            .thenBy { it.title.lowercase() },
+    )
+
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(favorites.first().slug, focusNonce) {
+    LaunchedEffect(sorted.first().slug, focusNonce) {
         repeat(10) {
             withFrameNanos { }
             if (firstFocus.requestFocus()) return@LaunchedEffect

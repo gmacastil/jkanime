@@ -3,13 +3,18 @@ package net.jkanime.tv
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,27 +23,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
-import androidx.tv.material3.SurfaceDefaults
-import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import net.jkanime.tv.Graph
 import net.jkanime.tv.nav.JkNavHost
 import net.jkanime.tv.feature.update.AppUpdate
 import net.jkanime.tv.feature.update.UpdateManager
 import net.jkanime.tv.ui.component.TvActionButton
 import net.jkanime.tv.ui.theme.JkBackground
+import net.jkanime.tv.ui.theme.JkGreen
 import net.jkanime.tv.ui.theme.JkOrange
 import net.jkanime.tv.ui.theme.JkSurface
 import net.jkanime.tv.ui.theme.JkTextPrimary
 import net.jkanime.tv.ui.theme.JkTextSecondary
 import net.jkanime.tv.data.local.AppLocale
 import net.jkanime.tv.ui.theme.JkTheme
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
+import androidx.tv.material3.Text
 
 class MainActivity : ComponentActivity() {
 
@@ -55,16 +65,37 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             JkTheme {
+                var showSplash by remember { mutableStateOf(true) }
                 var update by remember { mutableStateOf<AppUpdate?>(null) }
                 var checking by remember { mutableStateOf(true) }
                 var installing by remember { mutableStateOf(false) }
                 var updateError by remember { mutableStateOf<String?>(null) }
                 val scope = rememberCoroutineScope()
 
+                // Splash: 2 segundos con la imagen de la app; luego pasa a la UI
+                // normal (JkNavHost). El delay es mínimo y permite que Room
+                // termine de abrir la DB antes de la primera composición.
+                LaunchedEffect(Unit) {
+                    delay(2_000)
+                    showSplash = false
+                }
+
+                // Comprobación de actualizaciones en paralelo (tras el splash).
                 LaunchedEffect(Unit) {
                     delay(3_000)
                     update = UpdateManager.check(this@MainActivity)
                     checking = false
+                }
+
+                // Refresh de favoritos (aired episodes) en background, solo si
+                // hay perfil activo y sync configurado. No bloquea la UI.
+                LaunchedEffect(Unit) {
+                    val sync = Graph.sync(this@MainActivity)
+                    scope.launch {
+                        // Pequeño retardo para que la navegación y Room estén listos.
+                        delay(1_500)
+                        runCatching { sync.syncFavoritesIfConfigured() }
+                    }
                 }
 
                 Box(
@@ -72,31 +103,33 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(JkBackground),
                 ) {
-                    JkNavHost()
+                    if (showSplash) {
+                        SplashScreen()
+                    } else {
+                        JkNavHost()
 
-                    if (!checking && update != null) {
-                        UpdatePrompt(
-                            update = update!!,
-                            installing = installing,
-                            error = updateError,
-                            onInstall = {
-                                val candidate = update ?: return@UpdatePrompt
-                                installing = true
-                                updateError = null
-                                scope.launch {
-                                    runCatching {
-                                        UpdateManager.downloadAndInstall(this@MainActivity, candidate)
-                                    }.onFailure {
-                                        installing = false
-                                        // `getString` directo: este lambda se
-                                        // ejecuta al pulsar, fuera de composición.
-                                        updateError = it.message
-                                            ?: getString(R.string.update_start_error)
+                        if (!checking && update != null) {
+                            UpdatePrompt(
+                                update = update!!,
+                                installing = installing,
+                                error = updateError,
+                                onInstall = {
+                                    val candidate = update ?: return@UpdatePrompt
+                                    installing = true
+                                    updateError = null
+                                    scope.launch {
+                                        runCatching {
+                                            UpdateManager.downloadAndInstall(this@MainActivity, candidate)
+                                        }.onFailure {
+                                            installing = false
+                                            updateError = it.message
+                                                ?: getString(R.string.update_start_error)
+                                        }
                                     }
-                                }
-                            },
-                            onDismiss = { update = null },
-                        )
+                                },
+                                onDismiss = { update = null },
+                            )
+                        }
                     }
                 }
             }
@@ -104,7 +137,26 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
+private fun SplashScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(JkBackground),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.caiman_home),
+            contentDescription = stringResource(R.string.home_brand_cd),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(180.dp)
+                .clip(RoundedCornerShape(20.dp)),
+        )
+    }
+}
+
+@Composable
 private fun UpdatePrompt(
     update: AppUpdate,
     installing: Boolean,

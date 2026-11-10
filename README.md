@@ -324,12 +324,7 @@ ProfileGateScreen ──perfil──▶ HomeScreen ──card──▶ DetailScr
 
 ## Pendientes
 
-1. **Rotar la clave `sb_secret_…` vieja en el dashboard de Supabase.** Viajó
-   compilada en APKs anteriores al usarse por error como `JK_SUPABASE_ANON_KEY`.
-   Dashboard → Project Settings → API keys → Legacy API keys → Rotate. La app ya
-   usa la clave *publishable* correcta en `local.properties`; esto es solo
-   higiene de seguridad en el proyecto Supabase (acción manual, no de código).
-2. **Probar el emparejamiento con un segundo dispositivo físico real.** El
+1. **Probar el emparejamiento con un segundo dispositivo físico real.** El
    flujo completo (generar código en un dispositivo → unirse desde otro → sync)
    está verificado en emulador y con `curl` directo contra las RPC de Supabase,
    pero falta la validación end-to-end con dos TVs/dispositivos reales.
