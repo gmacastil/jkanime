@@ -437,7 +437,9 @@ fun TvRecoveryPad(
         listOf("J", "K", "L", "M", "N", "P", "Q", "R"),
         listOf("S", "T", "U", "V", "W", "X", "Y", "Z"),
         listOf("2", "3", "4", "5", "6", "7", "8", "9"),
-        listOf("⌫", "", "", "", "", "", "", "✓"),
+        // 0/1 se conservan para poder introducir claves numéricas creadas por
+        // la primera versión de esta función; las nuevas no los generan.
+        listOf("0", "1", "⌫", "", "", "", "", "✓"),
     )
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         rows.forEachIndexed { rowIndex, row ->
