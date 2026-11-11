@@ -1253,13 +1253,13 @@ private fun AvatarDrawerMain(
         )
     }
 
-    AvatarDrawerSection(stringResource(R.string.home_drawer_group_sync))
     if (hasSpace) {
         DrawerItem(
             label = stringResource(R.string.home_drawer_sync_now),
             icon = Icons.Filled.Refresh,
             selected = false,
             enabled = !busy,
+            compact = true,
             focusRequester = focusRequester,
             onClick = onSyncNow,
         )
@@ -1268,6 +1268,7 @@ private fun AvatarDrawerMain(
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,
+            compact = true,
             onClick = onGeneratePairing,
         )
         DrawerItem(
@@ -1275,6 +1276,7 @@ private fun AvatarDrawerMain(
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,
+            compact = true,
             onClick = onGenerateRecovery,
         )
         DrawerItem(
@@ -1282,6 +1284,7 @@ private fun AvatarDrawerMain(
             icon = Icons.Filled.Clear,
             selected = false,
             enabled = !busy,
+            compact = true,
             onClick = onUnlink,
         )
     } else {
@@ -1290,6 +1293,7 @@ private fun AvatarDrawerMain(
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,
+            compact = true,
             focusRequester = focusRequester,
             onClick = onCreateSpace,
         )
@@ -1298,6 +1302,7 @@ private fun AvatarDrawerMain(
             icon = Icons.Filled.Edit,
             selected = false,
             enabled = !busy,
+            compact = true,
             onClick = onJoinCode,
         )
         DrawerItem(
@@ -1305,27 +1310,28 @@ private fun AvatarDrawerMain(
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,
+            compact = true,
             onClick = onRecovery,
         )
     }
 
     AvatarDrawerDivider()
-    AvatarDrawerSection(stringResource(R.string.home_drawer_group_profile))
     DrawerItem(
         label = stringResource(R.string.home_drawer_change_profile),
         icon = Icons.Filled.AccountBox,
         selected = false,
         enabled = !busy,
+        compact = true,
         onClick = onProfileSwitch,
     )
 
     AvatarDrawerDivider()
-    AvatarDrawerSection(stringResource(R.string.lang_section))
     DrawerItem(
         label = stringResource(R.string.lang_title),
         icon = Icons.Filled.Settings,
         selected = false,
         enabled = !busy,
+        compact = true,
         onClick = onLanguage,
     )
 }
@@ -1377,6 +1383,7 @@ private fun DrawerItem(
     trailingIcon: ImageVector? = null,
     focusRequester: FocusRequester? = null,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -1415,7 +1422,7 @@ private fun DrawerItem(
                 enabled = enabled,
                 onClick = onClick,
             )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
@@ -1429,7 +1436,11 @@ private fun DrawerItem(
         }
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
+            style = if (compact) {
+                MaterialTheme.typography.bodyMedium
+            } else {
+                MaterialTheme.typography.labelLarge
+            },
             color = contentColor,
             modifier = Modifier.weight(1f),
         )
