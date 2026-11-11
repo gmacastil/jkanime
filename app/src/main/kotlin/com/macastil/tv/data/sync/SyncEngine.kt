@@ -74,12 +74,28 @@ class SyncEngine(
         return client.newPairingCode(credentials)
     }
 
+    suspend fun createRecoveryKey(): RecoveryKey {
+        val credentials = currentCredentials()
+            ?: throw IllegalStateException(appContext.getString(R.string.sync_device_not_linked))
+        return client.createRecoveryKey(credentials)
+    }
+
     /**
      * Une este dispositivo a un espacio existente usando solo el código
      * temporal: el token lo entrega el servidor, nunca se teclea.
      */
     suspend fun joinSpace(pairingCode: String) {
         val credentials = client.joinWithCode(pairingCode)
+        val profile = profiles.activeProfile()
+        if (profile != null) {
+            profiles.setSpace(profile.id, credentials.code, credentials.token)
+        } else {
+            store.credentials = credentials
+        }
+    }
+
+    suspend fun recoverSpace(recoveryKey: String) {
+        val credentials = client.recoverWithKey(recoveryKey)
         val profile = profiles.activeProfile()
         if (profile != null) {
             profiles.setSpace(profile.id, credentials.code, credentials.token)

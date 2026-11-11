@@ -44,6 +44,7 @@
     <!-- Sincronización multi-dispositivo (compartido: Home + perfiles) -->
     <string name="sync_create_space">Crear espacio de sync</string>
     <string name="sync_have_pairing_code">Tengo un código de vinculación</string>
+    <string name="sync_have_recovery_key">Tengo una clave de recuperación</string>
     <string name="sync_link_device">Vincular dispositivo</string>
     <string name="sync_pairing_title">CÓDIGO TEMPORAL DE VINCULACIÓN</string>
     <string name="sync_code_title">CÓDIGO DE SINCRONIZACIÓN</string>
@@ -54,7 +55,10 @@
     <string name="sync_device_linked">Dispositivo vinculado</string>
     <string name="sync_link_failed">No se pudo vincular: %1$s</string>
     <string name="sync_space_created">Espacio creado: %1$s</string>
+    <string name="sync_space_created_with_recovery">Espacio creado: %1$s. Guarda la clave de recuperación: %2$s</string>
     <string name="sync_pairing_created">Código para vincular (15 min): %1$s</string>
+    <string name="sync_recovery_title">CLAVE DE RECUPERACIÓN (16 DÍGITOS)</string>
+    <string name="sync_recovery_created">Guarda esta clave: %1$s</string>
     <string name="sync_result">Sincronizado: %1$d favoritos, %2$d progresos</string>
     <string name="sync_no_space">No hay espacio vinculado</string>
     <string name="sync_not_configured">Backend sin configurar</string>
@@ -62,6 +66,7 @@
     <string name="sync_device_not_linked">Este dispositivo no está vinculado</string>
     <string name="sync_err_schema">Falta ejecutar docs/supabase/schema.sql en Supabase (funcion ausente)</string>
     <string name="sync_err_pairing">Código inválido o vencido. 07951576 es el código del espacio; genera un código temporal desde el otro dispositivo.</string>
+    <string name="sync_err_recovery">Clave de recuperación inválida</string>
     <string name="sync_err_http">HTTP %1$s: %2$s</string>
 
     <!-- Home -->
@@ -78,6 +83,7 @@
     <string name="home_drawer_group_profile">PERFIL</string>
     <string name="home_drawer_sync_now">Sincronizar ahora</string>
     <string name="home_drawer_generate_pairing">Generar código de vinculación</string>
+    <string name="home_drawer_generate_recovery">Generar clave de recuperación</string>
     <string name="home_drawer_unlink">Desvincular</string>
     <string name="home_drawer_change_profile">Cambiar perfil</string>
     <string name="home_close_menu_cd">Cerrar menú</string>
@@ -148,6 +154,7 @@
     <string name="profiles_sync_note">Tus favoritos y progreso se compartirán con otros dispositivos.</string>
     <string name="profiles_sync_creating">Creando…</string>
     <string name="profiles_sync_save_code">Guarda este código: %1$s</string>
+    <string name="profiles_sync_save_code_with_recovery">Código de espacio: %1$s. Guarda también la clave de recuperación: %2$s</string>
     <string name="profiles_sync_linked_ok">Dispositivo vinculado al espacio</string>
     <string name="profiles_delete">Eliminar perfil</string>
     <string name="profiles_delete_message">Se borrarán los favoritos y el progreso de \"%1$s\" en este dispositivo. El espacio de sincronización no se toca.</string>

@@ -53,6 +53,22 @@ Favoritos y progreso compartidos entre todas tus TV y tu celular.
 > inviable con un D-pad. El código de emparejamiento es lo único que se
 > escribe, y caduca solo.
 
+## Recuperar sin el dispositivo anterior
+
+Al crear un espacio, la app muestra además una **clave de recuperación de 16
+dígitos**. Debe guardarse fuera de la TV (por ejemplo, en un gestor de
+contraseñas o un correo propio). No se muestra de nuevo automáticamente.
+
+En un dispositivo nuevo se elige **Tengo una clave de recuperación** y se
+introduce con el teclado numérico. El servidor valida el hash bcrypt de la
+clave y entrega un token nuevo para ese dispositivo; no hace falta tener la
+TV anterior. Desde el menú del avatar se puede generar/rotar la clave si se
+dispone de un dispositivo ya vinculado.
+
+La clave de recuperación no es el código del espacio ni el código temporal de
+8 dígitos. La clave es reutilizable hasta que se rote; al rotarla, la anterior
+deja de funcionar. El servidor nunca almacena la clave plana.
+
 ## Cómo funciona el merge
 
 - **Pull → merge local → push.** Primero se trae lo remoto y se aplica a Room

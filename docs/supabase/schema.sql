@@ -12,6 +12,11 @@
 --
 -- Ejecutar en el SQL Editor de Supabase.
 
+-- bcrypt para las claves de recuperación. En Supabase la extensión se expone
+-- normalmente bajo `extensions`; las RPC la invocan con nombre cualificado.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+
 -- Sin extensiones: se usa gen_random_uuid() (nativo desde Postgres 13) en vez
 -- de pgcrypto.gen_random_bytes(), porque en Supabase pgcrypto vive en el
 -- schema `extensions` y estas funciones corren con search_path = public.
@@ -24,8 +29,16 @@ create table if not exists sync_spaces (
     id         uuid primary key default gen_random_uuid(),
     code       text unique not null,
     token      text not null,
+    -- Hash bcrypt de una clave numérica de recuperación de 16 dígitos.
+    -- La clave plana solo se devuelve al cliente al crearla/rotarla.
+    recovery_hash text,
+    recovery_created_at timestamptz,
     created_at timestamptz not null default now()
 );
+
+-- Migración segura para proyectos que ya ejecutaron una versión anterior.
+alter table sync_spaces add column if not exists recovery_hash text;
+alter table sync_spaces add column if not exists recovery_created_at timestamptz;
 
 create table if not exists favorites (
     space_id             uuid not null references sync_spaces(id) on delete cascade,
@@ -96,6 +109,64 @@ begin
     insert into sync_spaces (code, token) values (v_code, v_token)
     returning id into v_id;
 
+    return jsonb_build_object('code', v_code, 'token', v_token);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- RPC: crear/rotar clave de recuperación
+-- ---------------------------------------------------------------------------
+create or replace function sync_set_recovery(p_code text, p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_space uuid;
+    v_key text;
+begin
+    select id into v_space from sync_spaces
+    where code = p_code and token = p_token;
+    if v_space is null then raise exception 'invalid_credentials'; end if;
+
+    -- Se extraen dígitos de UUIDs criptográficamente aleatorios. 16 dígitos
+    -- son cómodos en el teclado TV y suficientemente resistentes con bcrypt
+    -- y rate limiting del gateway.
+    loop
+        v_key := regexp_replace(
+            gen_random_uuid()::text || gen_random_uuid()::text,
+            '[^0-9]', '', 'g'
+        );
+        exit when length(v_key) >= 16;
+    end loop;
+    v_key := substr(v_key, 1, 16);
+    update sync_spaces
+       set recovery_hash = extensions.crypt(v_key, extensions.gen_salt('bf', 12)),
+           recovery_created_at = now()
+     where id = v_space;
+    return jsonb_build_object('recovery_key', v_key);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- RPC: recuperar espacio con clave, sin dispositivo anterior
+-- ---------------------------------------------------------------------------
+create or replace function sync_recover(p_recovery_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_code text;
+    v_token text;
+begin
+    select code, token into v_code, v_token
+    from sync_spaces
+    where recovery_hash is not null
+      and recovery_hash = extensions.crypt(p_recovery_key, recovery_hash);
+    if v_code is null then raise exception 'invalid_recovery_key'; end if;
     return jsonb_build_object('code', v_code, 'token', v_token);
 end;
 $$;
@@ -338,5 +409,13 @@ begin
     if exists (select 1 from pg_roles where rolname = 'authenticated') then
         grant execute on function sync_new_pairing(text, text) to authenticated;
         grant execute on function sync_join(text) to authenticated;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        grant execute on function sync_set_recovery(text, text) to anon;
+        grant execute on function sync_recover(text) to anon;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        grant execute on function sync_set_recovery(text, text) to authenticated;
+        grant execute on function sync_recover(text) to authenticated;
     end if;
 end $$;

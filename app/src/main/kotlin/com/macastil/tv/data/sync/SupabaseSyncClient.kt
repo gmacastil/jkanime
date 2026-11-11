@@ -21,6 +21,9 @@ data class SyncCredentials(val code: String, val token: String)
 /** Código temporal de un solo uso para vincular otro dispositivo. */
 data class PairingCode(val code: String, val expiresAt: Long)
 
+/** Clave permanente de recuperación, mostrada solo al generarla o rotarla. */
+data class RecoveryKey(val key: String)
+
 data class RemoteSnapshot(
     val favorites: List<FavoriteEntity>,
     val progress: List<ProgressEntity>,
@@ -83,6 +86,31 @@ class SupabaseSyncClient(
             PairingCode(
                 code = response.getString("pairing_code"),
                 expiresAt = response.optLong("expires_at", 0L),
+            )
+        }
+
+    /** Genera/rota la clave permanente de recuperación del espacio. */
+    suspend fun createRecoveryKey(credentials: SyncCredentials): RecoveryKey =
+        withContext(Dispatchers.IO) {
+            val response = rpc(
+                "sync_set_recovery",
+                JSONObject()
+                    .put("p_code", credentials.code)
+                    .put("p_token", credentials.token),
+            )
+            RecoveryKey(response.getString("recovery_key"))
+        }
+
+    /** Recupera un espacio sin disponer de otro dispositivo vinculado. */
+    suspend fun recoverWithKey(recoveryKey: String): SyncCredentials =
+        withContext(Dispatchers.IO) {
+            val response = rpc(
+                "sync_recover",
+                JSONObject().put("p_recovery_key", recoveryKey.trim()),
+            )
+            SyncCredentials(
+                code = response.getString("code"),
+                token = response.getString("token"),
             )
         }
 
@@ -198,6 +226,8 @@ private fun friendlyError(context: Context, httpCode: Int, body: String): String
             context.getString(R.string.sync_err_schema)
         serverMessage.contains("invalid_pairing_code", ignoreCase = true) ->
             context.getString(R.string.sync_err_pairing)
+        serverMessage.contains("invalid_recovery_key", ignoreCase = true) ->
+            context.getString(R.string.sync_err_recovery)
         serverMessage.isNotBlank() -> serverMessage
         else -> context.getString(R.string.sync_err_http, httpCode.toString(), body.take(120))
     }

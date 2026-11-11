@@ -142,6 +142,7 @@ fun HomeScreen(
     // Modal del avatar: opciones de sync + cambiar perfil
     var showAvatarMenu by remember { mutableStateOf(false) }
     var avatarMenuSyncCode by remember { mutableStateOf("") }
+    var avatarMenuRecoveryKey by remember { mutableStateOf("") }
     var avatarMenuBusy by remember { mutableStateOf(false) }
     var avatarMenuStatus by remember { mutableStateOf<String?>(null) }
     var avatarMenuMode by remember { mutableStateOf(AvatarMenuMode.MAIN) }
@@ -351,19 +352,24 @@ fun HomeScreen(
                 profileId = activeProfile!!.id,
                 mode = avatarMenuMode,
                 syncCode = avatarMenuSyncCode,
+                recoveryKey = avatarMenuRecoveryKey,
                 busy = avatarMenuBusy,
                 status = avatarMenuStatus,
                 focusRequester = avatarMenuFocus,
                 onModeChange = { newMode ->
                     avatarMenuMode = newMode
                     // Al entrar al teclado, limpia mensajes del estado anterior.
-                    if (newMode == AvatarMenuMode.JOIN_CODE) avatarMenuStatus = null
+                    if (newMode == AvatarMenuMode.JOIN_CODE || newMode == AvatarMenuMode.RECOVERY) {
+                        avatarMenuStatus = null
+                    }
                 },
                 onCodeChange = { avatarMenuSyncCode = it },
+                onRecoveryKeyChange = { avatarMenuRecoveryKey = it },
                 onClose = {
                     showAvatarMenu = false
                     avatarMenuMode = AvatarMenuMode.MAIN
                     avatarMenuSyncCode = ""
+                    avatarMenuRecoveryKey = ""
                     avatarMenuStatus = null
                 },
                 onSyncNow = {
@@ -393,11 +399,16 @@ fun HomeScreen(
                     scope.launch {
                         avatarMenuBusy = true
                         avatarMenuStatus = null
-                        runCatching { syncEngine.createSpace() }
-                            .onSuccess { creds ->
+                        runCatching {
+                            val creds = syncEngine.createSpace()
+                            val recovery = syncEngine.createRecoveryKey()
+                            creds to recovery
+                        }
+                            .onSuccess { (creds, recovery) ->
                                 avatarMenuStatus = context.getString(
-                                    R.string.sync_space_created,
+                                    R.string.sync_space_created_with_recovery,
                                     creds.code.chunked(4).joinToString(" "),
+                                    recovery.key.chunked(4).joinToString(" "),
                                 )
                                 avatarMenuMode = AvatarMenuMode.MAIN
                             }
@@ -417,6 +428,25 @@ fun HomeScreen(
                                 avatarMenuStatus = context.getString(R.string.sync_device_linked)
                                 avatarMenuMode = AvatarMenuMode.MAIN
                                 avatarMenuSyncCode = ""
+                            }
+                            .onFailure {
+                                avatarMenuStatus = context.getString(
+                                    R.string.sync_link_failed,
+                                    it.message,
+                                )
+                            }
+                        avatarMenuBusy = false
+                    }
+                },
+                onRecoverSpace = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        runCatching { syncEngine.recoverSpace(avatarMenuRecoveryKey) }
+                            .onSuccess {
+                                avatarMenuStatus = context.getString(R.string.sync_device_linked)
+                                avatarMenuMode = AvatarMenuMode.MAIN
+                                avatarMenuRecoveryKey = ""
                             }
                             .onFailure {
                                 avatarMenuStatus = context.getString(
@@ -451,6 +481,23 @@ fun HomeScreen(
                             .onFailure {
                                 avatarMenuStatus =
                                     context.getString(R.string.common_error, it.message)
+                            }
+                        avatarMenuBusy = false
+                    }
+                },
+                onGenerateRecovery = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        runCatching { syncEngine.createRecoveryKey() }
+                            .onSuccess { key ->
+                                avatarMenuStatus = context.getString(
+                                    R.string.sync_recovery_created,
+                                    key.key.chunked(4).joinToString(" "),
+                                )
+                            }
+                            .onFailure {
+                                avatarMenuStatus = context.getString(R.string.common_error, it.message)
                             }
                         avatarMenuBusy = false
                     }
@@ -748,7 +795,8 @@ private fun SideDrawer(
 
 /** Modos del menú del avatar (sync/perfil/idioma). */
 private enum class AvatarMenuMode {
-    MAIN,       // Menú principal: sync now, link, unlink, pairing, profile switch
+    MAIN,       // Menú principal: sync now, link, unlink, pairing, recovery
+    RECOVERY,   // Introduciendo clave de recuperación de 16 dígitos
     JOIN_CODE,  // Introduciendo código de 8 dígitos para vincular
     LANGUAGE,   // Selector de idioma de la app
 }
@@ -767,17 +815,21 @@ private fun AvatarMenu(
     profileId: Int,
     mode: AvatarMenuMode,
     syncCode: String,
+    recoveryKey: String,
     busy: Boolean,
     status: String?,
     focusRequester: FocusRequester,
     onModeChange: (AvatarMenuMode) -> Unit,
     onCodeChange: (String) -> Unit,
+    onRecoveryKeyChange: (String) -> Unit,
     onClose: () -> Unit,
     onSyncNow: () -> Unit,
     onCreateSpace: () -> Unit,
     onJoinSpace: () -> Unit,
+    onRecoverSpace: () -> Unit,
     onUnlink: () -> Unit,
     onGeneratePairing: () -> Unit,
+    onGenerateRecovery: () -> Unit,
     onProfileSwitch: () -> Unit,
     hasSpace: Boolean,
     spaceCode: String,
@@ -812,6 +864,10 @@ private fun AvatarMenu(
                 AvatarMenuMode.JOIN_CODE -> {
                     onModeChange(AvatarMenuMode.MAIN)
                     onCodeChange("")
+                }
+                AvatarMenuMode.RECOVERY -> {
+                    onModeChange(AvatarMenuMode.MAIN)
+                    onRecoveryKeyChange("")
                 }
                 // En idioma, BACK vuelve al menú principal sin cerrar: el
                 // cambio de idioma recrea la activity desde la propia fila.
@@ -879,8 +935,10 @@ private fun AvatarMenu(
                             onSyncNow = onSyncNow,
                             onCreateSpace = onCreateSpace,
                             onGeneratePairing = onGeneratePairing,
+                            onGenerateRecovery = onGenerateRecovery,
                             onUnlink = onUnlink,
                             onJoinCode = { onModeChange(AvatarMenuMode.JOIN_CODE) },
+                            onRecovery = { onModeChange(AvatarMenuMode.RECOVERY) },
                             onProfileSwitch = {
                                 onClose()
                                 onProfileSwitch()
@@ -910,6 +968,32 @@ private fun AvatarMenu(
                                  busy = busy,
                                  compact = true,
                                  focusRequester = focusRequester,
+                            )
+                        }
+
+                        AvatarMenuMode.RECOVERY -> Column(
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.sync_recovery_title),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = JkTextSecondary,
+                            )
+                            Text(
+                                text = recoveryKey.padEnd(16, '·').chunked(4).joinToString("  "),
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = JkOrange,
+                            )
+                            SyncKeypad(
+                                code = recoveryKey,
+                                maxLength = 16,
+                                onDigit = { if (recoveryKey.length < 16) onRecoveryKeyChange(recoveryKey + it) },
+                                onBackspace = { onRecoveryKeyChange(recoveryKey.dropLast(1)) },
+                                onConfirm = { if (recoveryKey.length == 16) onRecoverSpace() },
+                                busy = busy,
+                                compact = true,
+                                focusRequester = focusRequester,
                             )
                         }
 
@@ -1059,8 +1143,10 @@ private fun AvatarDrawerMain(
     onSyncNow: () -> Unit,
     onCreateSpace: () -> Unit,
     onGeneratePairing: () -> Unit,
+    onGenerateRecovery: () -> Unit,
     onUnlink: () -> Unit,
     onJoinCode: () -> Unit,
+    onRecovery: () -> Unit,
     onProfileSwitch: () -> Unit,
     onLanguage: () -> Unit,
 ) {
@@ -1108,6 +1194,13 @@ private fun AvatarDrawerMain(
             onClick = onGeneratePairing,
         )
         DrawerItem(
+            label = stringResource(R.string.home_drawer_generate_recovery),
+            icon = Icons.Filled.Add,
+            selected = false,
+            enabled = !busy,
+            onClick = onGenerateRecovery,
+        )
+        DrawerItem(
             label = stringResource(R.string.home_drawer_unlink),
             icon = Icons.Filled.Clear,
             selected = false,
@@ -1129,6 +1222,13 @@ private fun AvatarDrawerMain(
             selected = false,
             enabled = !busy,
             onClick = onJoinCode,
+        )
+        DrawerItem(
+            label = stringResource(R.string.sync_have_recovery_key),
+            icon = Icons.Filled.Add,
+            selected = false,
+            enabled = !busy,
+            onClick = onRecovery,
         )
     }
 
@@ -1159,6 +1259,7 @@ private fun AvatarDrawerMain(
 @Composable
 private fun SyncKeypad(
     code: String,
+    maxLength: Int = 8,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onConfirm: () -> Unit,
@@ -1170,7 +1271,7 @@ private fun SyncKeypad(
         TvNumberPad(
             onDigit = onDigit,
             onBackspace = onBackspace,
-            onConfirm = if (code.length == 8 && !busy) onConfirm else null,
+            onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
             enabled = !busy,
             compact = compact,
             focusRequester = focusRequester,

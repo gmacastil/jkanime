@@ -40,6 +40,7 @@
     <!-- Multi-device sync (shared: Home + profiles) -->
     <string name="sync_create_space">Create sync space</string>
     <string name="sync_have_pairing_code">I have a pairing code</string>
+    <string name="sync_have_recovery_key">I have a recovery key</string>
     <string name="sync_link_device">Link device</string>
     <string name="sync_pairing_title">TEMPORARY PAIRING CODE</string>
     <string name="sync_code_title">SYNC CODE</string>
@@ -50,7 +51,10 @@
     <string name="sync_device_linked">Device linked</string>
     <string name="sync_link_failed">Couldn\'t link: %1$s</string>
     <string name="sync_space_created">Space created: %1$s</string>
+    <string name="sync_space_created_with_recovery">Space created: %1$s. Save the recovery key: %2$s</string>
     <string name="sync_pairing_created">Pairing code (15 min): %1$s</string>
+    <string name="sync_recovery_title">RECOVERY KEY (16 DIGITS)</string>
+    <string name="sync_recovery_created">Save this key: %1$s</string>
     <string name="sync_result">Synced: %1$d favorites, %2$d progress</string>
     <string name="sync_no_space">No linked space</string>
     <string name="sync_not_configured">Backend not configured</string>
@@ -58,6 +62,7 @@
     <string name="sync_device_not_linked">This device is not linked</string>
     <string name="sync_err_schema">Run docs/supabase/schema.sql in Supabase (missing function)</string>
     <string name="sync_err_pairing">Invalid or expired code. 07951576 is the space code; generate a temporary code from the other device.</string>
+    <string name="sync_err_recovery">Invalid recovery key</string>
     <string name="sync_err_http">HTTP %1$s: %2$s</string>
 
     <!-- Home -->
@@ -74,6 +79,7 @@
     <string name="home_drawer_group_profile">PROFILE</string>
     <string name="home_drawer_sync_now">Sync now</string>
     <string name="home_drawer_generate_pairing">Generate pairing code</string>
+    <string name="home_drawer_generate_recovery">Generate recovery key</string>
     <string name="home_drawer_unlink">Unlink</string>
     <string name="home_drawer_change_profile">Switch profile</string>
     <string name="home_close_menu_cd">Close menu</string>
@@ -142,6 +148,7 @@
     <string name="profiles_sync_note">Your favorites and progress will be shared with other devices.</string>
     <string name="profiles_sync_creating">Creating…</string>
     <string name="profiles_sync_save_code">Save this code: %1$s</string>
+    <string name="profiles_sync_save_code_with_recovery">Space code: %1$s. Also save the recovery key: %2$s</string>
     <string name="profiles_sync_linked_ok">Device linked to the space</string>
     <string name="profiles_delete">Delete profile</string>
     <string name="profiles_delete_message">Favorites and progress of \"%1$s\" will be deleted on this device. The sync space will not be touched.</string>

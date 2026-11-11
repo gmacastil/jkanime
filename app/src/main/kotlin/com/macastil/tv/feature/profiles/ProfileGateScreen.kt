@@ -441,13 +441,19 @@ fun ProfileGateScreen(
                         syncBusy = true
                         syncStatus = null
                         scope.launch {
-                            runCatching { Graph.sync(context).createSpace() }
-                                .onSuccess { creds ->
+                            runCatching {
+                                val sync = Graph.sync(context)
+                                val creds = sync.createSpace()
+                                val recovery = sync.createRecoveryKey()
+                                creds to recovery
+                            }
+                                .onSuccess { (creds, recovery) ->
                                     // Fuera de la composición: `context` en
                                     // vez de `stringResource`.
                                     syncStatus = context.getString(
-                                        R.string.profiles_sync_save_code,
+                                        R.string.profiles_sync_save_code_with_recovery,
                                         creds.code.chunked(4).joinToString(" "),
+                                        recovery.key.chunked(4).joinToString(" "),
                                     )
                                     syncLinked = true
                                     Graph.syncInBackground(context)
@@ -459,7 +465,7 @@ fun ProfileGateScreen(
                             syncBusy = false
                         }
                     },
-                    onJoinSpace = {
+                            onJoinSpace = {
                         syncBusy = true
                         syncStatus = null
                         scope.launch {
@@ -478,7 +484,26 @@ fun ProfileGateScreen(
                                 }
                             syncBusy = false
                         }
-                    },
+                            },
+                            onRecoverSpace = {
+                                syncBusy = true
+                                syncStatus = null
+                                scope.launch {
+                                    runCatching { Graph.sync(context).recoverSpace(syncCode) }
+                                        .onSuccess {
+                                            syncStatus = context.getString(R.string.profiles_sync_linked_ok)
+                                            syncLinked = true
+                                            Graph.syncInBackground(context)
+                                        }
+                                        .onFailure {
+                                            syncStatus = context.getString(
+                                                R.string.sync_link_failed,
+                                                it.message,
+                                            )
+                                        }
+                                    syncBusy = false
+                                }
+                            },
                     onSkip = {
                         onReady()
                     },
@@ -508,12 +533,14 @@ private fun SyncChoiceScreen(
     onCodeChange: (String) -> Unit,
     onCreateSpace: () -> Unit,
     onJoinSpace: () -> Unit,
+    onRecoverSpace: () -> Unit,
     onSkip: () -> Unit,
     onBack: () -> Unit,
 ) {
     var joining by remember { mutableStateOf(false) }
+    var recovering by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(joining, linked) {
+    LaunchedEffect(joining, recovering, linked) {
         repeat(10) { withFrameNanos {}; if (focusRequester.requestFocus()) return@LaunchedEffect }
     }
 
@@ -544,6 +571,7 @@ private fun SyncChoiceScreen(
                     text = when {
                         linked -> stringResource(R.string.profiles_sync_linked_title)
                         joining -> stringResource(R.string.profiles_sync_join_title)
+                        recovering -> stringResource(R.string.sync_recovery_title)
                         else -> stringResource(R.string.profiles_sync_title)
                     },
                     style = MaterialTheme.typography.titleMedium,
@@ -570,7 +598,7 @@ private fun SyncChoiceScreen(
                             .focusRequester(focusRequester),
                         onClick = onSkip,
                     )
-                } else if (!joining) {
+                } else if (!joining && !recovering) {
                     Text(
                         text = stringResource(R.string.profiles_sync_note),
                         style = MaterialTheme.typography.bodySmall,
@@ -602,6 +630,15 @@ private fun SyncChoiceScreen(
                             joining = true
                         },
                     )
+                    TvActionButton(
+                        text = stringResource(R.string.sync_have_recovery_key),
+                        primary = false,
+                        enabled = !syncBusy,
+                        onClick = {
+                            onCodeChange("")
+                            recovering = true
+                        },
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TvActionButton(
                             text = stringResource(R.string.common_now),
@@ -617,7 +654,8 @@ private fun SyncChoiceScreen(
                     }
                 } else {
                     Text(
-                        text = syncCode.padEnd(8, '·').chunked(4).joinToString("  "),
+                        text = syncCode.padEnd(if (recovering) 16 else 8, '·')
+                            .chunked(4).joinToString("  "),
                         style = MaterialTheme.typography.headlineSmall,
                         color = JkOrange,
                     )
@@ -633,9 +671,14 @@ private fun SyncChoiceScreen(
                     }
                     SyncKeypad(
                         code = syncCode,
-                        onDigit = { if (syncCode.length < 8) onCodeChange(syncCode + it) },
+                        maxLength = if (recovering) 16 else 8,
+                        onDigit = { if (syncCode.length < if (recovering) 16 else 8) onCodeChange(syncCode + it) },
                         onBackspace = { onCodeChange(syncCode.dropLast(1)) },
-                        onConfirm = { if (syncCode.length == 8) onJoinSpace() },
+                        onConfirm = {
+                            if (syncCode.length == if (recovering) 16 else 8) {
+                                if (recovering) onRecoverSpace() else onJoinSpace()
+                            }
+                        },
                         busy = syncBusy,
                         compact = true,
                         focusRequester = focusRequester,
@@ -663,6 +706,7 @@ private fun SyncChoiceScreen(
 @Composable
 private fun SyncKeypad(
     code: String,
+    maxLength: Int = 8,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onConfirm: () -> Unit,
@@ -674,7 +718,7 @@ private fun SyncKeypad(
         TvNumberPad(
             onDigit = onDigit,
             onBackspace = onBackspace,
-            onConfirm = if (code.length == 8 && !busy) onConfirm else null,
+            onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
             enabled = !busy,
             compact = compact,
             focusRequester = focusRequester,
