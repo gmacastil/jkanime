@@ -1138,3 +1138,146 @@ Commits `693f142` (ajustes visuales), `2c9fe25` (i18n) y `f78a85b`
   "System (default)/Español/English" → elegir Español → recreate → UI en
   español ("Menú", "Buscar anime en jkanime…", "¿Quién está viendo?") →
   gate con botón "Idioma" → diálogo con check + foco en "Español".
+
+## F19 — 15 ajustes de UX y paginado real de capítulos (1.4.0) — verificado 2026-11-11
+
+Commits `fd1aac5` (ajustes), `f7e339e` (paginado) y `08a6dcd` (`1.4.0`),
+tag `v1.4.0`. Todo con APK de release firmada instalada en `emulator-5554`
+(paquete `com.macastil.tv`).
+
+### Cambios
+
+**Reproductor**
+1. Adelantar/retroceder con ◀ ▶ muestra los controles y reinicia el
+   temporizador: se ocultan solos ~9 s después del último seek.
+2. El auto-ocultar solo actúa mientras reproduce; en pausa, con aviso de
+   servidor o con el overlay enfocado se queda visible.
+3. Fuera los botones de salto ±10 s y el de salir (se sale con `BACK`).
+4. Pausa/play de 96 dp centrado sobre el vídeo; desaparece al reanudar.
+   El icono sale del estado real del player, no de un flip manual.
+
+**Home / tarjetas**
+
+5. OK sostenido en una tarjeta añade/quita el favorito sin entrar al detalle.
+   Si la tarjeta no traía datos de emisión, `completeFavorite()` pide el
+   detalle justo después de insertar para poder calcular pendientes.
+6. Avatar y nombre del perfil pasan al menú lateral; la cabecera queda solo
+   con menú + buscador.
+7. Animación del póster con `tween(110)` y escala 1.06: la grilla deja de
+   temblar al recorrerla.
+8. Estado con color: naranja "En emisión", verde "Concluido"
+   (`airingStatusColor`), igual en Home, búsqueda, Directorio, detalle y
+   favoritos.
+9. Títulos a una línea en la grilla de búsqueda (`titleMaxLines`).
+10. Favoritos sin datos de emisión (`pendingEpisodes == null`) dejan de
+    clasificarse como "Al día": van a Pendientes y sin badge verde.
+
+**Detalle**
+
+11. OK sostenido marca/desmarca el capítulo visto conservando el foco
+    (`markWatched`/`unmarkWatched`; `bumpLastWatched` usa `MAX(...)` para no
+    bajar `last_watched_episode`).
+12. Botón "Todo visto" (`markAllWatched`).
+13. Ordenar capítulos ya no roba el foco ni salta a mitad de lista.
+14. "Cargar más" con paginado real y foco en el primer capítulo cargado.
+
+**Directorio**
+
+15. "Ir a página" pasa al final del panel de filtros y el diálogo pierde
+    Cancelar (se cierra con `BACK`, devolviendo el foco al botón).
+
+### Paginado de capítulos: la página va en la RUTA
+
+El JS de la ficha del sitio no pagina por query string:
+
+```js
+$.ajax({ type: "POST", url: 'https://jkanime.net/ajax/episodes/' + id + '/' + pag, ... })
+```
+
+Comprobado con curl (misma sesión y `_token` de `/naruto-shippuden/`, id 142):
+
+| Petición | Resultado |
+|---|---|
+| `POST /ajax/episodes/142/` | `current_page=1`, caps 1-16 |
+| `POST /ajax/episodes/142/?page=2` | `current_page=1`, caps 1-16 (**ignora**) |
+| `POST /ajax/episodes/142/?p=2` | `current_page=1`, caps 1-16 (**ignora**) |
+| `POST` con `page=2` en el body | `current_page=1`, caps 1-16 (**ignora**) |
+| `GET /ajax/episodes/142/?p=2` | HTML, no JSON |
+| `POST /ajax/episodes/142/2` | `current_page=2`, caps 17-32 |
+| `POST /ajax/episodes/142/32` | `current_page=32`, caps 497-500 |
+
+El JSON de paginación publica `next_page_url: "...?p=2"`, que es una **pista
+falsa**: el servidor arma esa URL pero solo respeta el segmento de ruta.
+`per_page` es 16 y `total` 500, así que las últimas páginas traen menos.
+
+Fix: `Jk.episodesAjaxUrl(animeId, page)` construye la ruta y hay test en
+`JkUrlTest` (`episodios pagina en la ruta no en la query`). Síntoma típico si
+se vuelve a romper: "Cargar más" repite el mismo bloque y el contador no
+avanza.
+
+### Paginado direccional
+
+- "Más nuevos primero" (por defecto) arranca en `lastPage` y **retrocede**
+  (`p-1`); "más antiguos primero" arranca en la 1 y **avanza** (`p+1`).
+- `DetailViewModel.loadEpisodes` reancla el cursor al cambiar de orden y
+  `Success.hasMore` se calcula al cargar, porque depende del sentido. Si una
+  página no aporta episodios nuevos, el paginado se cierra en vez de repetirse.
+- La carga inicial pide la página 1 solo para conocer `lastPage` y luego salta
+  a la página objetivo (con cache TTL del repositorio, sin red extra).
+
+### Foco al "cargar más"
+
+Devolver el foco al botón **no funciona**: al crecer la lista el botón se sale
+del viewport, la fila se descarta y `requestFocus()` falla en silencio — el
+D-pad acababa en el botón de atrás de la cabecera.
+
+Patrón que sí funciona (`DetailScreen`):
+
+1. Al pasar `loadingMore` a `true`, guardar `countBeforeLoad = episodes.size`.
+2. Al volver a `false`, si creció la lista, `pendingFocusIndex = countBeforeLoad`
+   (índice del primer capítulo nuevo en el orden mostrado).
+3. En un `LaunchedEffect`: `listState.scrollToItem(target)` y luego reintento
+   con `withFrameNanos {}` hasta que `rowFocusers[target]?.requestFocus()`
+   devuelva `true`. `rowFocusers` es un `mutableMapOf<Int, FocusRequester>`
+   con una entrada por índice (la inicial apunta a `firstChapterFocus`).
+
+### Trampas nuevas
+
+- **Nunca combinar `focusable()` con `clickable()` en el mismo nodo.** Son dos
+  focus targets anidados: ARRIBA/ABAJO se mueven entre el target externo y el
+  interno **sin cambiar de elemento** y el foco queda atrapado. Pasó en
+  `FilterOptionRow` del Directorio: era imposible recorrer el panel y llegar a
+  "Ir a página". Con `clickable()` basta; para capturar CENTER antes del scroll
+  se usa `onPreviewKeyEvent` sobre ese mismo nodo.
+- **Icono pausa/play invertido:** con player nativo, `NativePlayer` ya emite
+  `onPlayingChanged` de forma síncrona dentro de `pause()`/`play()`. Invertir
+  `isPlaying` a mano pisaba ese valor y el botón quedaba al revés. La lambda
+  `togglePlay` lee `controller.player?.isPlaying` **antes** del toggle y solo
+  invierte cuando no hay player nativo (WebView).
+- **Verificar reproducción/pausa en el emulador:** `screencap` del vídeo nativo
+  sí funciona (el del WebView sale negro). Dos capturas separadas ~2 s y
+  `ImageChops.difference(a, b).getbbox()`: `None` = congelado (está en pausa).
+- **Pulsación sostenida por adb:** `adb shell input keyevent --longpress
+  KEYCODE_DPAD_CENTER`.
+- **La APK de release no es debuggable:** `run-as com.macastil.tv` falla con
+  "package not debuggable", así que inyectar progreso en Room (para probar
+  verdes o el foco inicial) exige instalar el build **debug**.
+- **El panel del Directorio es largo:** desde la grilla, `LEFT` ×4-5 entra al
+  panel y el final ("Ir a página") queda a ~60-70 `DOWN`; llegar con
+  `input tap` es más rápido que recorrerlo.
+
+### Verificación en emulador
+
+- Reproductor: overlay a 1 s y 4 s tras un seek, oculto a ~9 s; pausa con
+  `content-desc="Play"` y vídeo congelado; reanudar con `Pause` y auto-ocultar.
+- Home: OK sostenido añadió "Dark Machine" a Favoritos; con los 5 capítulos
+  vistos pasó a "Up to date" con badge verde.
+- Búsqueda "one" (30 resultados): títulos a una línea y "Concluido" en verde.
+- Directorio: diálogo "Go to page" sin Cancelar, salto a la página 22 y foco
+  devuelto al botón; en el paginado ya no aparece el botón.
+- Temblor: grabación de 8 s navegando tarjetas (`screenrecord`) analizada con
+  ffmpeg + PIL; el borde de foco es estable y monótono entre fotogramas.
+- Paginado con "Naruto Shippuden" (500 caps): arranca en 497-500 y
+  "Load more" → 496…481 (20 caps) → 480…465 (36 caps). Con "Oldest first"
+  arranca en 1-16 → 17-32, y en ambos casos el foco cae en el primer capítulo
+  nuevo.
