@@ -15,8 +15,17 @@ object Jk {
     /** Episodio concreto. */
     fun episodeUrl(slug: String, episode: Int) = "$BASE_URL/$slug/$episode/"
 
-    /** Endpoint AJAX (POST + CSRF) que devuelve la lista de capítulos paginada. */
-    fun episodesAjaxUrl(animeId: Int) = "$BASE_URL/ajax/episodes/$animeId/"
+    /**
+     * Endpoint AJAX (POST + CSRF) que devuelve la lista de capítulos paginada.
+     *
+     * La página va **en la ruta**, no en la query: el propio JS del sitio
+     * pide `https://jkanime.net/ajax/episodes/{id}/{pagina}`. Con `?page=N`
+     * o `?p=N` el servidor ignora el valor y devuelve siempre la página 1
+     * (comprobado con curl: `/ajax/episodes/142/2` devuelve los capítulos
+     * 17-32 y `/ajax/episodes/142/32` los 497-500).
+     */
+    fun episodesAjaxUrl(animeId: Int, page: Int = 1) =
+        if (page > 1) "$BASE_URL/ajax/episodes/$animeId/$page" else "$BASE_URL/ajax/episodes/$animeId/"
 
     /** CDN de pósters (vertical) y de thumbnails de episodio (16:9). */
     const val CDN_POSTER = "https://cdn.jkdesa.com/assets/images/animes/image/"

@@ -155,7 +155,6 @@ private fun Content(
     val firstChapterFocus = remember { FocusRequester() }
     val starFocus = remember { FocusRequester() }
     val sortFocus = remember { FocusRequester() }
-    val loadMoreFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
     // Cambiar el orden invierte la lista: volver al principio evita aterrizar a
@@ -165,17 +164,41 @@ private fun Content(
         if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0)
     }
 
-    // "Cargar más" añade filas al final: al terminar se devuelve el foco al
-    // botón para que el D-pad no salte a otra fila ni la lista se mueva sola.
+    // "Cargar más" añade filas al final. Antes se devolvía el foco al botón,
+    // pero al crecer la lista el botón se sale del viewport y la fila se
+    // descarta: el `requestFocus()` fallaba y el D-pad acababa en el botón de
+    // atrás de la cabecera. Ahora el foco va al PRIMER capítulo recién
+    // cargado (el usuario sigue leyendo la lista donde se quedó) y la lista
+    // se desplaza hasta él.
+    val rowFocusers = remember { mutableMapOf<Int, FocusRequester>() }
     var wasLoadingMore by remember { mutableStateOf(false) }
+    var countBeforeLoad by remember { mutableStateOf(0) }
+    var pendingFocusIndex by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(loadingMore) {
-        if (wasLoadingMore && !loadingMore) {
-            repeat(6) {
-                withFrameNanos { }
-                if (loadMoreFocus.requestFocus()) return@LaunchedEffect
-            }
+        if (loadingMore) {
+            countBeforeLoad = episodes.size
+        } else if (wasLoadingMore && episodes.size > countBeforeLoad) {
+            pendingFocusIndex = countBeforeLoad
         }
         wasLoadingMore = loadingMore
+    }
+
+    LaunchedEffect(pendingFocusIndex, sorted.size) {
+        val target = pendingFocusIndex ?: return@LaunchedEffect
+        if (target !in sorted.indices) {
+            pendingFocusIndex = null
+            return@LaunchedEffect
+        }
+        runCatching { listState.scrollToItem(target) }
+        repeat(10) {
+            withFrameNanos { }
+            if (rowFocusers[target]?.requestFocus() == true) {
+                pendingFocusIndex = null
+                return@LaunchedEffect
+            }
+        }
+        pendingFocusIndex = null
     }
 
     // Calcula el índice del capítulo en el que enfocar:
@@ -349,6 +372,12 @@ private fun Content(
                         // botón de orden (antes lo hacía siempre la primera y
                         // con el orden invertido apuntaba a otra fila).
                         val isFocusTarget = index == initialFocusIndex
+                        // Un FocusRequester por fila (cacheado por índice) para
+                        // poder devolver el foco a un capítulo concreto tras
+                        // "Cargar más".
+                        val rowFocus = rowFocusers.getOrPut(index) {
+                            if (isFocusTarget) firstChapterFocus else FocusRequester()
+                        }
                         ChapterRow(
                             number = episode.numberLabel,
                             title = chapterTitle(episode, detail.title),
@@ -363,7 +392,7 @@ private fun Content(
                             } else {
                                 Modifier
                             },
-                            focusRequester = if (isFocusTarget) firstChapterFocus else null,
+                            focusRequester = rowFocus,
                             onClick = {
                                 onPlay(
                                     detail.slug,
@@ -388,7 +417,6 @@ private fun Content(
                                     },
                                     primary = false,
                                     enabled = !loadingMore,
-                                    modifier = Modifier.focusRequester(loadMoreFocus),
                                     onClick = onLoadMore,
                                 )
                             }

@@ -35,6 +35,11 @@ class JkanimeCatalogDataSource(private val http: JkHttpClient = JkHttpClient()) 
     /**
      * El endpoint exige sesión + CSRF. Se pide la página del anime primero para
      * dejar la cookie y obtener el token, y luego se hace el POST.
+     *
+     * **Ojo con la página:** va como segmento de ruta
+     * (`/ajax/episodes/{id}/{pagina}`), igual que lo hace el JS del sitio. Con
+     * `?page=` o `?p=` el servidor ignora el valor y devuelve siempre la
+     * primera página, así que "Cargar más" repetía el mismo bloque.
      */
     suspend fun loadEpisodes(
         animeId: Int,
@@ -43,10 +48,7 @@ class JkanimeCatalogDataSource(private val http: JkHttpClient = JkHttpClient()) 
     ): EpisodesPage {
         val referer = Jk.animeUrl(slug)
         val token = http.csrfToken(referer)
-        val url = buildString {
-            append(Jk.episodesAjaxUrl(animeId))
-            if (page > 1) append("?page=").append(page)
-        }
+        val url = Jk.episodesAjaxUrl(animeId, page)
 
         val body = http.postForm(
             url = url,

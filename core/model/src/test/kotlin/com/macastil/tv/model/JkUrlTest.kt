@@ -45,4 +45,14 @@ class JkUrlTest {
             Jk.directorioUrl(mapOf("genero" to "aventura"), page = 1),
         )
     }
+
+    @Test
+    fun `episodios pagina en la ruta no en la query`() {
+        // El JS del sitio pide /ajax/episodes/{id}/{pagina}; con ?page= o ?p=
+        // el servidor devuelve siempre la página 1.
+        assertEquals("https://jkanime.net/ajax/episodes/142/", Jk.episodesAjaxUrl(142))
+        assertEquals("https://jkanime.net/ajax/episodes/142/", Jk.episodesAjaxUrl(142, page = 1))
+        assertEquals("https://jkanime.net/ajax/episodes/142/2", Jk.episodesAjaxUrl(142, page = 2))
+        assertEquals("https://jkanime.net/ajax/episodes/142/32", Jk.episodesAjaxUrl(142, 32))
+    }
 }
