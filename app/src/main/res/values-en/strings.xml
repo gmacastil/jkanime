@@ -78,6 +78,8 @@
     <string name="home_drawer_favoritos">Favorites</string>
     <string name="home_drawer_group_sync">SYNC</string>
     <string name="home_drawer_group_profile">PROFILE</string>
+    <string name="home_drawer_anime_group">ANIME</string>
+    <string name="home_drawer_config">Config</string>
     <string name="home_drawer_sync_now">Sync now</string>
     <string name="home_drawer_generate_pairing">Generate pairing code</string>
     <string name="home_drawer_generate_recovery">Generate recovery key</string>

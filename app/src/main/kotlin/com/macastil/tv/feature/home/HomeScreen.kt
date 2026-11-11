@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -152,6 +154,7 @@ fun HomeScreen(
     val resultsFocus = remember { FocusRequester() }
     val menuFocus = remember { FocusRequester() }
     val firstDrawerItemFocus = remember { FocusRequester() }
+    val configFirstItemFocus = remember { FocusRequester() }
     val avatarMenuFocus = remember { FocusRequester() }
 
     // Cada vez que se elige algo en el menú hay que devolver el foco a la
@@ -324,11 +327,63 @@ fun HomeScreen(
                 profileName = activeProfile?.name,
                 profileId = activeProfile?.id ?: 0,
                 firstItemFocus = firstDrawerItemFocus,
-                onOpenProfile = {
-                    // El menú del perfil es un Dialog: se cierra el cajón
-                    // antes para que el foco no quede detrás del velo.
-                    viewModel.closeDrawer()
+                onClose = viewModel::closeDrawer,
+                configFirstItemFocus = configFirstItemFocus,
+                hasSpace = activeProfile?.spaceCode != null,
+                busy = avatarMenuBusy,
+                onSyncNow = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        avatarMenuStatus = null
+                        avatarMenuStatus = when (val result = syncEngine.syncNow()) {
+                            is SyncResult.Success -> context.getString(R.string.sync_result, result.favorites, result.progress)
+                            is SyncResult.Failure -> context.getString(R.string.common_error, result.message)
+                            SyncResult.NotPaired -> context.getString(R.string.sync_no_space)
+                            SyncResult.NotConfigured -> context.getString(R.string.sync_not_configured)
+                        }
+                        avatarMenuBusy = false
+                    }
+                },
+                onCreateSpace = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        runCatching { syncEngine.createSpace() }
+                            .onSuccess {
+                                showAvatarMenu = true
+                                avatarMenuMode = AvatarMenuMode.RECOVERY
+                                avatarMenuRecoveryKey = ""
+                                avatarMenuStatus = context.getString(R.string.sync_space_created, it.code.chunked(4).joinToString(" "))
+                            }
+                            .onFailure { avatarMenuStatus = context.getString(R.string.common_error, it.message) }
+                        avatarMenuBusy = false
+                    }
+                },
+                onGeneratePairing = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        runCatching { syncEngine.createPairingCode() }
+                            .onSuccess { pairing ->
+                                avatarMenuStatus = context.getString(R.string.sync_pairing_created, pairing.code.chunked(4).joinToString(" "))
+                            }
+                            .onFailure { avatarMenuStatus = context.getString(R.string.common_error, it.message) }
+                        avatarMenuBusy = false
+                    }
+                },
+                onGenerateRecovery = { showAvatarMenu = true; avatarMenuMode = AvatarMenuMode.RECOVERY; avatarMenuRecoveryKey = ""; avatarMenuStatus = null },
+                onUnlink = {
+                    scope.launch {
+                        avatarMenuBusy = true
+                        syncEngine.clearSpace()
+                        avatarMenuStatus = context.getString(R.string.sync_unlinked)
+                        avatarMenuBusy = false
+                    }
+                },
+                onJoinCode = { showAvatarMenu = true; avatarMenuMode = AvatarMenuMode.JOIN_CODE; avatarMenuSyncCode = ""; avatarMenuStatus = null },
+                onRecovery = { showAvatarMenu = true; avatarMenuMode = AvatarMenuMode.RECOVERY; avatarMenuRecoveryKey = ""; avatarMenuStatus = null },
+                onProfileSwitch = { viewModel.closeDrawer(); onOpenProfileSwitch() },
+                onLanguage = {
                     showAvatarMenu = true
+                    avatarMenuMode = AvatarMenuMode.LANGUAGE
                 },
                 onSelectSection = {
                     viewModel.selectSection(it)
@@ -712,35 +767,48 @@ private fun SideDrawer(
     profileName: String?,
     profileId: Int,
     firstItemFocus: FocusRequester,
-    onOpenProfile: () -> Unit,
+    onClose: () -> Unit,
+    configFirstItemFocus: FocusRequester,
+    hasSpace: Boolean,
+    busy: Boolean,
+    onSyncNow: () -> Unit,
+    onCreateSpace: () -> Unit,
+    onGeneratePairing: () -> Unit,
+    onGenerateRecovery: () -> Unit,
+    onUnlink: () -> Unit,
+    onJoinCode: () -> Unit,
+    onRecovery: () -> Unit,
+    onProfileSwitch: () -> Unit,
+    onLanguage: () -> Unit,
     onSelectSection: (ProgramacionSection) -> Unit,
     onFavorites: () -> Unit,
     onDirectorio: () -> Unit,
 ) {
+    var configExpanded by remember { mutableStateOf(true) }
     Column(
         modifier = Modifier
-            .width(260.dp)
+            .width(420.dp)
             .fillMaxHeight()
             .background(JkSurface)
             .border(width = 1.dp, color = JkSurfaceHigh)
-            .padding(vertical = 18.dp),
+            .padding(vertical = 18.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (profileName != null) {
-            DrawerProfileRow(
-                name = profileName,
+            AvatarDrawerHeader(
+                profileName = profileName,
                 profileId = profileId,
-                onClick = onOpenProfile,
+                synced = hasSpace,
+                busy = busy,
+                compact = false,
+                title = null,
+                onBack = {},
+                onClose = onClose,
             )
-            Spacer(modifier = Modifier.height(4.dp))
         }
-
-        Text(
-            text = stringResource(R.string.home_menu_title),
-            style = MaterialTheme.typography.labelSmall,
-            color = JkTextSecondary,
-            modifier = Modifier.padding(start = 28.dp, bottom = 8.dp),
-        )
+        AvatarDrawerDivider()
+        AvatarDrawerSection(stringResource(R.string.home_drawer_anime_group))
 
         // La sección de programación se muestra como "Recientes" (los
         // episodios que acaban de salir), con icono de fecha.
@@ -761,16 +829,6 @@ private fun SideDrawer(
             onClick = onDirectorio,
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .padding(horizontal = 24.dp, vertical = 4.dp)
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(JkSurfaceHigh),
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-
         DrawerItem(
             label = stringResource(R.string.home_drawer_favoritos),
             icon = Icons.Filled.Star,
@@ -778,7 +836,31 @@ private fun SideDrawer(
             onClick = onFavorites,
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        AvatarDrawerDivider()
+        DrawerItem(
+            label = stringResource(R.string.home_drawer_config),
+            icon = Icons.Filled.Settings,
+            selected = false,
+            onClick = { configExpanded = !configExpanded },
+        )
+        if (configExpanded) {
+            AvatarDrawerMain(
+                hasSpace = hasSpace,
+                spaceCode = "",
+                busy = busy,
+                focusRequester = configFirstItemFocus,
+                onSyncNow = onSyncNow,
+                onCreateSpace = onCreateSpace,
+                onGeneratePairing = onGeneratePairing,
+                onGenerateRecovery = onGenerateRecovery,
+                onUnlink = onUnlink,
+                onJoinCode = onJoinCode,
+                onRecovery = onRecovery,
+                onProfileSwitch = onProfileSwitch,
+                onLanguage = onLanguage,
+            )
+        }
+
         Text(
             text = stringResource(R.string.update_version_label, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.labelSmall,
@@ -799,9 +881,9 @@ private enum class AvatarMenuMode {
 }
 
 /**
- * Menú lateral del avatar: se despliega desde el borde derecho como un cajón
- * colapsable (mismo lenguaje que el menú `☰` de la izquierda) y cada acción es
- * una opción del menú en vez de una rejilla de botones.
+ * Submenú del cajón izquierdo para introducir pairing/recovery. El menú
+ * principal ya vive siempre en [SideDrawer]; este Dialog solo se usa para los
+ * teclados y se ancla al borde izquierdo.
  *
  * Sigue siendo un `Dialog` para que el D-pad NO se escape a la grilla de
  * detrás: un `Box` overlay en el mismo árbol deja que el foco viaje al fondo.
@@ -885,10 +967,10 @@ private fun AvatarMenu(
                     .background(Color.Black.copy(alpha = 0.7f)),
             )
 
-            // Panel anclado al borde derecho, altura completa.
+            // Panel anclado al borde izquierdo, altura completa.
             androidx.tv.material3.Surface(
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
+                    .align(Alignment.CenterStart)
                     .width(AVATAR_DRAWER_WIDTH)
                     .fillMaxHeight()
                     .graphicsLayer { translationX = offsetX.toPx() },

@@ -82,6 +82,8 @@
     <string name="home_drawer_favoritos">Favoritos</string>
     <string name="home_drawer_group_sync">SINCRONIZACIÓN</string>
     <string name="home_drawer_group_profile">PERFIL</string>
+    <string name="home_drawer_anime_group">ANIME</string>
+    <string name="home_drawer_config">Config</string>
     <string name="home_drawer_sync_now">Sincronizar ahora</string>
     <string name="home_drawer_generate_pairing">Generar código de vinculación</string>
     <string name="home_drawer_generate_recovery">Generar clave de recuperación</string>
