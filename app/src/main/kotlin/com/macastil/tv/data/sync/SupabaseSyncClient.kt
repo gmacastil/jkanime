@@ -21,7 +21,7 @@ data class SyncCredentials(val code: String, val token: String)
 /** Código temporal de un solo uso para vincular otro dispositivo. */
 data class PairingCode(val code: String, val expiresAt: Long)
 
-/** Clave permanente de recuperación, mostrada solo al generarla o rotarla. */
+/** Clave de vinculación definida por el usuario. */
 data class RecoveryKey(val key: String)
 
 data class RemoteSnapshot(
@@ -89,16 +89,20 @@ class SupabaseSyncClient(
             )
         }
 
-    /** Genera/rota la clave permanente de recuperación del espacio. */
-    suspend fun createRecoveryKey(credentials: SyncCredentials): RecoveryKey =
+    /** Guarda/rota la clave de vinculación definida por el usuario. */
+    suspend fun setRecoveryKey(
+        credentials: SyncCredentials,
+        recoveryKey: String,
+    ): RecoveryKey =
         withContext(Dispatchers.IO) {
             val response = rpc(
                 "sync_set_recovery",
                 JSONObject()
                     .put("p_code", credentials.code)
-                    .put("p_token", credentials.token),
+                    .put("p_token", credentials.token)
+                    .put("p_recovery_key", recoveryKey.trim().uppercase()),
             )
-            RecoveryKey(response.getString("recovery_key"))
+            RecoveryKey(response.optString("recovery_key", recoveryKey.trim().uppercase()))
         }
 
     /** Recupera un espacio sin disponer de otro dispositivo vinculado. */

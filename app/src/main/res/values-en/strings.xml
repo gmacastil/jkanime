@@ -53,8 +53,9 @@
     <string name="sync_space_created">Space created: %1$s</string>
     <string name="sync_space_created_with_recovery">Space created: %1$s. Save the recovery key: %2$s</string>
     <string name="sync_pairing_created">Pairing code (15 min): %1$s</string>
-    <string name="sync_recovery_title">RECOVERY KEY (16 CHARACTERS)</string>
-    <string name="sync_recovery_created">Save this key: %1$s</string>
+    <string name="sync_recovery_title">ENTER LINKING KEY (10 CHARACTERS)</string>
+    <string name="sync_recovery_set_title">SET LINKING KEY (10 CHARACTERS)</string>
+    <string name="sync_recovery_saved">Linking key saved</string>
     <string name="sync_result">Synced: %1$d favorites, %2$d progress</string>
     <string name="sync_no_space">No linked space</string>
     <string name="sync_not_configured">Backend not configured</string>
@@ -80,6 +81,7 @@
     <string name="home_drawer_sync_now">Sync now</string>
     <string name="home_drawer_generate_pairing">Generate pairing code</string>
     <string name="home_drawer_generate_recovery">Generate recovery key</string>
+    <string name="home_drawer_set_recovery">Set linking key</string>
     <string name="home_drawer_unlink">Unlink</string>
     <string name="home_drawer_change_profile">Switch profile</string>
     <string name="home_close_menu_cd">Close menu</string>

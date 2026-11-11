@@ -400,18 +400,14 @@ fun HomeScreen(
                     scope.launch {
                         avatarMenuBusy = true
                         avatarMenuStatus = null
-                        runCatching {
-                            val creds = syncEngine.createSpace()
-                            val recovery = syncEngine.createRecoveryKey()
-                            creds to recovery
-                        }
-                            .onSuccess { (creds, recovery) ->
+                        runCatching { syncEngine.createSpace() }
+                            .onSuccess { creds ->
                                 avatarMenuStatus = context.getString(
-                                    R.string.sync_space_created_with_recovery,
+                                    R.string.sync_space_created,
                                     creds.code.chunked(4).joinToString(" "),
-                                    recovery.key.chunked(4).joinToString(" "),
                                 )
-                                avatarMenuMode = AvatarMenuMode.MAIN
+                                avatarMenuRecoveryKey = ""
+                                avatarMenuMode = AvatarMenuMode.RECOVERY
                             }
                             .onFailure {
                                 avatarMenuStatus =
@@ -443,9 +439,21 @@ fun HomeScreen(
                     scope.launch {
                         avatarMenuBusy = true
                         avatarMenuStatus = null
-                        runCatching { syncEngine.recoverSpace(avatarMenuRecoveryKey) }
+                        runCatching {
+                            if (activeProfile?.spaceCode != null) {
+                                syncEngine.setRecoveryKey(avatarMenuRecoveryKey)
+                            } else {
+                                syncEngine.recoverSpace(avatarMenuRecoveryKey)
+                            }
+                        }
                             .onSuccess {
-                                avatarMenuStatus = context.getString(R.string.sync_device_linked)
+                                avatarMenuStatus = context.getString(
+                                    if (activeProfile?.spaceCode != null) {
+                                        R.string.sync_recovery_saved
+                                    } else {
+                                        R.string.sync_device_linked
+                                    },
+                                )
                                 avatarMenuMode = AvatarMenuMode.MAIN
                                 avatarMenuRecoveryKey = ""
                             }
@@ -487,21 +495,9 @@ fun HomeScreen(
                     }
                 },
                 onGenerateRecovery = {
-                    scope.launch {
-                        avatarMenuBusy = true
-                        avatarMenuStatus = null
-                        runCatching { syncEngine.createRecoveryKey() }
-                            .onSuccess { key ->
-                                avatarMenuStatus = context.getString(
-                                    R.string.sync_recovery_created,
-                                    key.key.chunked(4).joinToString(" "),
-                                )
-                            }
-                            .onFailure {
-                                avatarMenuStatus = context.getString(R.string.common_error, it.message)
-                            }
-                        avatarMenuBusy = false
-                    }
+                    avatarMenuRecoveryKey = ""
+                    avatarMenuStatus = null
+                    avatarMenuMode = AvatarMenuMode.RECOVERY
                 },
                 onProfileSwitch = {
                     showAvatarMenu = false
@@ -977,22 +973,25 @@ private fun AvatarMenu(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Text(
-                                text = stringResource(R.string.sync_recovery_title),
+                                text = stringResource(
+                                    if (hasSpace) R.string.sync_recovery_set_title
+                                    else R.string.sync_recovery_title,
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = JkTextSecondary,
                             )
                             Text(
-                                text = recoveryKey.padEnd(16, '·').chunked(4).joinToString("  "),
+                                text = recoveryKey.padEnd(10, '·').chunked(5).joinToString("  "),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = JkOrange,
                             )
                             SyncKeypad(
                                 code = recoveryKey,
-                                maxLength = 16,
+                                maxLength = 10,
                                 recovery = true,
-                                onDigit = { if (recoveryKey.length < 16) onRecoveryKeyChange(recoveryKey + it) },
+                                onDigit = { if (recoveryKey.length < 10) onRecoveryKeyChange(recoveryKey + it) },
                                 onBackspace = { onRecoveryKeyChange(recoveryKey.dropLast(1)) },
-                                onConfirm = { if (recoveryKey.length == 16) onRecoverSpace() },
+                                onConfirm = { if (recoveryKey.length == 10) onRecoverSpace() },
                                 busy = busy,
                                 compact = true,
                                 focusRequester = focusRequester,
@@ -1152,24 +1151,7 @@ private fun AvatarDrawerMain(
     onProfileSwitch: () -> Unit,
     onLanguage: () -> Unit,
 ) {
-    // Código del espacio como dato de cabecera (no es una acción).
-    if (hasSpace) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.sync_code_title),
-                style = MaterialTheme.typography.labelSmall,
-                color = JkTextSecondary,
-            )
-            Text(
-                text = spaceCode.chunked(4).joinToString("  "),
-                style = MaterialTheme.typography.headlineSmall,
-                color = JkOrange,
-            )
-        }
-    } else {
+    if (!hasSpace) {
         Text(
             text = stringResource(R.string.sync_not_linked_cloud),
             style = MaterialTheme.typography.bodySmall,
@@ -1196,7 +1178,7 @@ private fun AvatarDrawerMain(
             onClick = onGeneratePairing,
         )
         DrawerItem(
-            label = stringResource(R.string.home_drawer_generate_recovery),
+            label = stringResource(R.string.home_drawer_set_recovery),
             icon = Icons.Filled.Add,
             selected = false,
             enabled = !busy,

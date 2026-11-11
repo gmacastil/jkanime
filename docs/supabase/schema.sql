@@ -29,7 +29,7 @@ create table if not exists sync_spaces (
     id         uuid primary key default gen_random_uuid(),
     code       text unique not null,
     token      text not null,
-    -- Hash bcrypt de una clave alfanumérica de recuperación de 16 caracteres.
+    -- Hash bcrypt de una clave alfanumérica de vinculación de 10 caracteres.
     -- La clave plana solo se devuelve al cliente al crearla/rotarla.
     recovery_hash text,
     recovery_created_at timestamptz,
@@ -116,7 +116,13 @@ $$;
 -- ---------------------------------------------------------------------------
 -- RPC: crear/rotar clave de recuperación
 -- ---------------------------------------------------------------------------
-create or replace function sync_set_recovery(p_code text, p_token text)
+drop function if exists sync_set_recovery(text, text);
+
+create or replace function sync_set_recovery(
+    p_code text,
+    p_token text,
+    p_recovery_key text
+)
 returns jsonb
 language plpgsql
 security definer
@@ -124,22 +130,22 @@ set search_path = public
 as $$
 declare
     v_space uuid;
-    v_key text;
 begin
     select id into v_space from sync_spaces
     where code = p_code and token = p_token;
     if v_space is null then raise exception 'invalid_credentials'; end if;
 
-    -- Base32 derivado de un UUID: excluye I/O/0/1 para evitar confusiones.
-    v_key := upper(substr(translate(
-        replace(gen_random_uuid()::text, '-', ''),
-        '0123456789abcdef', 'ABCDEFGHJKLMNPQR'
-    ), 1, 16));
+    if p_recovery_key is null
+       or length(trim(p_recovery_key)) <> 10
+       or upper(trim(p_recovery_key)) !~ '^[A-Z2-9]+$'
+       or upper(trim(p_recovery_key)) ~ '[IO01]' then
+        raise exception 'invalid_recovery_key_format';
+    end if;
     update sync_spaces
-       set recovery_hash = extensions.crypt(v_key, extensions.gen_salt('bf', 12)),
+       set recovery_hash = extensions.crypt(upper(trim(p_recovery_key)), extensions.gen_salt('bf', 12)),
            recovery_created_at = now()
      where id = v_space;
-    return jsonb_build_object('recovery_key', v_key);
+    return jsonb_build_object('recovery_key', upper(trim(p_recovery_key)));
 end;
 $$;
 
@@ -405,11 +411,11 @@ begin
         grant execute on function sync_join(text) to authenticated;
     end if;
     if exists (select 1 from pg_roles where rolname = 'anon') then
-        grant execute on function sync_set_recovery(text, text) to anon;
+        grant execute on function sync_set_recovery(text, text, text) to anon;
         grant execute on function sync_recover(text) to anon;
     end if;
     if exists (select 1 from pg_roles where rolname = 'authenticated') then
-        grant execute on function sync_set_recovery(text, text) to authenticated;
+        grant execute on function sync_set_recovery(text, text, text) to authenticated;
         grant execute on function sync_recover(text) to authenticated;
     end if;
 end $$;

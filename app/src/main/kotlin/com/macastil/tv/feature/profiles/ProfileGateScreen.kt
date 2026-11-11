@@ -122,6 +122,7 @@ fun ProfileGateScreen(
     var syncBusy by remember { mutableStateOf(false) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
     var syncLinked by remember { mutableStateOf(false) }
+    var syncNeedsRecoveryKey by remember { mutableStateOf(false) }
     var showLangPicker by remember { mutableStateOf(false) }
 
     // Modo edición (borrar perfiles): solo tiene sentido dentro del
@@ -412,6 +413,7 @@ fun ProfileGateScreen(
                                             syncCode = ""
                                             syncStatus = null
                                             syncLinked = false
+                                            syncNeedsRecoveryKey = false
                                         }
                                     }
                                 },
@@ -437,27 +439,21 @@ fun ProfileGateScreen(
                     syncBusy = syncBusy,
                     syncStatus = syncStatus,
                     linked = syncLinked,
+                    needsRecoveryKey = syncNeedsRecoveryKey,
                     onCodeChange = { syncCode = it },
                     onCreateSpace = {
                         syncBusy = true
                         syncStatus = null
                         scope.launch {
-                            runCatching {
-                                val sync = Graph.sync(context)
-                                val creds = sync.createSpace()
-                                val recovery = sync.createRecoveryKey()
-                                creds to recovery
-                            }
-                                .onSuccess { (creds, recovery) ->
+                            runCatching { Graph.sync(context).createSpace() }
+                                .onSuccess { creds ->
                                     // Fuera de la composición: `context` en
                                     // vez de `stringResource`.
                                     syncStatus = context.getString(
-                                        R.string.profiles_sync_save_code_with_recovery,
+                                        R.string.profiles_sync_save_code,
                                         creds.code.chunked(4).joinToString(" "),
-                                        recovery.key.chunked(4).joinToString(" "),
                                     )
-                                    syncLinked = true
-                                    Graph.syncInBackground(context)
+                                    syncNeedsRecoveryKey = true
                                 }
                                 .onFailure {
                                     syncStatus =
@@ -486,7 +482,7 @@ fun ProfileGateScreen(
                             syncBusy = false
                         }
                             },
-                            onRecoverSpace = {
+                             onRecoverSpace = {
                                 syncBusy = true
                                 syncStatus = null
                                 scope.launch {
@@ -504,7 +500,27 @@ fun ProfileGateScreen(
                                         }
                                     syncBusy = false
                                 }
-                            },
+                             },
+                             onSetRecoveryKey = {
+                                 syncBusy = true
+                                 syncStatus = null
+                                 scope.launch {
+                                     runCatching { Graph.sync(context).setRecoveryKey(syncCode) }
+                                         .onSuccess {
+                                             syncStatus = context.getString(R.string.sync_recovery_saved)
+                                             syncLinked = true
+                                             syncNeedsRecoveryKey = false
+                                             Graph.syncInBackground(context)
+                                         }
+                                         .onFailure {
+                                             syncStatus = context.getString(
+                                                 R.string.sync_link_failed,
+                                                 it.message,
+                                             )
+                                         }
+                                     syncBusy = false
+                                 }
+                             },
                     onSkip = {
                         onReady()
                     },
@@ -535,13 +551,17 @@ private fun SyncChoiceScreen(
     onCreateSpace: () -> Unit,
     onJoinSpace: () -> Unit,
     onRecoverSpace: () -> Unit,
+    onSetRecoveryKey: () -> Unit,
+    needsRecoveryKey: Boolean,
     onSkip: () -> Unit,
     onBack: () -> Unit,
 ) {
     var joining by remember { mutableStateOf(false) }
     var recovering by remember { mutableStateOf(false) }
+    var settingRecovery by remember { mutableStateOf(false) }
+    LaunchedEffect(needsRecoveryKey) { settingRecovery = needsRecoveryKey }
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(joining, recovering, linked) {
+    LaunchedEffect(joining, recovering, settingRecovery, linked) {
         repeat(10) { withFrameNanos {}; if (focusRequester.requestFocus()) return@LaunchedEffect }
     }
 
@@ -573,6 +593,7 @@ private fun SyncChoiceScreen(
                         linked -> stringResource(R.string.profiles_sync_linked_title)
                         joining -> stringResource(R.string.profiles_sync_join_title)
                         recovering -> stringResource(R.string.sync_recovery_title)
+                        settingRecovery -> stringResource(R.string.sync_recovery_set_title)
                         else -> stringResource(R.string.profiles_sync_title)
                     },
                     style = MaterialTheme.typography.titleMedium,
@@ -599,7 +620,7 @@ private fun SyncChoiceScreen(
                             .focusRequester(focusRequester),
                         onClick = onSkip,
                     )
-                } else if (!joining && !recovering) {
+                } else if (!joining && !recovering && !settingRecovery) {
                     Text(
                         text = stringResource(R.string.profiles_sync_note),
                         style = MaterialTheme.typography.bodySmall,
@@ -655,8 +676,9 @@ private fun SyncChoiceScreen(
                     }
                 } else {
                     Text(
-                        text = syncCode.padEnd(if (recovering) 16 else 8, '·')
-                            .chunked(4).joinToString("  "),
+                        text = syncCode.padEnd(if (recovering || settingRecovery) 10 else 8, '·')
+                            .chunked(if (recovering || settingRecovery) 5 else 4)
+                            .joinToString("  "),
                         style = MaterialTheme.typography.headlineSmall,
                         color = JkOrange,
                     )
@@ -672,13 +694,17 @@ private fun SyncChoiceScreen(
                     }
                     SyncKeypad(
                         code = syncCode,
-                        maxLength = if (recovering) 16 else 8,
-                        recovery = recovering,
-                        onDigit = { if (syncCode.length < if (recovering) 16 else 8) onCodeChange(syncCode + it) },
+                        maxLength = if (recovering || settingRecovery) 10 else 8,
+                        recovery = recovering || settingRecovery,
+                        onDigit = { if (syncCode.length < if (recovering || settingRecovery) 10 else 8) onCodeChange(syncCode + it) },
                         onBackspace = { onCodeChange(syncCode.dropLast(1)) },
                         onConfirm = {
-                            if (syncCode.length == if (recovering) 16 else 8) {
-                                if (recovering) onRecoverSpace() else onJoinSpace()
+                            if (syncCode.length == if (recovering || settingRecovery) 10 else 8) {
+                                when {
+                                    settingRecovery -> onSetRecoveryKey()
+                                    recovering -> onRecoverSpace()
+                                    else -> onJoinSpace()
+                                }
                             }
                         },
                         busy = syncBusy,

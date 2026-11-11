@@ -74,10 +74,10 @@ class SyncEngine(
         return client.newPairingCode(credentials)
     }
 
-    suspend fun createRecoveryKey(): RecoveryKey {
+    suspend fun setRecoveryKey(recoveryKey: String): RecoveryKey {
         val credentials = currentCredentials()
             ?: throw IllegalStateException(appContext.getString(R.string.sync_device_not_linked))
-        return client.createRecoveryKey(credentials)
+        return client.setRecoveryKey(credentials, recoveryKey)
     }
 
     /**
