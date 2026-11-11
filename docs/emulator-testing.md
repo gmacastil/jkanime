@@ -1163,8 +1163,10 @@ tag `v1.4.0`. Todo con APK de release firmada instalada en `emulator-5554`
    detalle justo después de insertar para poder calcular pendientes.
 6. Avatar y nombre del perfil pasan al menú lateral; la cabecera queda solo
    con menú + buscador.
-7. Animación del póster con `tween(110)` y escala 1.06: la grilla deja de
-   temblar al recorrerla.
+7. Animación del póster con `tween(110)` y escala 1.06. **Ojo:** se cambió
+   del spring por defecto a `tween` creyendo que así se quitaba el temblor de
+   la grilla. No era cierto: el temblor seguía ahí y la causa era otra (ver
+   *F20 — el temblor de la grilla* más abajo).
 8. Estado con color: naranja "En emisión", verde "Concluido"
    (`airingStatusColor`), igual en Home, búsqueda, Directorio, detalle y
    favoritos.
@@ -1281,3 +1283,114 @@ Patrón que sí funciona (`DetailScreen`):
   "Load more" → 496…481 (20 caps) → 480…465 (36 caps). Con "Oldest first"
   arranca en 1-16 → 17-32, y en ambos casos el foco cae en el primer capítulo
   nuevo.
+
+## F20 — El temblor de la grilla al navegar en horizontal (1.4.1) — verificado 2026-11-11
+
+Síntoma reportado: al recorrer las tarjetas del Home con `RIGHT`/`LEFT`, toda
+la grilla "tiembla" — el contenido sube y baja unos píxeles aunque no se esté
+haciendo scroll vertical.
+
+### Medición (antes del fix)
+
+No se puede diagnosticar esto mirando capturas sueltas: el desplazamiento dura
+~200 ms y vuelve a su sitio, así que un `screencap` antes y después sale
+idéntico. Se graba con `screenrecord`, se extraen los fotogramas a 30 fps y se
+mide el desplazamiento entre fotogramas consecutivos con **correlación de fase**
+(`np.fft.rfft2` + pico del `irfft2`) por zonas independientes.
+
+Resultado con la animación de escala activa, tras cada pulsación `RIGHT`:
+
+| zona (banda vertical) | dy entre fotogramas | confianza |
+|---|---|---|
+| cabecera (logo + buscador) | `0` en todos | 1.00 |
+| títulos de la fila 1 | `+5, +3, -1, -4, -2, 0` | 0.96-1.00 |
+| pósters | `+5, +3, -1, -4, -2, 0` | 0.78-0.94 |
+| pie / fila 2 | `+5, +3, -1, -4, -2, 0` | 0.69-0.86 |
+
+Conclusiones de la medición:
+
+- La **cabecera no se mueve** y los `bounds` de `uiautomator` son idénticos
+  antes y después ⇒ no es un cambio de layout ni un inset de ventana.
+- `dx` siempre `0` ⇒ no hay scroll horizontal.
+- El mismo `dy` en todas las bandas de la grilla ⇒ se desplaza **el contenido
+  del `LazyVerticalGrid` completo**, no una tarjeta.
+- La secuencia no es monótona (`+5 … -4 … 0`) ⇒ es un **spring con rebote**,
+  no un `tween`.
+
+### Causa
+
+`PosterCard` aplicaba `Modifier.scale(animateFloatAsState(1.06f))` al **mismo
+nodo que tiene el `combinedClickable`**, es decir al nodo que recibe el foco.
+Al cambiar el foco, ese nodo cambia de tamaño y Compose pide `bringIntoView`
+para el nodo recién enfocado; el `LazyVerticalGrid` responde con un scroll
+animado (spring) de unos pocos píxeles que mueve **todo** su contenido y luego
+vuelve. Eso es exactamente el temblor: pósters, títulos, fila 2 y pie se
+desplazan a la vez, y la cabecera (fuera de la grilla) no.
+
+Prueba A/B que lo confirma: con la escala fijada a `1f` (sin animación), 236
+fotogramas analizados dan `dy = 0` en todas las zonas.
+
+### Fix
+
+Separar el **nodo enfocado** (tamaño de layout fijo) de la **capa visual** que
+se escala:
+
+```kotlin
+Box(                                  // foco + tamaño estable
+    Modifier
+        .fillMaxWidth()
+        .aspectRatio(2f / 3f)
+        .focusRequester(focusRequester)
+        .combinedClickable(...)
+) {
+    Box(                              // capa visual: aquí va la escala
+        Modifier.fillMaxSize().scale(scale).clip(...).background(...).border(...)
+    ) {
+        AsyncImage(...)
+        // badge
+    }
+}
+```
+
+Así el nodo que recibe el foco nunca cambia de tamaño, `bringIntoView` no tiene
+nada que compensar y la grilla no se desplaza. El zoom se conserva tal cual
+(6 % sobre el póster, con el borde naranja y el badge escalando junto).
+
+### Verificación
+
+`tools/measure-jitter.sh` (nuevo en el repo) automatiza todo: reinicia la app,
+graba 16 s mientras pulsa `RIGHT` ×4 y `LEFT` ×4, extrae fotogramas y mide
+grilla y cabecera. Sale con código 1 si detecta el temblor.
+
+```
+$ ./tools/measure-jitter.sh verify
+[verify] fotogramas analizados: 236
+  grilla   : 0 eventos de desplazamiento, max |dy| = 0 px
+  cabecera : max |dy| = 0 px (debe ser 0)
+  ✓ SIN temblor: el contenido de la grilla no se desplaza
+```
+
+El zoom se comprobó con la captura de la tarjeta enfocada: el póster pasa de
+270 px de layout a 286 px de dibujo (1.06) manteniendo el borde naranja y el
+badge, y las tarjetas vecinas no se mueven.
+
+### Trampa nueva
+
+- **Nunca animes la escala del nodo que recibe el foco dentro de un
+  `LazyGrid`/`LazyColumn`.** El `<T>` que escala tiene que ser un hijo, y el
+  `focusable`/`clickable` va en un contenedor de tamaño constante. Si no, cada
+  cambio de foco provoca un `bringIntoView` con spring que desplaza todo el
+  listado unos píxeles y se percibe como temblor. Aplica igual a
+  `CardDefaults.scale(focusedScale = …)` de `tv-material3` dentro de listas.
+- **Diagnóstico:** un desplazamiento transitorio no se ve con `screencap`
+  (antes/después salen iguales). Hay que grabar y medir por correlación de
+  fase, y separar las bandas de la pantalla para distinguir "se mueve todo el
+  listado" de "se mueve la ventana/layout".
+- **Ojo con la conclusión fácil:** se había cambiado el spring por
+  `tween(110)` en la creencia de que eso quitaba el temblor; el temblor seguía
+  igual. La animación no era el problema, sino el tamaño del nodo enfocado.
+- La APK de debug tiene `versionCode` menor (`100 + commits` no aplica: en
+  debug cae a `1` por defecto): para instalarla encima de la release sin
+  desinstalar, compilar con `-PVERSION_CODE=<actual+1>` y **re-firmar** con el
+  keystore de release (`apksigner sign --ks …`); si no, Android rechaza por
+  downgrade o por firma distinta.

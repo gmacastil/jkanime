@@ -72,8 +72,8 @@ fun PosterCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
-    // Animación corta y sin rebote: con el spring por defecto dos tarjetas se
-    // animaban a la vez al mover el D-pad y la grilla parecía temblar.
+    // `tween` en vez del spring por defecto: con rebote el zoom del póster
+    // se "pasaba" de 1.06 y volvía, y en movimiento se notaba como un pulso.
     val scale by animateFloatAsState(
         targetValue = if (focused) 1.06f else 1f,
         animationSpec = tween(durationMillis = 110),
@@ -88,6 +88,11 @@ fun PosterCard(
     val sized = if (width != null) modifier.width(width) else modifier.fillMaxWidth()
 
     Column(modifier = sized) {
+        // El foco y el tamaño de layout van en el Box EXTERIOR, que nunca
+        // cambia de tamaño. La escala del foco se aplica a una capa visual
+        // interna: si el nodo enfocado creciera, Compose pediría
+        // `bringIntoView` y la grilla entera se desplazaría unos píxeles en
+        // vertical (ese era el "temblor" al recorrer las tarjetas).
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -98,14 +103,6 @@ fun PosterCard(
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
                 )
-                .scale(scale)
-                .clip(RoundedCornerShape(10.dp))
-                .background(JkSurfaceHigh)
-                .border(
-                    width = if (focused) 3.dp else 0.dp,
-                    color = borderColor,
-                    shape = RoundedCornerShape(10.dp),
-                )
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
@@ -113,25 +110,38 @@ fun PosterCard(
                     onClick = onClick,
                 ),
         ) {
-            AsyncImage(
-                model = posterUrl,
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            if (badge != null) {
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF141414),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(badgeColor)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scale(scale)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(JkSurfaceHigh)
+                    .border(
+                        width = if (focused) 3.dp else 0.dp,
+                        color = borderColor,
+                        shape = RoundedCornerShape(10.dp),
+                    ),
+            ) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
+
+                if (badge != null) {
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF141414),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(badgeColor)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
             }
         }
 
