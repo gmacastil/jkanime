@@ -809,7 +809,6 @@ private fun SideDrawer(
                 onClose = onClose,
             )
         }
-        Spacer(modifier = Modifier.weight(1f))
         AvatarDrawerDivider()
         AvatarDrawerSection(stringResource(R.string.home_drawer_anime_group))
 
@@ -839,6 +838,7 @@ private fun SideDrawer(
             onClick = onFavorites,
         )
 
+        Spacer(modifier = Modifier.weight(1f))
         AvatarDrawerDivider()
         DrawerItem(
             label = stringResource(R.string.home_drawer_config),
