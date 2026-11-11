@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +42,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -784,15 +787,14 @@ private fun SideDrawer(
     onFavorites: () -> Unit,
     onDirectorio: () -> Unit,
 ) {
-    var configExpanded by remember { mutableStateOf(true) }
+    var configExpanded by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .width(420.dp)
             .fillMaxHeight()
             .background(JkSurface)
             .border(width = 1.dp, color = JkSurfaceHigh)
-            .padding(vertical = 18.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (profileName != null) {
@@ -807,6 +809,7 @@ private fun SideDrawer(
                 onClose = onClose,
             )
         }
+        Spacer(modifier = Modifier.weight(1f))
         AvatarDrawerDivider()
         AvatarDrawerSection(stringResource(R.string.home_drawer_anime_group))
 
@@ -840,35 +843,43 @@ private fun SideDrawer(
         DrawerItem(
             label = stringResource(R.string.home_drawer_config),
             icon = Icons.Filled.Settings,
+            trailingIcon = if (configExpanded) {
+                Icons.Filled.KeyboardArrowUp
+            } else {
+                Icons.Filled.KeyboardArrowDown
+            },
             selected = false,
             onClick = { configExpanded = !configExpanded },
         )
         if (configExpanded) {
-            AvatarDrawerMain(
-                hasSpace = hasSpace,
-                spaceCode = "",
-                busy = busy,
-                focusRequester = configFirstItemFocus,
-                onSyncNow = onSyncNow,
-                onCreateSpace = onCreateSpace,
-                onGeneratePairing = onGeneratePairing,
-                onGenerateRecovery = onGenerateRecovery,
-                onUnlink = onUnlink,
-                onJoinCode = onJoinCode,
-                onRecovery = onRecovery,
-                onProfileSwitch = onProfileSwitch,
-                onLanguage = onLanguage,
-            )
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                AvatarDrawerMain(
+                    hasSpace = hasSpace,
+                    spaceCode = "",
+                    busy = busy,
+                    focusRequester = configFirstItemFocus,
+                    onSyncNow = onSyncNow,
+                    onCreateSpace = onCreateSpace,
+                    onGeneratePairing = onGeneratePairing,
+                    onGenerateRecovery = onGenerateRecovery,
+                    onUnlink = onUnlink,
+                    onJoinCode = onJoinCode,
+                    onRecovery = onRecovery,
+                    onProfileSwitch = onProfileSwitch,
+                    onLanguage = onLanguage,
+                )
+                Text(
+                    text = stringResource(R.string.update_version_label, BuildConfig.VERSION_NAME),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = JkTextSecondary.copy(alpha = 0.7f),
+                    modifier = Modifier.align(Alignment.End).padding(end = 20.dp, top = 10.dp),
+                )
+            }
         }
-
-        Text(
-            text = stringResource(R.string.update_version_label, BuildConfig.VERSION_NAME),
-            style = MaterialTheme.typography.labelSmall,
-            color = JkTextSecondary.copy(alpha = 0.7f),
-            modifier = Modifier
-                .align(Alignment.End)
-                .padding(end = 20.dp, top = 12.dp),
-        )
     }
 }
 
@@ -1363,6 +1374,7 @@ private fun DrawerItem(
     selected: Boolean,
     onClick: () -> Unit,
     icon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
     focusRequester: FocusRequester? = null,
     enabled: Boolean = true,
 ) {
@@ -1419,7 +1431,16 @@ private fun DrawerItem(
             text = label,
             style = MaterialTheme.typography.labelLarge,
             color = contentColor,
+            modifier = Modifier.weight(1f),
         )
+        if (trailingIcon != null) {
+            Icon(
+                imageVector = trailingIcon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(22.dp),
+            )
+        }
     }
 }
 
