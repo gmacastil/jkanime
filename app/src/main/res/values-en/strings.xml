@@ -11,6 +11,8 @@
     <string name="common_now">Not now</string>
     <string name="common_continue">Continue</string>
     <string name="common_go">Go</string>
+    <string name="detail_mark_all">Mark all watched</string>
+    <string name="detail_unmark_all">Unmark all</string>
     <string name="common_delete">Delete</string>
     <string name="common_loading">Loading…</string>
     <string name="common_retry">Retry</string>

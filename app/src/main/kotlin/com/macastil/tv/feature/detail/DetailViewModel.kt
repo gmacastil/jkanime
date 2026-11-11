@@ -114,11 +114,17 @@ class DetailViewModel(
         }
     }
 
-    /** Botón "Todo visto": marca completos todos los capítulos cargados. */
-    fun markAllWatched(episodes: List<Episode>) {
+    /** Alterna el estado visto de todos los capítulos cargados. */
+    fun toggleAllWatched(episodes: List<Episode>, allWatched: Boolean) {
         val numbers = episodes.map { it.number.toInt() }
         if (numbers.isEmpty()) return
-        viewModelScope.launch { library.markAllWatched(slug, numbers) }
+        viewModelScope.launch {
+            if (allWatched) {
+                library.unmarkAllWatched(slug, numbers)
+            } else {
+                library.markAllWatched(slug, numbers)
+            }
+        }
     }
 
     init {

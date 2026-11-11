@@ -353,8 +353,10 @@ fun TvNumberPad(
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onConfirm: (() -> Unit)? = null,
+    confirmText: String? = null,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    confirmEnabled: Boolean = enabled,
     compact: Boolean = false,
     focusRequester: FocusRequester? = null,
 ) {
@@ -381,6 +383,15 @@ fun TvNumberPad(
                     when (key) {
                         "" -> if (onConfirm == null) {
                             Spacer(modifier = mod)
+                        } else if (confirmText != null) {
+                            TvActionButton(
+                                text = confirmText,
+                                primary = true,
+                                compact = true,
+                                enabled = confirmEnabled,
+                                modifier = mod,
+                                onClick = onConfirm,
+                            )
                         } else {
                             Box(
                                 modifier = mod,
@@ -389,10 +400,10 @@ fun TvNumberPad(
                                 TvIconButton(
                                     icon = Icons.Filled.Check,
                                     contentDescription = stringResource(R.string.keypad_link_cd),
-                                    size = if (compact) 42.dp else 48.dp,
-                                    iconSize = if (compact) 22.dp else 24.dp,
-                                    onClick = onConfirm,
-                                )
+                                     size = if (compact) 42.dp else 48.dp,
+                                     iconSize = if (compact) 22.dp else 24.dp,
+                                     onClick = onConfirm,
+                                 )
                             }
                         }
                         "⌫" -> TvActionButton(

@@ -95,6 +95,7 @@ fun DirectorioScreen(
 ) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
+    val favorites by library.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
     val viewModel: DirectorioViewModel = viewModel(
         factory = DirectorioViewModel.factory(Graph.repository, library, context),
     )
@@ -161,6 +162,7 @@ fun DirectorioScreen(
                 )
                 is DirectorioUiState.Success -> ResultsGrid(
                     page = current.page,
+                    favoriteSlugs = favorites.asSequence().map { it.slug }.toSet(),
                     onOpenAnime = onOpenAnime,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
@@ -395,6 +397,7 @@ private fun FilterOptionRow(
 @Composable
 private fun ResultsGrid(
     page: DirectorioPage,
+    favoriteSlugs: Set<String>,
     onOpenAnime: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -430,8 +433,9 @@ private fun ResultsGrid(
                     posterUrl = hit.posterUrl,
                     badge = hit.type,
                     subtitle = hit.statusLabel,
-                    subtitleColor = airingStatusColor(hit.statusLabel),
-                    width = null,
+                     subtitleColor = airingStatusColor(hit.statusLabel),
+                     width = null,
+                     isFavorite = hit.slug in favoriteSlugs,
                     focusRequester = if (hit === page.hits.first()) firstCardFocus else null,
                     onClick = { onOpenAnime(hit.slug) },
                 )
@@ -616,21 +620,15 @@ private fun JumpToPageDialog(
                             // 4 dígitos alcanzan de sobra: el sitio no pasa de ~170.
                             if (next.length <= 4 && next.toIntOrNull()!! <= lastPage) digits = next
                         },
-                        onBackspace = { digits = digits.dropLast(1) },
-                        compact = true,
-                        focusRequester = padFocus,
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Sin botón Cancelar: BACK cierra el diálogo.
-                        TvActionButton(
-                            text = stringResource(R.string.common_go),
-                            primary = true,
-                            compact = true,
-                            enabled = digits.isNotEmpty(),
-                            onClick = { onGo(digits.toInt().coerceIn(1, lastPage)) },
-                        )
-                    }
+                         onBackspace = { digits = digits.dropLast(1) },
+                         compact = true,
+                         confirmText = stringResource(R.string.common_go),
+                         confirmEnabled = digits.isNotEmpty(),
+                         onConfirm = {
+                             if (digits.isNotEmpty()) onGo(digits.toInt().coerceIn(1, lastPage))
+                         },
+                         focusRequester = padFocus,
+                     )
                 }
             }
         }

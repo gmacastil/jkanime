@@ -124,6 +124,7 @@
     <string name="detail_sort_oldest_first">Antiguos primero</string>
     <string name="detail_load_more">Cargar más</string>
     <string name="detail_mark_all">Todo visto</string>
+    <string name="detail_unmark_all">Desmarcar todo</string>
     <string name="detail_episode_resume">Ep %1$s</string>
     <string name="detail_favorite_add_cd">Añadir a favoritos</string>
     <string name="detail_favorite_remove_cd">Quitar de favoritos</string>

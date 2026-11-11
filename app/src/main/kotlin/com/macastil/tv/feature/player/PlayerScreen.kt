@@ -138,10 +138,12 @@ fun PlayerScreen(
     // `pause()`/`play()`). Invertir después pisaba ese valor y el icono
     // quedaba al revés (se pausaba el vídeo y el botón seguía en "Pausa").
     // El WebView, en cambio, no avisa, así que ahí sí se invierte a mano.
-    val togglePlay: () -> Unit = {
+    val togglePlay: () -> Boolean = {
         val wasPlaying = controller.player?.isPlaying
         controller.togglePlayPause()
-        isPlaying = if (wasPlaying == null) !isPlaying else !wasPlaying
+        val nowPlaying = if (wasPlaying == null) !isPlaying else !wasPlaying
+        isPlaying = nowPlaying
+        nowPlaying
     }
 
     // Reanudar donde quedó el usuario la última vez.
@@ -397,9 +399,12 @@ fun PlayerScreen(
                              overlayInteraction++
                          },
                          onTogglePlay = {
-                             togglePlay()
-                             overlayInteraction++
-                         },
+                              val playing = togglePlay()
+                              // Pausar mantiene visibles el botón y el seekbar;
+                              // al reanudar se ocultan ambos automáticamente.
+                              overlayVisible = !playing
+                              overlayInteraction++
+                          },
                         onToggleServers = {
                             showServers = !showServers
                             overlayInteraction++

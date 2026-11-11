@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,6 +77,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -84,6 +88,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import com.macastil.tv.Graph
 import com.macastil.tv.R
@@ -98,6 +104,7 @@ import com.macastil.tv.feature.profiles.ProfileAvatar
 import com.macastil.tv.ui.component.ErrorState
 import com.macastil.tv.ui.component.LoadingState
 import com.macastil.tv.ui.component.PosterCard
+import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.component.TvIconButton
 import com.macastil.tv.ui.component.TvNumberPad
 import com.macastil.tv.ui.component.TvRecoveryPad
@@ -263,6 +270,7 @@ fun HomeScreen(
                     state = search,
                     resetKey = search.query,
                     firstFocusRequester = resultsFocus,
+                    favoriteSlugs = favorites.asSequence().map { it.slug }.toSet(),
                     onOpenAnime = onOpenAnime,
                     onToggleFavorite = { hit ->
                         viewModel.toggleFavoriteFromCard(
@@ -303,6 +311,7 @@ fun HomeScreen(
                         resetKey = section,
                         showSection = false,
                         focusNonce = focusNonce,
+                        favoriteSlugs = favorites.asSequence().map { it.slug }.toSet(),
                         onOpenAnime = onOpenAnime,
                         onToggleFavorite = { card ->
                             viewModel.toggleFavoriteFromCard(
@@ -1466,6 +1475,7 @@ private fun SearchGrid(
     state: SearchUiState,
     resetKey: Any,
     firstFocusRequester: FocusRequester?,
+    favoriteSlugs: Set<String>,
     onOpenAnime: (String) -> Unit,
     onToggleFavorite: (AnimeSearchHit) -> Unit,
 ) {
@@ -1491,38 +1501,191 @@ private fun SearchGrid(
 
     val firstCardFocus = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
+    var currentPage by remember(resetKey) { mutableIntStateOf(1) }
+    var showJumpDialog by remember { mutableStateOf(false) }
+    val pageSize = 18
+    val lastPage = ((state.hits.size - 1) / pageSize + 1).coerceAtLeast(1)
+    val pageHits = state.hits.drop((currentPage - 1) * pageSize).take(pageSize)
 
     LaunchedEffect(resetKey) {
+        currentPage = 1
         gridState.scrollToItem(0)
     }
 
-    LazyVerticalGrid(
-        state = gridState,
-        columns = GridCells.Fixed(6),
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 36.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(22.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        items(state.hits, key = { it.slug }) { hit ->
-            PosterCard(
-                title = hit.title,
-                posterUrl = hit.posterUrl,
-                badge = hit.type,
-                subtitle = hit.statusLabel,
-                subtitleColor = airingStatusColor(hit.statusLabel),
-                // Títulos a una línea: en el buscador abundan los nombres
-                // largos y dos líneas hacían que las filas midieran distinto.
-                titleMaxLines = 1,
-                width = null,
-                focusRequester = if (hit === state.hits.first()) {
-                    firstFocusRequester ?: firstCardFocus
-                } else {
-                    null
-                },
-                onClick = { onOpenAnime(hit.slug) },
-                onLongClick = { onToggleFavorite(hit) },
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Fixed(6),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+            modifier = Modifier.weight(1f),
+        ) {
+            items(pageHits, key = { it.slug }) { hit ->
+                PosterCard(
+                    title = hit.title,
+                    posterUrl = hit.posterUrl,
+                    badge = hit.type,
+                    subtitle = hit.statusLabel,
+                    subtitleColor = airingStatusColor(hit.statusLabel),
+                    titleMaxLines = 1,
+                    width = null,
+                    isFavorite = hit.slug in favoriteSlugs,
+                    focusRequester = if (hit === pageHits.firstOrNull()) {
+                        firstFocusRequester ?: firstCardFocus
+                    } else {
+                        null
+                    },
+                    onClick = { onOpenAnime(hit.slug) },
+                    onLongClick = { onToggleFavorite(hit) },
+                )
+            }
+        }
+
+        if (lastPage > 1) {
+            SearchPaginationBar(
+                currentPage = currentPage,
+                lastPage = lastPage,
+                onGoToPage = { currentPage = it },
+                onJumpToPage = { showJumpDialog = true },
             )
+        }
+    }
+
+    if (showJumpDialog) {
+        SearchJumpToPageDialog(
+            currentPage = currentPage,
+            lastPage = lastPage,
+            onDismiss = { showJumpDialog = false },
+            onGo = {
+                currentPage = it
+                showJumpDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun SearchPaginationBar(
+    currentPage: Int,
+    lastPage: Int,
+    onGoToPage: (Int) -> Unit,
+    onJumpToPage: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TvIconButton(
+            icon = Icons.Filled.KeyboardArrowLeft,
+            contentDescription = "Previous page",
+            enabled = currentPage > 1,
+            onClick = { onGoToPage(currentPage - 1) },
+        )
+        searchPageWindow(currentPage, lastPage).forEach { page ->
+            if (page == null) {
+                Text("…", color = JkTextSecondary, modifier = Modifier.width(20.dp), textAlign = TextAlign.Center)
+            } else {
+                TvActionButton(
+                    text = page.toString(),
+                    primary = page == currentPage,
+                    compact = true,
+                    onClick = { onGoToPage(page) },
+                )
+            }
+        }
+        TvIconButton(
+            icon = Icons.Filled.KeyboardArrowRight,
+            contentDescription = "Next page",
+            enabled = currentPage < lastPage,
+            onClick = { onGoToPage(currentPage + 1) },
+        )
+        TvActionButton(
+            text = stringResource(R.string.directorio_go_to_page),
+            primary = false,
+            compact = true,
+            onClick = onJumpToPage,
+        )
+    }
+}
+
+private fun searchPageWindow(current: Int, last: Int): List<Int?> {
+    val pages = sortedSetOf(1, last)
+    for (page in (current - 2)..(current + 2)) {
+        if (page in 1..last) pages.add(page)
+    }
+    val result = mutableListOf<Int?>()
+    var previous: Int? = null
+    for (page in pages) {
+        if (previous != null && page - previous!! > 1) result += null
+        result += page
+        previous = page
+    }
+    return result
+}
+
+@Composable
+private fun SearchJumpToPageDialog(
+    currentPage: Int,
+    lastPage: Int,
+    onDismiss: () -> Unit,
+    onGo: (Int) -> Unit,
+) {
+    var digits by remember { mutableStateOf("") }
+    val padFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        repeat(10) {
+            withFrameNanos { }
+            if (padFocus.requestFocus()) return@LaunchedEffect
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.82f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(0.36f),
+                shape = RoundedCornerShape(16.dp),
+                colors = SurfaceDefaults.colors(containerColor = JkSurface, contentColor = JkTextPrimary),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(stringResource(R.string.directorio_go_to_page), color = JkOrange, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.directorio_page_current_of, currentPage, lastPage),
+                        color = JkTextSecondary,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Box(
+                        modifier = Modifier.width(140.dp).height(46.dp).clip(RoundedCornerShape(12.dp)).background(JkSurfaceHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(digits.ifEmpty { "—" }, color = if (digits.isEmpty()) JkTextSecondary else JkTextPrimary, style = MaterialTheme.typography.titleLarge)
+                    }
+                    TvNumberPad(
+                        onDigit = { digit ->
+                            val next = digits + digit
+                            if (next.length <= 3 && next.toIntOrNull()!! <= lastPage) digits = next
+                        },
+                        onBackspace = { digits = digits.dropLast(1) },
+                        onConfirm = { if (digits.isNotEmpty()) onGo(digits.toInt().coerceIn(1, lastPage)) },
+                        confirmText = stringResource(R.string.common_go),
+                        confirmEnabled = digits.isNotEmpty(),
+                        compact = true,
+                        focusRequester = padFocus,
+                    )
+                }
+            }
         }
     }
 }
@@ -1542,6 +1705,7 @@ private fun CardsGrid(
     resetKey: Any,
     showSection: Boolean,
     focusNonce: Int = 0,
+    favoriteSlugs: Set<String>,
     onOpenAnime: (String) -> Unit,
     onToggleFavorite: (AnimeCard) -> Unit,
 ) {
@@ -1600,6 +1764,7 @@ private fun CardsGrid(
                     card.dateLabel,
                 ).joinToString(" · ").ifBlank { null },
                 width = null,
+                isFavorite = card.slug in favoriteSlugs,
                 focusRequester = if (card === cards.first()) firstCardFocus else null,
                 onClick = { onOpenAnime(card.slug) },
                 onLongClick = { onToggleFavorite(card) },
@@ -1726,11 +1891,12 @@ private fun FavoriteCard(
         pending > 0 -> "+$pending"
         else -> stringResource(R.string.home_badge_up_to_date)
     }
-    PosterCard(
+        PosterCard(
         title = favorite.title,
         posterUrl = favorite.posterUrl,
         badge = badge,
-        badgeColor = if (pending == 0) JkGreen else JkOrange,
+            badgeColor = if (pending == 0) JkGreen else JkOrange,
+            isFavorite = true,
         subtitle = favorite.statusLabel,
         subtitleColor = airingStatusColor(favorite.statusLabel),
         width = null,

@@ -205,6 +205,21 @@ class LibraryRepository(
         db.favorites().bumpLastWatched(owner, slug, episodes.max(), now)
     }
 
+    /** Desmarca todos los capítulos indicados y recalcula el último visto. */
+    suspend fun unmarkAllWatched(slug: String, episodes: List<Int>) {
+        if (episodes.isEmpty()) return
+        val owner = profiles.owner()
+        episodes.forEach { episode ->
+            db.progress().delete(owner, slug, episode)
+        }
+        db.favorites().setLastWatched(
+            owner = owner,
+            slug = slug,
+            episode = db.progress().maxCompleted(owner, slug),
+            now = System.currentTimeMillis(),
+        )
+    }
+
     // ---------------------------------------------------------------------
     // Merge desde el backend (last-write-wins por `updatedAt`)
     // ---------------------------------------------------------------------

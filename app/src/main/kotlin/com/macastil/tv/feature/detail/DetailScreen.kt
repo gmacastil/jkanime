@@ -124,7 +124,9 @@ fun DetailScreen(
                 onToggleSort = viewModel::toggleSort,
                 onLoadMore = viewModel::loadMore,
                 onToggleWatched = viewModel::toggleWatched,
-                onMarkAllWatched = { viewModel.markAllWatched(current.episodes) },
+                 onToggleAllWatched = { allWatched ->
+                     viewModel.toggleAllWatched(current.episodes, allWatched)
+                 },
                 onPlay = onPlay,
             )
         }
@@ -145,7 +147,7 @@ private fun Content(
     onToggleSort: () -> Unit,
     onLoadMore: () -> Unit,
     onToggleWatched: (episodeNumber: Int, watched: Boolean) -> Unit,
-    onMarkAllWatched: () -> Unit,
+    onToggleAllWatched: (allWatched: Boolean) -> Unit,
     onPlay: (String, Int?, String, String) -> Unit,
 ) {
     val sorted = remember(episodes, descending) {
@@ -222,6 +224,9 @@ private fun Content(
             }
         }
     }.takeIf { it >= 0 } ?: 0
+    val allWatched = episodes.isNotEmpty() && episodes.all {
+        progressByEpisode[it.number.toInt()]?.completed == true
+    }
 
     // El foco inicial va al capítulo calculado; si no hay capítulos, a la
     // estrella de favoritos.
@@ -327,11 +332,13 @@ private fun Content(
                 }
                 // Marca completos todos los capítulos cargados de una vez.
                 TvActionButton(
-                    text = stringResource(R.string.detail_mark_all),
+                     text = stringResource(
+                         if (allWatched) R.string.detail_unmark_all else R.string.detail_mark_all,
+                     ),
                     primary = false,
                     compact = true,
                     icon = Icons.Filled.Check,
-                    onClick = onMarkAllWatched,
+                     onClick = { onToggleAllWatched(allWatched) },
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
