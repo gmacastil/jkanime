@@ -56,11 +56,12 @@ Favoritos y progreso compartidos entre todas tus TV y tu celular.
 ## Recuperar sin el dispositivo anterior
 
 Al crear un espacio, la app muestra además una **clave de recuperación de 16
-dígitos**. Debe guardarse fuera de la TV (por ejemplo, en un gestor de
+caracteres alfanuméricos**. Usa un alfabeto sin caracteres ambiguos (`I`, `O`,
+`0` y `1`). Debe guardarse fuera de la TV (por ejemplo, en un gestor de
 contraseñas o un correo propio). No se muestra de nuevo automáticamente.
 
 En un dispositivo nuevo se elige **Tengo una clave de recuperación** y se
-introduce con el teclado numérico. El servidor valida el hash bcrypt de la
+introduce con el teclado alfanumérico. El servidor valida el hash bcrypt de la
 clave y entrega un token nuevo para ese dispositivo; no hace falta tener la
 TV anterior. Desde el menú del avatar se puede generar/rotar la clave si se
 dispone de un dispositivo ya vinculado.

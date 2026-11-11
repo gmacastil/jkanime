@@ -73,6 +73,7 @@ import com.macastil.tv.R
 import com.macastil.tv.data.local.ProfileEntity
 import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.component.TvNumberPad
+import com.macastil.tv.ui.component.TvRecoveryPad
 import com.macastil.tv.ui.component.TvIconButton
 import com.macastil.tv.ui.theme.JkBackground
 import com.macastil.tv.ui.theme.JkGreen
@@ -672,6 +673,7 @@ private fun SyncChoiceScreen(
                     SyncKeypad(
                         code = syncCode,
                         maxLength = if (recovering) 16 else 8,
+                        recovery = recovering,
                         onDigit = { if (syncCode.length < if (recovering) 16 else 8) onCodeChange(syncCode + it) },
                         onBackspace = { onCodeChange(syncCode.dropLast(1)) },
                         onConfirm = {
@@ -707,6 +709,7 @@ private fun SyncChoiceScreen(
 private fun SyncKeypad(
     code: String,
     maxLength: Int = 8,
+    recovery: Boolean = false,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onConfirm: () -> Unit,
@@ -715,14 +718,24 @@ private fun SyncKeypad(
     focusRequester: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
-        TvNumberPad(
-            onDigit = onDigit,
-            onBackspace = onBackspace,
-            onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
-            enabled = !busy,
-            compact = compact,
-            focusRequester = focusRequester,
-        )
+        if (recovery) {
+            TvRecoveryPad(
+                onChar = onDigit,
+                onBackspace = onBackspace,
+                onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
+                enabled = !busy,
+                focusRequester = focusRequester,
+            )
+        } else {
+            TvNumberPad(
+                onDigit = onDigit,
+                onBackspace = onBackspace,
+                onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
+                enabled = !busy,
+                compact = compact,
+                focusRequester = focusRequester,
+            )
+        }
         // Acciones: confirmar (solo con 8 dígitos) + volver, en la misma fila
         // para no desbordar el panel en 1080p.
     }

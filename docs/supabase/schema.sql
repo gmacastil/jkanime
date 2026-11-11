@@ -29,7 +29,7 @@ create table if not exists sync_spaces (
     id         uuid primary key default gen_random_uuid(),
     code       text unique not null,
     token      text not null,
-    -- Hash bcrypt de una clave numérica de recuperación de 16 dígitos.
+    -- Hash bcrypt de una clave alfanumérica de recuperación de 16 caracteres.
     -- La clave plana solo se devuelve al cliente al crearla/rotarla.
     recovery_hash text,
     recovery_created_at timestamptz,
@@ -130,17 +130,11 @@ begin
     where code = p_code and token = p_token;
     if v_space is null then raise exception 'invalid_credentials'; end if;
 
-    -- Se extraen dígitos de UUIDs criptográficamente aleatorios. 16 dígitos
-    -- son cómodos en el teclado TV y suficientemente resistentes con bcrypt
-    -- y rate limiting del gateway.
-    loop
-        v_key := regexp_replace(
-            gen_random_uuid()::text || gen_random_uuid()::text,
-            '[^0-9]', '', 'g'
-        );
-        exit when length(v_key) >= 16;
-    end loop;
-    v_key := substr(v_key, 1, 16);
+    -- Base32 derivado de un UUID: excluye I/O/0/1 para evitar confusiones.
+    v_key := upper(substr(translate(
+        replace(gen_random_uuid()::text, '-', ''),
+        '0123456789abcdef', 'ABCDEFGHJKLMNPQR'
+    ), 1, 16));
     update sync_spaces
        set recovery_hash = extensions.crypt(v_key, extensions.gen_salt('bf', 12)),
            recovery_created_at = now()

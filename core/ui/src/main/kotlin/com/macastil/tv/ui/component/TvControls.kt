@@ -419,6 +419,69 @@ fun TvNumberPad(
 }
 
 /**
+ * Teclado compacto para la clave de recuperación. Usa un alfabeto base32 sin
+ * caracteres ambiguos (I/O/0/1), para que una clave dictada o copiada a mano
+ * no se confunda en la TV.
+ */
+@Composable
+fun TvRecoveryPad(
+    onChar: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onConfirm: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    focusRequester: FocusRequester? = null,
+) {
+    val rows = listOf(
+        listOf("A", "B", "C", "D", "E", "F", "G", "H"),
+        listOf("J", "K", "L", "M", "N", "P", "Q", "R"),
+        listOf("S", "T", "U", "V", "W", "X", "Y", "Z"),
+        listOf("2", "3", "4", "5", "6", "7", "8", "9"),
+        listOf("⌫", "", "", "", "", "", "", "✓"),
+    )
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        rows.forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                row.forEachIndexed { colIndex, key ->
+                    val isFirst = rowIndex == 0 && colIndex == 0
+                    val cell = Modifier
+                        .width(42.dp)
+                        .then(if (isFirst && focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    when {
+                        key == "" -> Spacer(modifier = cell)
+                        key == "⌫" -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            compact = true,
+                            enabled = enabled,
+                            modifier = cell,
+                            onClick = onBackspace,
+                        )
+                        key == "✓" -> Box(cell, contentAlignment = Alignment.Center) {
+                            TvIconButton(
+                                icon = Icons.Filled.Check,
+                                contentDescription = stringResource(R.string.keypad_link_cd),
+                                size = 42.dp,
+                                iconSize = 22.dp,
+                                onClick = onConfirm ?: {},
+                            )
+                        }
+                        else -> TvActionButton(
+                            text = key,
+                            primary = false,
+                            compact = true,
+                            enabled = enabled,
+                            modifier = cell,
+                            onClick = { onChar(key) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Flechas arriba/abajo apiladas (el `⇅` de ordenar). No existe en
  * `material-icons-core` (solo en el artefacto `extended`, que pesa decenas de
  * MB), así que se compone con los dos chevrons que sí vienen en core.

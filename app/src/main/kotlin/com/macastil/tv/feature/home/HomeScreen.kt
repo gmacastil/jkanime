@@ -95,6 +95,7 @@ import com.macastil.tv.ui.component.LoadingState
 import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.component.TvIconButton
 import com.macastil.tv.ui.component.TvNumberPad
+import com.macastil.tv.ui.component.TvRecoveryPad
 import com.macastil.tv.ui.component.airingStatusColor
 import com.macastil.tv.ui.theme.JkBackground
 import com.macastil.tv.ui.theme.JkGreen
@@ -796,7 +797,7 @@ private fun SideDrawer(
 /** Modos del menú del avatar (sync/perfil/idioma). */
 private enum class AvatarMenuMode {
     MAIN,       // Menú principal: sync now, link, unlink, pairing, recovery
-    RECOVERY,   // Introduciendo clave de recuperación de 16 dígitos
+    RECOVERY,   // Introduciendo clave de recuperación de 16 caracteres
     JOIN_CODE,  // Introduciendo código de 8 dígitos para vincular
     LANGUAGE,   // Selector de idioma de la app
 }
@@ -988,6 +989,7 @@ private fun AvatarMenu(
                             SyncKeypad(
                                 code = recoveryKey,
                                 maxLength = 16,
+                                recovery = true,
                                 onDigit = { if (recoveryKey.length < 16) onRecoveryKeyChange(recoveryKey + it) },
                                 onBackspace = { onRecoveryKeyChange(recoveryKey.dropLast(1)) },
                                 onConfirm = { if (recoveryKey.length == 16) onRecoverSpace() },
@@ -1260,6 +1262,7 @@ private fun AvatarDrawerMain(
 private fun SyncKeypad(
     code: String,
     maxLength: Int = 8,
+    recovery: Boolean = false,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onConfirm: () -> Unit,
@@ -1268,14 +1271,24 @@ private fun SyncKeypad(
     focusRequester: FocusRequester? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
-        TvNumberPad(
-            onDigit = onDigit,
-            onBackspace = onBackspace,
-            onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
-            enabled = !busy,
-            compact = compact,
-            focusRequester = focusRequester,
-        )
+        if (recovery) {
+            TvRecoveryPad(
+                onChar = onDigit,
+                onBackspace = onBackspace,
+                onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
+                enabled = !busy,
+                focusRequester = focusRequester,
+            )
+        } else {
+            TvNumberPad(
+                onDigit = onDigit,
+                onBackspace = onBackspace,
+                onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
+                enabled = !busy,
+                compact = compact,
+                focusRequester = focusRequester,
+            )
+        }
         // Confirmar (solo con 8 dígitos) + volver, en la misma fila.
     }
 }
