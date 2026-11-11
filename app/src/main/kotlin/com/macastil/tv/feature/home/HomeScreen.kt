@@ -7,7 +7,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -85,7 +84,6 @@ import com.macastil.tv.Graph
 import com.macastil.tv.R
 import com.macastil.tv.BuildConfig
 import com.macastil.tv.data.local.FavoriteEntity
-import com.macastil.tv.data.sync.SyncEngine
 import com.macastil.tv.data.sync.SyncResult
 import com.macastil.tv.model.AnimeCard
 import com.macastil.tv.model.AnimeSearchHit
@@ -96,12 +94,11 @@ import com.macastil.tv.ui.component.ErrorState
 import com.macastil.tv.ui.component.LoadingState
 import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.component.TvIconButton
-import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.component.TvNumberPad
+import com.macastil.tv.ui.component.airingStatusColor
 import com.macastil.tv.ui.theme.JkBackground
 import com.macastil.tv.ui.theme.JkGreen
 import com.macastil.tv.ui.theme.JkOrange
-import com.macastil.tv.ui.theme.JkRed
 import com.macastil.tv.ui.theme.JkSurface
 import com.macastil.tv.ui.theme.JkSurfaceHigh
 import com.macastil.tv.ui.theme.JkTextPrimary
@@ -238,8 +235,6 @@ fun HomeScreen(
                 resultCount = search.hits.size,
                 searchFocus = searchFocus,
                 menuFocus = menuFocus,
-                profileName = activeProfile?.name,
-                profileId = activeProfile?.id ?: 0,
                 onToggleDrawer = {
                     if (drawerOpen) viewModel.closeDrawer() else viewModel.openDrawer()
                 },
@@ -248,7 +243,6 @@ fun HomeScreen(
                     val moved = runCatching { resultsFocus.requestFocus() }.getOrDefault(false)
                     pendingGridFocus = !moved
                 },
-                onOpenAvatarMenu = { showAvatarMenu = true },
             )
 
             when {
@@ -262,12 +256,31 @@ fun HomeScreen(
                     resetKey = search.query,
                     firstFocusRequester = resultsFocus,
                     onOpenAnime = onOpenAnime,
+                    onToggleFavorite = { hit ->
+                        viewModel.toggleFavoriteFromCard(
+                            slug = hit.slug,
+                            title = hit.title,
+                            posterUrl = hit.posterUrl,
+                            statusLabel = hit.statusLabel,
+                        )
+                    },
                 )
 
                 showFavorites -> FavoritesGrid(
                     favorites = favorites,
                     focusNonce = focusNonce,
                     onOpenAnime = onOpenAnime,
+                    onToggleFavorite = { fav ->
+                        viewModel.toggleFavoriteFromCard(
+                            slug = fav.slug,
+                            title = fav.title,
+                            posterUrl = fav.posterUrl,
+                            animeId = fav.animeId,
+                            statusLabel = fav.statusLabel,
+                            lastAiredEpisode = fav.lastAiredEpisode,
+                            totalEpisodes = fav.totalEpisodes,
+                        )
+                    },
                 )
 
                 else -> when (val current = state) {
@@ -283,6 +296,13 @@ fun HomeScreen(
                         showSection = false,
                         focusNonce = focusNonce,
                         onOpenAnime = onOpenAnime,
+                        onToggleFavorite = { card ->
+                            viewModel.toggleFavoriteFromCard(
+                                slug = card.slug,
+                                title = card.title,
+                                posterUrl = card.posterUrl ?: card.thumbUrl,
+                            )
+                        },
                     )
                 }
             }
@@ -299,7 +319,15 @@ fun HomeScreen(
             SideDrawer(
                 selected = section,
                 showFavorites = showFavorites,
+                profileName = activeProfile?.name,
+                profileId = activeProfile?.id ?: 0,
                 firstItemFocus = firstDrawerItemFocus,
+                onOpenProfile = {
+                    // El menú del perfil es un Dialog: se cierra el cajón
+                    // antes para que el foco no quede detrás del velo.
+                    viewModel.closeDrawer()
+                    showAvatarMenu = true
+                },
                 onSelectSection = {
                     viewModel.selectSection(it)
                     focusNonce++
@@ -448,8 +476,8 @@ fun HomeScreen(
 }
 
 /**
- * Cabecera: hamburguesa, marca y buscador fijo. Sin fila de botones: los
- * filtros están en el menú lateral.
+ * Cabecera: hamburguesa y buscador fijo. Sin fila de botones: los filtros y el
+ * perfil están en el menú lateral.
  */
 @Composable
 private fun Header(
@@ -460,12 +488,9 @@ private fun Header(
     resultCount: Int,
     searchFocus: FocusRequester,
     menuFocus: FocusRequester,
-    profileName: String?,
-    profileId: Int,
     onToggleDrawer: () -> Unit,
     onQueryChange: (String) -> Unit,
     onMoveDown: () -> Unit,
-    onOpenAvatarMenu: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -497,24 +522,15 @@ private fun Header(
             onMoveDown = onMoveDown,
             modifier = Modifier.weight(1f),
         )
-
-        if (profileName != null) {
-            Spacer(modifier = Modifier.width(16.dp))
-            ProfileAvatarButton(
-                name = profileName,
-                profileId = profileId,
-                onClick = onOpenAvatarMenu,
-            )
-        }
     }
 }
 
 /**
- * Avatar del perfil activo en la cabecera de Home: identifica "quién está
- * viendo" de un vistazo. Al pulsarlo abre el menú de sync/perfil (modal).
+ * Fila de perfil del menú lateral: avatar + nombre. Sustituye al avatar de la
+ * cabecera (se movió al cajón para dejar todo el ancho al buscador).
  */
 @Composable
-private fun ProfileAvatarButton(
+private fun DrawerProfileRow(
     name: String,
     profileId: Int,
     onClick: () -> Unit,
@@ -522,23 +538,34 @@ private fun ProfileAvatarButton(
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
-    Box(
+    Row(
         modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (focused) JkSurfaceHigh else Color.Transparent)
             .border(
                 width = if (focused) 2.dp else 0.dp,
                 color = if (focused) JkOrange else Color.Transparent,
-                shape = CircleShape,
+                shape = RoundedCornerShape(10.dp),
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        ProfileAvatar(name = name, profileId = profileId, size = 40.dp)
+        ProfileAvatar(name = name, profileId = profileId, size = 36.dp)
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (focused) JkTextPrimary else JkTextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -633,12 +660,15 @@ private fun SearchField(
     }
 }
 
-/** Menú lateral colapsable con los filtros y accesos. */
+/** Menú lateral colapsable con el perfil, los filtros y accesos. */
 @Composable
 private fun SideDrawer(
     selected: ProgramacionSection,
     showFavorites: Boolean,
+    profileName: String?,
+    profileId: Int,
     firstItemFocus: FocusRequester,
+    onOpenProfile: () -> Unit,
     onSelectSection: (ProgramacionSection) -> Unit,
     onFavorites: () -> Unit,
     onDirectorio: () -> Unit,
@@ -652,6 +682,15 @@ private fun SideDrawer(
             .padding(vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        if (profileName != null) {
+            DrawerProfileRow(
+                name = profileName,
+                profileId = profileId,
+                onClick = onOpenProfile,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
         Text(
             text = stringResource(R.string.home_menu_title),
             style = MaterialTheme.typography.labelSmall,
@@ -1218,6 +1257,7 @@ private fun SearchGrid(
     resetKey: Any,
     firstFocusRequester: FocusRequester?,
     onOpenAnime: (String) -> Unit,
+    onToggleFavorite: (AnimeSearchHit) -> Unit,
 ) {
     when {
         !state.hasQuery -> {
@@ -1260,6 +1300,10 @@ private fun SearchGrid(
                 posterUrl = hit.posterUrl,
                 badge = hit.type,
                 subtitle = hit.statusLabel,
+                subtitleColor = airingStatusColor(hit.statusLabel),
+                // Títulos a una línea: en el buscador abundan los nombres
+                // largos y dos líneas hacían que las filas midieran distinto.
+                titleMaxLines = 1,
                 width = null,
                 focusRequester = if (hit === state.hits.first()) {
                     firstFocusRequester ?: firstCardFocus
@@ -1267,6 +1311,7 @@ private fun SearchGrid(
                     null
                 },
                 onClick = { onOpenAnime(hit.slug) },
+                onLongClick = { onToggleFavorite(hit) },
             )
         }
     }
@@ -1288,6 +1333,7 @@ private fun CardsGrid(
     showSection: Boolean,
     focusNonce: Int = 0,
     onOpenAnime: (String) -> Unit,
+    onToggleFavorite: (AnimeCard) -> Unit,
 ) {
     if (cards.isEmpty()) {
         LoadingState(message = emptyMessage)
@@ -1346,6 +1392,7 @@ private fun CardsGrid(
                 width = null,
                 focusRequester = if (card === cards.first()) firstCardFocus else null,
                 onClick = { onOpenAnime(card.slug) },
+                onLongClick = { onToggleFavorite(card) },
             )
         }
     }
@@ -1364,14 +1411,20 @@ private fun FavoritesGrid(
     favorites: List<FavoriteEntity>,
     focusNonce: Int = 0,
     onOpenAnime: (String) -> Unit,
+    onToggleFavorite: (FavoriteEntity) -> Unit,
 ) {
     if (favorites.isEmpty()) {
         LoadingState(message = stringResource(R.string.home_favorites_empty))
         return
     }
 
-    // Partición: pendientes > 0 | resto (Al día + sin datos)
-    val (pendientes, alDia) = favorites.partition { (it.pendingEpisodes ?: -1) > 0 }
+    // Partición: pendientes | al día.
+    //
+    // Sin datos de emisión (`pendingEpisodes == null`) NO se puede afirmar que
+    // el anime esté al día: se trata como pendiente y la tarjeta no muestra el
+    // badge verde. Antes caía en "Al día" y cualquier favorito recién añadido
+    // desde el buscador aparecía ahí por error.
+    val (pendientes, alDia) = favorites.partition { (it.pendingEpisodes ?: 1) > 0 }
 
     val sortedPendientes = pendientes.sortedBy { it.title.lowercase() }
     val sortedAlDia = alDia.sortedWith(
@@ -1379,8 +1432,9 @@ private fun FavoritesGrid(
             .thenBy { it.title.lowercase() },
     )
 
+    val all = sortedPendientes + sortedAlDia
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect((sortedPendientes + sortedAlDia).firstOrNull()?.slug, focusNonce) {
+    LaunchedEffect(all.firstOrNull()?.slug, focusNonce) {
         repeat(10) {
             withFrameNanos { }
             if (firstFocus.requestFocus()) return@LaunchedEffect
@@ -1401,8 +1455,9 @@ private fun FavoritesGrid(
             items(sortedPendientes, key = { it.slug }) { fav ->
                 FavoriteCard(
                     favorite = fav,
-                    focusRequester = if (fav === (sortedPendientes + sortedAlDia).first()) firstFocus else null,
+                    focusRequester = if (fav === all.first()) firstFocus else null,
                     onOpenAnime = onOpenAnime,
+                    onToggleFavorite = onToggleFavorite,
                 )
             }
         }
@@ -1426,8 +1481,9 @@ private fun FavoritesGrid(
             items(sortedAlDia, key = { it.slug }) { fav ->
                 FavoriteCard(
                     favorite = fav,
-                    focusRequester = if (fav === (sortedPendientes + sortedAlDia).first()) firstFocus else null,
+                    focusRequester = if (fav === all.first()) firstFocus else null,
                     onOpenAnime = onOpenAnime,
+                    onToggleFavorite = onToggleFavorite,
                 )
             }
         }
@@ -1449,26 +1505,27 @@ private fun FavoriteCard(
     favorite: FavoriteEntity,
     focusRequester: FocusRequester?,
     onOpenAnime: (String) -> Unit,
+    onToggleFavorite: (FavoriteEntity) -> Unit,
 ) {
-    val fav = favorite
-    run {
-            val pending = fav.pendingEpisodes
-            val badge = when {
-                pending != null && pending > 0 -> "+$pending"
-                pending == 0 -> stringResource(R.string.home_badge_up_to_date)
-                else -> fav.lastWatchedEpisode?.let {
-                    stringResource(R.string.episode_badge, it)
-                }
-            }
-            PosterCard(
-                title = fav.title,
-                posterUrl = fav.posterUrl,
-                badge = badge,
-                badgeColor = if (pending == 0) JkGreen else JkOrange,
-                subtitle = fav.statusLabel,
-                width = null,
-                focusRequester = focusRequester,
-                onClick = { onOpenAnime(fav.slug) },
-            )
+    val pending = favorite.pendingEpisodes
+    // Verde solo con la certeza de que no hay nada pendiente.
+    val badge = when {
+        pending == null -> favorite.lastWatchedEpisode?.let {
+            stringResource(R.string.episode_badge, it)
         }
+        pending > 0 -> "+$pending"
+        else -> stringResource(R.string.home_badge_up_to_date)
+    }
+    PosterCard(
+        title = favorite.title,
+        posterUrl = favorite.posterUrl,
+        badge = badge,
+        badgeColor = if (pending == 0) JkGreen else JkOrange,
+        subtitle = favorite.statusLabel,
+        subtitleColor = airingStatusColor(favorite.statusLabel),
+        width = null,
+        focusRequester = focusRequester,
+        onClick = { onOpenAnime(favorite.slug) },
+        onLongClick = { onToggleFavorite(favorite) },
+    )
 }

@@ -146,7 +146,18 @@ interface FavoriteDao {
         "UPDATE favorites SET last_watched_episode = :episode, updated_at = :now " +
             "WHERE owner = :owner AND slug = :slug",
     )
-    suspend fun setLastWatched(owner: Int, slug: String, episode: Int, now: Long)
+    suspend fun setLastWatched(owner: Int, slug: String, episode: Int?, now: Long)
+
+    /**
+     * Sube `last_watched_episode` solo si el capítulo nuevo es mayor. Se usa al
+     * marcar visto con pulsación sostenida, que puede o no ser el último.
+     */
+    @Query(
+        "UPDATE favorites SET last_watched_episode = " +
+            "MAX(COALESCE(last_watched_episode, 0), :episode), updated_at = :now " +
+            "WHERE owner = :owner AND slug = :slug",
+    )
+    suspend fun bumpLastWatched(owner: Int, slug: String, episode: Int, now: Long)
 
     @Query(
         "UPDATE favorites SET last_aired_episode = :aired, total_episodes = :total, " +
@@ -195,6 +206,20 @@ interface ProgressDao {
 
     @Upsert
     suspend fun upsert(progress: ProgressEntity)
+
+    /** Borra el progreso de un capítulo (destildar "visto" con OK sostenido). */
+    @Query(
+        "DELETE FROM progress WHERE owner = :owner AND slug = :slug " +
+            "AND episode = :episode",
+    )
+    suspend fun delete(owner: Int, slug: String, episode: Int)
+
+    /** Capítulo más alto marcado como visto (para recalcular el pendiente). */
+    @Query(
+        "SELECT MAX(episode) FROM progress WHERE owner = :owner AND slug = :slug " +
+            "AND completed = 1",
+    )
+    suspend fun maxCompleted(owner: Int, slug: String): Int?
 
     // F11: claim del modo legacy y borrado por perfil.
 

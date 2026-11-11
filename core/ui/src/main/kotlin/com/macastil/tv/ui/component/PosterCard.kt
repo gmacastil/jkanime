@@ -2,9 +2,10 @@ package com.macastil.tv.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +47,9 @@ import com.macastil.tv.ui.theme.JkTextSecondary
  * Tarjeta vertical 2:3 con el póster del anime.
  * El foco se gestiona con [MutableInteractionSource] para no depender de
  * indicaciones de Material (en TV el feedback es escala + borde).
+ *
+ * `onLongClick` (mantener pulsado OK en el D-pad) se usa para marcar o quitar
+ * favoritos sin entrar al detalle.
  */
 @Composable
 fun PosterCard(
@@ -57,15 +61,27 @@ fun PosterCard(
     /** Color del badge: naranja por defecto; verde para "al día". */
     badgeColor: Color = JkOrange,
     subtitle: String? = null,
+    /** null = gris. Se usa para pintar "En emisión" / "Concluido". */
+    subtitleColor: Color? = null,
+    /** 1 línea en las grillas de búsqueda para que las filas no salten. */
+    titleMaxLines: Int = 2,
     /** null = ocupa el ancho del contenedor (grillas). */
     width: Dp? = 168.dp,
     focusRequester: FocusRequester? = null,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "posterScale")
+    // Animación corta y sin rebote: con el spring por defecto dos tarjetas se
+    // animaban a la vez al mover el D-pad y la grilla parecía temblar.
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.06f else 1f,
+        animationSpec = tween(durationMillis = 110),
+        label = "posterScale",
+    )
     val borderColor by animateColorAsState(
-        if (focused) JkOrange else Color.Transparent,
+        targetValue = if (focused) JkOrange else Color.Transparent,
+        animationSpec = tween(durationMillis = 110),
         label = "posterBorder",
     )
 
@@ -90,9 +106,10 @@ fun PosterCard(
                     color = borderColor,
                     shape = RoundedCornerShape(10.dp),
                 )
-                .clickable(
+                .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
+                    onLongClick = onLongClick,
                     onClick = onClick,
                 ),
         ) {
@@ -122,7 +139,7 @@ fun PosterCard(
             text = title,
             style = MaterialTheme.typography.bodySmall,
             color = if (focused) JkTextPrimary else JkTextSecondary,
-            maxLines = 2,
+            maxLines = titleMaxLines,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 8.dp, start = 2.dp, end = 2.dp),
         )
@@ -131,7 +148,7 @@ fun PosterCard(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
-                color = JkTextSecondary,
+                color = subtitleColor ?: JkTextSecondary,
                 maxLines = 1,
                 modifier = Modifier.padding(top = 2.dp, start = 2.dp),
             )

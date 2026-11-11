@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -60,7 +59,6 @@ import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import com.macastil.tv.Graph
 import com.macastil.tv.R
-import com.macastil.tv.model.AnimeSearchHit
 import com.macastil.tv.model.DirectorioFilter
 import com.macastil.tv.model.DirectorioOption
 import com.macastil.tv.model.DirectorioPage
@@ -71,6 +69,7 @@ import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.component.TvChipButton
 import com.macastil.tv.ui.component.TvNumberPad
 import com.macastil.tv.ui.component.TvIconButton
+import com.macastil.tv.ui.component.airingStatusColor
 import com.macastil.tv.ui.theme.JkBackground
 import com.macastil.tv.ui.theme.JkOrange
 import com.macastil.tv.ui.theme.JkSurface
@@ -83,8 +82,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
 
 /**
  * Pantalla del Directorio: el formulario de filtros del sitio a la izquierda,
@@ -107,9 +104,14 @@ fun DirectorioScreen(
     // definiciones de opciones de la última página para no desmontar el panel
     // ni perder el foco del D-pad mientras llega la nueva respuesta.
     var availableFilters by remember { mutableStateOf<List<DirectorioFilter>>(emptyList()) }
+    // Última página conocida: la comparten el paginado y el "Ir a página" del
+    // panel lateral, y sobrevive a los estados de carga.
+    var page by remember { mutableStateOf<DirectorioPage?>(null) }
     LaunchedEffect(state) {
         if (state is DirectorioUiState.Success) {
-            availableFilters = (state as DirectorioUiState.Success).page.filters
+            val success = state as DirectorioUiState.Success
+            availableFilters = success.page.filters
+            page = success.page
         }
     }
 
@@ -141,6 +143,9 @@ fun DirectorioScreen(
                 selected = selectedFilters,
                 onFilterChange = { name, value -> viewModel.setFilter(name, value) },
                 onClearFilters = viewModel::clearFilters,
+                currentPage = page?.page ?: 1,
+                lastPage = page?.lastPage ?: 1,
+                onGoToPage = { target -> viewModel.loadPage(target) },
             )
 
             // Grilla de resultados
@@ -165,7 +170,7 @@ fun DirectorioScreen(
         // Barra de paginado: fuera del `when` para que no se desmonte (y se
         // pierda el foco del D-pad) mientras llega la página siguiente.
         PaginationFooter(
-            state = state,
+            page = page,
             onGoToPage = { target -> viewModel.loadPage(target) },
         )
     }
@@ -179,6 +184,9 @@ private fun FiltersPanel(
     selected: Map<String, String>,
     onFilterChange: (String, String) -> Unit,
     onClearFilters: () -> Unit,
+    currentPage: Int,
+    lastPage: Int,
+    onGoToPage: (Int) -> Unit,
 ) {
     // El formulario real publica diez filtros. El panel tiene scroll vertical,
     // por lo que todos deben permanecer disponibles en la TV.
@@ -187,6 +195,23 @@ private fun FiltersPanel(
     if (visibleFilters.isEmpty()) {
         LoadingState(message = stringResource(R.string.directorio_loading_filters))
         return
+    }
+
+    // "Ir a página" vive aquí (no en la barra de paginado) y abre el teclado
+    // numérico en un diálogo sin botón Cancelar: se cierra con BACK.
+    var showJump by remember { mutableStateOf(false) }
+    val jumpFocus = remember { FocusRequester() }
+    var openedJump by remember { mutableStateOf(false) }
+    LaunchedEffect(showJump) {
+        if (showJump) {
+            openedJump = true
+            return@LaunchedEffect
+        }
+        if (!openedJump) return@LaunchedEffect
+        repeat(10) {
+            withFrameNanos { }
+            if (jumpFocus.requestFocus()) return@LaunchedEffect
+        }
     }
 
     // Surface MD3 en vez del Box+background suelto de antes: JkSurface y
@@ -248,7 +273,39 @@ private fun FiltersPanel(
                     )
                 }
             }
+
+            if (lastPage > 1) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(JkSurfaceHigh),
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                TvActionButton(
+                    text = stringResource(R.string.directorio_go_to_page),
+                    primary = false,
+                    compact = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(jumpFocus),
+                    onClick = { showJump = true },
+                )
+            }
         }
+    }
+
+    if (showJump) {
+        JumpToPageDialog(
+            currentPage = currentPage,
+            lastPage = lastPage,
+            onDismiss = { showJump = false },
+            onGo = { target ->
+                showJump = false
+                onGoToPage(target)
+            },
+        )
     }
 }
 
@@ -263,9 +320,9 @@ private fun FilterOptionRow(
     selected: Boolean,
     onSelect: () -> Unit,
 ) {
-    // El foco pertenece al nodo `focusable`, no necesariamente al nodo que
-    // crea `clickable`. Leerlo desde InteractionSource hacía que algunas filas
-    // no se resaltaran al recorrerlas con el D-pad.
+    // El foco se sigue con `onFocusChanged` (no con el InteractionSource de
+    // `clickable`): el nodo enfocado no siempre coincide con el que crea
+    // `clickable`, y leerlo del InteractionSource dejaba filas sin resaltar.
     var focused by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -288,11 +345,12 @@ private fun FilterOptionRow(
             .clip(RoundedCornerShape(6.dp))
             .onFocusChanged { focused = it.isFocused }
             .background(background)
-            // `clickable` no siempre recibe CENTER de forma consistente en
-            // una columna vertical con scroll en Compose for TV. Hacemos la
-            // fila explícitamente focusable y capturamos CENTER antes del
-            // gestor de texto/scroll.
-            .focusable()
+            // UN solo target de foco: `clickable` ya lo crea y recibe CENTER
+            // del D-pad. Antes había además un `focusable()` delante, y al ser
+            // dos targets anidados en el mismo nodo el foco se quedaba
+            // atrapado en la fila: ARRIBA/ABAJO movían del target externo al
+            // interno sin cambiar de fila y era imposible llegar al final del
+            // panel (p. ej. a «Ir a página»).
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionCenter) {
                     onSelect()
@@ -372,6 +430,7 @@ private fun ResultsGrid(
                     posterUrl = hit.posterUrl,
                     badge = hit.type,
                     subtitle = hit.statusLabel,
+                    subtitleColor = airingStatusColor(hit.statusLabel),
                     width = null,
                     focusRequester = if (hit === page.hits.first()) firstCardFocus else null,
                     onClick = { onOpenAnime(hit.slug) },
@@ -382,21 +441,15 @@ private fun ResultsGrid(
 }
 
 /**
- * Envoltorio de la barra de paginado que recuerda la última página conocida:
- * durante los `Loading` la barra sigue en pantalla con los datos anteriores.
+ * Envoltorio de la barra de paginado: recibe la última página conocida de
+ * [DirectorioScreen] para seguir en pantalla durante los `Loading`.
  */
 @Composable
 private fun PaginationFooter(
-    state: DirectorioUiState,
+    page: DirectorioPage?,
     onGoToPage: (Int) -> Unit,
 ) {
-    var lastPage by remember { mutableStateOf<DirectorioPage?>(null) }
-    val success = (state as? DirectorioUiState.Success)?.page
-    LaunchedEffect(success) {
-        if (success != null) lastPage = success
-    }
-
-    val page = success ?: lastPage ?: return
+    if (page == null) return
     if (page.lastPage <= 1) return
 
     PaginationBar(
@@ -408,10 +461,10 @@ private fun PaginationFooter(
 
 /**
  * Barra de paginado del Directorio: flechas + ventana de chips alrededor de la
- * página actual + «Ir a página» con teclado numérico.
+ * página actual. El salto directo («Ir a página») vive en el panel de filtros.
  *
- * Vive fuera del `when` del estado para que no se desmonte mientras carga la
- * página siguiente (si desapareciera se perdería el foco del D-pad).
+ * Se mantiene fuera del `when` del estado para que no se desmonte mientras
+ * carga la página siguiente (si desapareciera se perdería el foco del D-pad).
  */
 @Composable
 private fun PaginationBar(
@@ -419,24 +472,6 @@ private fun PaginationBar(
     lastPage: Int,
     onGoToPage: (Int) -> Unit,
 ) {
-    var showJump by remember { mutableStateOf(false) }
-    // Al cerrar el diálogo el foco se devuelve al botón que lo abrió: si no,
-    // el D-pad se queda sin foco hasta la siguiente pulsación.
-    val jumpFocus = remember { FocusRequester() }
-    var openedJump by remember { mutableStateOf(false) }
-
-    LaunchedEffect(showJump) {
-        if (showJump) {
-            openedJump = true
-            return@LaunchedEffect
-        }
-        if (!openedJump) return@LaunchedEffect
-        repeat(10) {
-            withFrameNanos { }
-            if (jumpFocus.requestFocus()) return@LaunchedEffect
-        }
-    }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -474,28 +509,6 @@ private fun PaginationBar(
             contentDescription = stringResource(R.string.directorio_next_page_cd),
             enabled = currentPage < lastPage,
             onClick = { onGoToPage(currentPage + 1) },
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        TvActionButton(
-            text = stringResource(R.string.directorio_go_to_page),
-            primary = false,
-            compact = true,
-            modifier = Modifier.focusRequester(jumpFocus),
-            onClick = { showJump = true },
-        )
-    }
-
-    if (showJump) {
-        JumpToPageDialog(
-            currentPage = currentPage,
-            lastPage = lastPage,
-            onDismiss = { showJump = false },
-            onGo = {
-                showJump = false
-                onGoToPage(it)
-            },
         )
     }
 }
@@ -609,12 +622,7 @@ private fun JumpToPageDialog(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TvActionButton(
-                            text = stringResource(R.string.common_cancel),
-                            primary = false,
-                            compact = true,
-                            onClick = onDismiss,
-                        )
+                        // Sin botón Cancelar: BACK cierra el diálogo.
                         TvActionButton(
                             text = stringResource(R.string.common_go),
                             primary = true,

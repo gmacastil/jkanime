@@ -21,15 +21,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,6 +123,8 @@ fun DetailScreen(
                 onToggleFavorite = viewModel::toggleFavorite,
                 onToggleSort = viewModel::toggleSort,
                 onLoadMore = viewModel::loadMore,
+                onToggleWatched = viewModel::toggleWatched,
+                onMarkAllWatched = { viewModel.markAllWatched(current.episodes) },
                 onPlay = onPlay,
             )
         }
@@ -138,6 +144,8 @@ private fun Content(
     onToggleFavorite: () -> Unit,
     onToggleSort: () -> Unit,
     onLoadMore: () -> Unit,
+    onToggleWatched: (episodeNumber: Int, watched: Boolean) -> Unit,
+    onMarkAllWatched: () -> Unit,
     onPlay: (String, Int?, String, String) -> Unit,
 ) {
     val sorted = remember(episodes, descending) {
@@ -147,6 +155,28 @@ private fun Content(
     val firstChapterFocus = remember { FocusRequester() }
     val starFocus = remember { FocusRequester() }
     val sortFocus = remember { FocusRequester() }
+    val loadMoreFocus = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+
+    // Cambiar el orden invierte la lista: volver al principio evita aterrizar a
+    // mitad de capítulos (con las claves el scroll se anclaba a una fila
+    // cualquiera). El foco sigue en el botón de orden.
+    LaunchedEffect(descending) {
+        if (listState.firstVisibleItemIndex > 0) listState.scrollToItem(0)
+    }
+
+    // "Cargar más" añade filas al final: al terminar se devuelve el foco al
+    // botón para que el D-pad no salte a otra fila ni la lista se mueva sola.
+    var wasLoadingMore by remember { mutableStateOf(false) }
+    LaunchedEffect(loadingMore) {
+        if (wasLoadingMore && !loadingMore) {
+            repeat(6) {
+                withFrameNanos { }
+                if (loadMoreFocus.requestFocus()) return@LaunchedEffect
+            }
+        }
+        wasLoadingMore = loadingMore
+    }
 
     // Calcula el índice del capítulo en el que enfocar:
     // 1) Si hay resumeEpisode (empezado y sin terminar), ése.
@@ -171,18 +201,16 @@ private fun Content(
     }.takeIf { it >= 0 } ?: 0
 
     // El foco inicial va al capítulo calculado; si no hay capítulos, a la
-    // estrella de favoritos. La clave NO incluye el orden: al tocar ⇅ el
-    // foco debe quedarse en el icono para poder volver a invertir.
-    LaunchedEffect(detail.slug, sorted.isEmpty(), initialFocusIndex) {
+    // estrella de favoritos.
+    //
+    // La clave es SOLO el slug: antes incluía `initialFocusIndex` y el orden,
+    // así que al tocar ⇅ (o al llegar capítulos con "Cargar más") se volvía a
+    // pedir el foco en una fila, el D-pad saltaba y la lista se movía sola.
+    LaunchedEffect(detail.slug) {
         repeat(10) {
             withFrameNanos { }
             val ok = if (sorted.isEmpty()) starFocus.requestFocus()
-            else {
-                // El primer capítulo ya está compuesto al entrar al detalle.
-                // Pedirlo explícitamente evita que el foco caiga en la
-                // estrella y hace que DPAD_UP llegue al botón de orden.
-                firstChapterFocus.requestFocus()
-            }
+            else firstChapterFocus.requestFocus()
             if (ok) return@LaunchedEffect
         }
     }
@@ -274,6 +302,14 @@ private fun Content(
                         },
                     )
                 }
+                // Marca completos todos los capítulos cargados de una vez.
+                TvActionButton(
+                    text = stringResource(R.string.detail_mark_all),
+                    primary = false,
+                    compact = true,
+                    icon = Icons.Filled.Check,
+                    onClick = onMarkAllWatched,
+                )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = if (descending) {
@@ -283,6 +319,7 @@ private fun Content(
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = JkTextSecondary,
+                    maxLines = 1,
                 )
             }
 
@@ -298,6 +335,7 @@ private fun Content(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize(),
@@ -306,6 +344,11 @@ private fun Content(
                         val progress = progressByEpisode[episode.number.toInt()]
                         val watched = progress?.completed == true
                         val inProgress = !watched && (progress?.positionMs ?: 0L) > 0L
+                        // El FocusRequester se asigna al capítulo que se va a
+                        // enfocar al entrar; solo esa fila mapea ARRIBA al
+                        // botón de orden (antes lo hacía siempre la primera y
+                        // con el orden invertido apuntaba a otra fila).
+                        val isFocusTarget = index == initialFocusIndex
                         ChapterRow(
                             number = episode.numberLabel,
                             title = chapterTitle(episode, detail.title),
@@ -315,12 +358,12 @@ private fun Content(
                             progressLabel = progress
                                 ?.takeIf { it.durationMs > 0 && it.fraction >= 0.01f }
                                 ?.let { "${(it.fraction * 100).toInt()}%" },
-                            modifier = if (index == 0) {
+                            modifier = if (isFocusTarget) {
                                 Modifier.focusProperties { up = sortFocus }
                             } else {
                                 Modifier
                             },
-                            focusRequester = if (index == initialFocusIndex) firstChapterFocus else null,
+                            focusRequester = if (isFocusTarget) firstChapterFocus else null,
                             onClick = {
                                 onPlay(
                                     detail.slug,
@@ -328,6 +371,9 @@ private fun Content(
                                     episode.url,
                                     episode.title,
                                 )
+                            },
+                            onLongClick = {
+                                onToggleWatched(episode.number.toInt(), watched)
                             },
                         )
                     }
@@ -342,6 +388,7 @@ private fun Content(
                                     },
                                     primary = false,
                                     enabled = !loadingMore,
+                                    modifier = Modifier.focusRequester(loadMoreFocus),
                                     onClick = onLoadMore,
                                 )
                             }
@@ -404,10 +451,12 @@ private fun LeftPanel(detail: AnimeDetail) {
             MetaLine(
                 label = stringResource(R.string.detail_meta_status),
                 value = status,
-                valueColor = if (detail.status == AiringStatus.CURRENTLY) {
-                    JkGreen
-                } else {
-                    JkTextPrimary
+                // Mismo código de color que las tarjetas: naranja mientras se
+                // emite, verde cuando concluyó.
+                valueColor = when (detail.status) {
+                    AiringStatus.CURRENTLY -> JkOrange
+                    AiringStatus.FINISHED -> JkGreen
+                    else -> JkTextPrimary
                 },
             )
         }

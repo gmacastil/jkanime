@@ -92,6 +92,24 @@ class DetailViewModel(
         }
     }
 
+    /** Pulsación sostenida en una fila: alterna visto / no visto. */
+    fun toggleWatched(episodeNumber: Int, watched: Boolean) {
+        viewModelScope.launch {
+            if (watched) {
+                library.unmarkWatched(slug, episodeNumber)
+            } else {
+                library.markWatched(slug, episodeNumber)
+            }
+        }
+    }
+
+    /** Botón "Todo visto": marca completos todos los capítulos cargados. */
+    fun markAllWatched(episodes: List<Episode>) {
+        val numbers = episodes.map { it.number.toInt() }
+        if (numbers.isEmpty()) return
+        viewModelScope.launch { library.markAllWatched(slug, numbers) }
+    }
+
     init {
         load()
     }
@@ -128,10 +146,20 @@ class DetailViewModel(
                 repository.episodes(current.detail.animeId, slug, page = nextPage)
             }.fold(
                 onSuccess = { page ->
+                    val merged = (current.episodes + page.episodes)
+                        .distinctBy { it.id }
+                        .sortedBy { it.number }
+                    // Si la página no aportó nada nuevo, se corta el paginado:
+                    // antes `hasMore` seguía en true y pulsar el botón
+                    // "Cargar más" repetía la misma página sin fin.
+                    val advanced = merged.size > current.episodes.size
                     _state.value = current.copy(
-                        episodes = (current.episodes + page.episodes).distinctBy { it.id }
-                            .sortedBy { it.number },
-                        page = page.currentPage,
+                        episodes = merged,
+                        page = if (advanced) {
+                            page.currentPage.coerceAtLeast(nextPage)
+                        } else {
+                            current.lastPage
+                        },
                         lastPage = page.lastPage,
                         loadingMore = false,
                     )

@@ -1,21 +1,25 @@
 package com.macastil.tv.feature.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -23,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -39,11 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.tv.material3.Icon
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
@@ -89,6 +92,9 @@ fun PlayerScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // Salir del reproductor es solo con BACK: ya no hay botón en el overlay.
+    BackHandler(onBack = onExit)
+
     val controller = remember { PlayerController() }
     val rootFocus = remember { FocusRequester() }
     // El WebView se queda con el foco del sistema (Chromium lo pide al
@@ -100,6 +106,11 @@ fun PlayerScreen(
     // fila de arriba (se queda atascada en el propio botón).
     val firstServerFocus = remember { FocusRequester() }
     var overlayVisible by remember { mutableStateOf(true) }
+    // Cada interacción (buscar, pausar, elegir servidor) reinicia el
+    // temporizador de auto-ocultar: antes el contador arrancaba al abrirse el
+    // overlay y los controles desaparecían a los 6 s aunque el usuario
+    // estuviera adelantando/retrocediendo.
+    var overlayInteraction by remember { mutableIntStateOf(0) }
     // Los servidores están ocultos por defecto: se reproduce con Desu (el
     // player propio del sitio) y solo se ofrece la lista si falla.
     var showServers by remember { mutableStateOf(false) }
@@ -119,6 +130,19 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(true) }
     var resumeFromMs by remember { mutableStateOf<Long?>(null) }
     var playerReady by remember { mutableStateOf(false) }
+
+    // Pausa/play desde el overlay o con la tecla del mando.
+    //
+    // El estado NO se invierte a ciegas: `NativePlayer` ya emite el estado
+    // real por `onPlayingChanged` (que se dispara de forma síncrona dentro de
+    // `pause()`/`play()`). Invertir después pisaba ese valor y el icono
+    // quedaba al revés (se pausaba el vídeo y el botón seguía en "Pausa").
+    // El WebView, en cambio, no avisa, así que ahí sí se invierte a mano.
+    val togglePlay: () -> Unit = {
+        val wasPlaying = controller.player?.isPlaying
+        controller.togglePlayPause()
+        isPlaying = if (wasPlaying == null) !isPlaying else !wasPlaying
+    }
 
     // Reanudar donde quedó el usuario la última vez.
     LaunchedEffect(episodeUrl) {
@@ -143,10 +167,19 @@ fun PlayerScreen(
         runCatching { rootFocus.requestFocus() }
     }
 
-    // El overlay se oculta solo: en TV no hay mouse para "quitar el foco".
-    // Si estamos avisando de que el servidor falló, se queda visible.
-    LaunchedEffect(overlayVisible, state, fallbackSuggested, showServers, overlayHasFocus) {
-        if (overlayVisible && !fallbackSuggested && !showServers && !overlayHasFocus) {
+    // El overlay se oculta solo mientras se reproduce: en pausa los controles
+    // se quedan (es cuando el usuario los necesita). Si estamos avisando de que
+    // el servidor falló, también se queda visible.
+    LaunchedEffect(
+        overlayVisible,
+        isPlaying,
+        state,
+        fallbackSuggested,
+        showServers,
+        overlayHasFocus,
+        overlayInteraction,
+    ) {
+        if (overlayVisible && isPlaying && !fallbackSuggested && !showServers && !overlayHasFocus) {
             delay(6_000)
             overlayVisible = false
         }
@@ -209,24 +242,31 @@ fun PlayerScreen(
                         }
                     }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-                        controller.togglePlayPause()
-                        isPlaying = !isPlaying
+                        togglePlay()
                         overlayVisible = true
+                        overlayInteraction++
                         true
                     }
+                    // Buscar con ◀ ▶ muestra los controles (para ver dónde
+                    // quedó la reproducción) y reinicia el temporizador, así
+                    // se ocultan solos unos segundos después del último seek.
                     Key.DirectionLeft -> {
-                        if (overlayVisible) {
+                        if (overlayHasFocus) {
                             false
                         } else {
                             controller.seekBy(-10)
+                            overlayVisible = true
+                            overlayInteraction++
                             true
                         }
                     }
                     Key.DirectionRight -> {
-                        if (overlayVisible) {
+                        if (overlayHasFocus) {
                             false
                         } else {
                             controller.seekBy(10)
+                            overlayVisible = true
+                            overlayInteraction++
                             true
                         }
                     }
@@ -234,10 +274,12 @@ fun PlayerScreen(
                         if (overlayVisible) {
                             // Entrar en los botones del overlay.
                             overlayHasFocus = true
+                            overlayInteraction++
                             runCatching { overlayFocus.requestFocus() }
                             true
                         } else {
                             overlayVisible = true
+                            overlayInteraction++
                             false
                         }
                     }
@@ -352,12 +394,16 @@ fun PlayerScreen(
                          onSeek = { target ->
                              positionMs = target
                              controller.seekTo(target)
+                             overlayInteraction++
                          },
                          onTogglePlay = {
-                             controller.togglePlayPause()
-                             isPlaying = !isPlaying
+                             togglePlay()
+                             overlayInteraction++
                          },
-                        onToggleServers = { showServers = !showServers },
+                        onToggleServers = {
+                            showServers = !showServers
+                            overlayInteraction++
+                        },
                         onBackToPlayer = {
                             overlayHasFocus = false
                             runCatching { rootFocus.requestFocus() }
@@ -368,7 +414,6 @@ fun PlayerScreen(
                             fallbackSuggested = false
                             playerReady = false
                         },
-                        onExit = onExit,
                     )
                 }
             }
@@ -393,7 +438,6 @@ private fun Overlay(
     onToggleServers: () -> Unit,
     onBackToPlayer: () -> Unit,
     onSelect: (com.macastil.tv.model.VideoServer) -> Unit,
-    onExit: () -> Unit,
 ) {
     // La lista se acaba de abrir: el foco entra en ella.
     LaunchedEffect(showServers) {
@@ -436,6 +480,35 @@ private fun Overlay(
                     onClick = onToggleServers,
                 )
             }
+
+            // Pausa/play en el centro del vídeo (antes estaba en la fila de
+            // abajo junto a los saltos). Al ocultarse el overlay desaparece.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .focusRequester(focusRequester)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onTogglePlay,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) PauseIcon else Icons.Filled.PlayArrow,
+                    contentDescription = if (isPlaying) {
+                        stringResource(R.string.player_pause_cd)
+                    } else {
+                        stringResource(R.string.player_play_cd)
+                    },
+                    tint = JkTextPrimary,
+                    modifier = Modifier.size(52.dp),
+                )
+            }
+
             if (showServers) {
                 Column(
                     modifier = Modifier
@@ -494,48 +567,13 @@ private fun Overlay(
                 onSeek = onSeek,
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TvIconButton(
-                    icon = Icons.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.player_rewind_cd),
-                    size = 40.dp,
-                    iconSize = 21.dp,
-                    onClick = { onSeek((positionMs - 10_000L).coerceAtLeast(0L)) },
-                )
-                TvIconButton(
-                    icon = if (isPlaying) PauseIcon else Icons.Filled.PlayArrow,
-                    contentDescription = if (isPlaying) {
-                        stringResource(R.string.player_pause_cd)
-                    } else {
-                        stringResource(R.string.player_play_cd)
-                    },
-                    active = true,
-                    size = 48.dp,
-                    iconSize = 24.dp,
-                    modifier = Modifier.focusRequester(focusRequester),
-                    onClick = onTogglePlay,
-                )
-                TvIconButton(
-                    icon = Icons.Filled.ArrowForward,
-                    contentDescription = stringResource(R.string.player_forward_cd),
-                    size = 40.dp,
-                    iconSize = 21.dp,
-                    onClick = {
-                        onSeek((positionMs + 10_000L).coerceAtMost(durationMs))
-                    },
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                TvIconButton(
-                    icon = Icons.Filled.ExitToApp,
-                    contentDescription = stringResource(R.string.player_exit_cd),
-                    size = 40.dp,
-                    onClick = onExit,
-                )
-            }
+            // Sin botones de adelantar/retroceder ni de salir: el D-pad
+            // (◀ ▶) mueve la barra y BACK sale del reproductor.
+            Text(
+                text = stringResource(R.string.player_seek_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = JkTextSecondary,
+            )
         }
     }
 }

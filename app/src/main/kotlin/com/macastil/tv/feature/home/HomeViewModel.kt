@@ -70,6 +70,55 @@ class HomeViewModel(
         _drawerOpen.value = false
     }
 
+    /**
+     * Alterna favorito desde una tarjeta (OK sostenido).
+     *
+     * Las tarjetas de Programación y del buscador solo traen slug/título/póster,
+     * así que al añadir se guarda lo mínimo y **inmediatamente** se completa el
+     * dato de emisión: sin `lastAiredEpisode` la tarjeta no puede calcular
+     * pendientes y acabaría clasificada como "Al día" por error.
+     */
+    fun toggleFavoriteFromCard(
+        slug: String,
+        title: String,
+        posterUrl: String?,
+        animeId: Int = 0,
+        statusLabel: String? = null,
+        lastAiredEpisode: Int? = null,
+        totalEpisodes: Int? = null,
+    ) {
+        viewModelScope.launch {
+            val added = runCatching {
+                library.toggleFavorite(
+                    slug = slug,
+                    animeId = animeId,
+                    title = title,
+                    posterUrl = posterUrl,
+                    totalEpisodes = totalEpisodes?.takeIf { it > 0 },
+                    statusLabel = statusLabel,
+                    lastAiredEpisode = lastAiredEpisode,
+                )
+            }.getOrNull() == true
+
+            if (added && (lastAiredEpisode == null || totalEpisodes == null)) {
+                completeFavorite(slug)
+            }
+        }
+    }
+
+    /** Rellena emisión/total del favorito recién creado pidiendo el detalle. */
+    private suspend fun completeFavorite(slug: String) {
+        runCatching { repository.detail(slug) }
+            .onSuccess { detail ->
+                library.updateAired(
+                    slug = slug,
+                    lastAiredEpisode = detail.lastEpisodeNumber,
+                    totalEpisodes = detail.totalEpisodes?.takeIf { it > 0 },
+                    statusLabel = detail.statusLabel ?: detail.status.label,
+                )
+            }
+    }
+
     // ---------------------------------------------------------------------
     // Menú lateral (hamburguesa): sustituye a la fila de botones que antes
     // vivía en la cabecera. Animes/Donghuas/OVAs viven en `section`; Favoritos

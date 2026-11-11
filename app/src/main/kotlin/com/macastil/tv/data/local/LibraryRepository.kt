@@ -144,6 +144,68 @@ class LibraryRepository(
     }
 
     // ---------------------------------------------------------------------
+    // Marcado manual de capítulos (pulsación sostenida y "todo visto")
+    // ---------------------------------------------------------------------
+
+    /**
+     * Marca un capítulo como visto sin haberlo reproducido. Si ya había
+     * progreso se conserva su duración para que la barra no quede rara.
+     */
+    suspend fun markWatched(slug: String, episode: Int) {
+        val owner = profiles.owner()
+        val previous = db.progress().get(owner, slug, episode)
+        val duration = previous?.durationMs ?: 0L
+        val now = System.currentTimeMillis()
+        db.progress().upsert(
+            ProgressEntity(
+                owner = owner,
+                slug = slug,
+                episode = episode,
+                positionMs = duration,
+                durationMs = duration,
+                completed = true,
+                updatedAt = now,
+            ),
+        )
+        db.favorites().bumpLastWatched(owner, slug, episode, now)
+    }
+
+    /** Desmarca un capítulo y recalcula el último visto del favorito. */
+    suspend fun unmarkWatched(slug: String, episode: Int) {
+        val owner = profiles.owner()
+        db.progress().delete(owner, slug, episode)
+        db.favorites().setLastWatched(
+            owner = owner,
+            slug = slug,
+            episode = db.progress().maxCompleted(owner, slug),
+            now = System.currentTimeMillis(),
+        )
+    }
+
+    /** "Todo visto": marca completos todos los capítulos indicados. */
+    suspend fun markAllWatched(slug: String, episodes: List<Int>) {
+        if (episodes.isEmpty()) return
+        val owner = profiles.owner()
+        val now = System.currentTimeMillis()
+        episodes.forEach { episode ->
+            val previous = db.progress().get(owner, slug, episode)
+            val duration = previous?.durationMs ?: 0L
+            db.progress().upsert(
+                ProgressEntity(
+                    owner = owner,
+                    slug = slug,
+                    episode = episode,
+                    positionMs = duration,
+                    durationMs = duration,
+                    completed = true,
+                    updatedAt = now,
+                ),
+            )
+        }
+        db.favorites().bumpLastWatched(owner, slug, episodes.max(), now)
+    }
+
+    // ---------------------------------------------------------------------
     // Merge desde el backend (last-write-wins por `updatedAt`)
     // ---------------------------------------------------------------------
 

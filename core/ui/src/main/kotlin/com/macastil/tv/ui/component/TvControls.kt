@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Check
 import androidx.tv.material3.Icon
 import androidx.compose.runtime.Composable
@@ -467,6 +467,8 @@ fun ChapterRow(
     progressFraction: Float = 0f,
     progressLabel: String? = null,
     focusRequester: FocusRequester? = null,
+    /** Mantener OK: marca/desmarca el capítulo como visto. */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -491,9 +493,10 @@ fun ChapterRow(
             .then(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
+                onLongClick = onLongClick,
                 onClick = onClick,
             )
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -599,4 +602,20 @@ fun Divider(modifier: Modifier = Modifier) {
             .background(JkSurfaceHigh)
             .padding(top = 1.dp),
     )
+}
+
+/**
+ * Color del estado de emisión tal como lo publica el sitio:
+ * **naranja** mientras se emite, **verde** cuando ya concluyó.
+ *
+ * Se resuelve por texto porque las tarjetas de búsqueda y del Directorio solo
+ * traen la etiqueta ya renderizada (`En emisión`, `Concluido`, …), no el enum.
+ */
+fun airingStatusColor(label: String?): Color {
+    val value = label?.lowercase() ?: return JkTextSecondary
+    return when {
+        "emisi" in value || "emit" in value -> JkOrange
+        "conclu" in value || "finaliz" in value || "termin" in value -> JkGreen
+        else -> JkTextSecondary
+    }
 }
