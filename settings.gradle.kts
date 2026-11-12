@@ -23,6 +23,7 @@ dependencyResolutionManagement {
 rootProject.name = "jkanime-tv"
 
 include(":app")
+include(":app-mobile")
 include(":core:model")
 include(":core:network")
 include(":core:ui")
