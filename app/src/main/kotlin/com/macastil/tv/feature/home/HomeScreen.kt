@@ -633,17 +633,21 @@ private fun Header(
             onMoveDown = onMoveDown,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            text = BuildConfig.VERSION_NAME,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF141414),
+        Box(
             modifier = Modifier
                 .padding(start = 12.dp)
                 .height(48.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(JkOrange)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-        )
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = BuildConfig.VERSION_NAME,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF141414),
+            )
+        }
     }
 }
 
