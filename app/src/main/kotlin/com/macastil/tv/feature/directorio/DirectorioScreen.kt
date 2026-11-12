@@ -105,6 +105,7 @@ fun DirectorioScreen(
     // definiciones de opciones de la última página para no desmontar el panel
     // ni perder el foco del D-pad mientras llega la nueva respuesta.
     var availableFilters by remember { mutableStateOf<List<DirectorioFilter>>(emptyList()) }
+    var showJump by remember { mutableStateOf(false) }
     // Última página conocida: la comparten el paginado y el "Ir a página" del
     // panel lateral, y sobrevive a los estados de carga.
     var page by remember { mutableStateOf<DirectorioPage?>(null) }
@@ -144,9 +145,6 @@ fun DirectorioScreen(
                 selected = selectedFilters,
                 onFilterChange = { name, value -> viewModel.setFilter(name, value) },
                 onClearFilters = viewModel::clearFilters,
-                currentPage = page?.page ?: 1,
-                lastPage = page?.lastPage ?: 1,
-                onGoToPage = { target -> viewModel.loadPage(target) },
             )
 
             // Grilla de resultados
@@ -174,6 +172,19 @@ fun DirectorioScreen(
         PaginationFooter(
             page = page,
             onGoToPage = { target -> viewModel.loadPage(target) },
+            onJumpToPage = { showJump = true },
+        )
+    }
+
+    if (showJump && page != null) {
+        JumpToPageDialog(
+            currentPage = page!!.page,
+            lastPage = page!!.lastPage,
+            onDismiss = { showJump = false },
+            onGo = { target ->
+                showJump = false
+                viewModel.loadPage(target)
+            },
         )
     }
 }
@@ -186,9 +197,6 @@ private fun FiltersPanel(
     selected: Map<String, String>,
     onFilterChange: (String, String) -> Unit,
     onClearFilters: () -> Unit,
-    currentPage: Int,
-    lastPage: Int,
-    onGoToPage: (Int) -> Unit,
 ) {
     // El formulario real publica diez filtros. El panel tiene scroll vertical,
     // por lo que todos deben permanecer disponibles en la TV.
@@ -197,23 +205,6 @@ private fun FiltersPanel(
     if (visibleFilters.isEmpty()) {
         LoadingState(message = stringResource(R.string.directorio_loading_filters))
         return
-    }
-
-    // "Ir a página" vive aquí (no en la barra de paginado) y abre el teclado
-    // numérico en un diálogo sin botón Cancelar: se cierra con BACK.
-    var showJump by remember { mutableStateOf(false) }
-    val jumpFocus = remember { FocusRequester() }
-    var openedJump by remember { mutableStateOf(false) }
-    LaunchedEffect(showJump) {
-        if (showJump) {
-            openedJump = true
-            return@LaunchedEffect
-        }
-        if (!openedJump) return@LaunchedEffect
-        repeat(10) {
-            withFrameNanos { }
-            if (jumpFocus.requestFocus()) return@LaunchedEffect
-        }
     }
 
     // Surface MD3 en vez del Box+background suelto de antes: JkSurface y
@@ -276,38 +267,7 @@ private fun FiltersPanel(
                 }
             }
 
-            if (lastPage > 1) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(JkSurfaceHigh),
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                TvActionButton(
-                    text = stringResource(R.string.directorio_go_to_page),
-                    primary = false,
-                    compact = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(jumpFocus),
-                    onClick = { showJump = true },
-                )
-            }
         }
-    }
-
-    if (showJump) {
-        JumpToPageDialog(
-            currentPage = currentPage,
-            lastPage = lastPage,
-            onDismiss = { showJump = false },
-            onGo = { target ->
-                showJump = false
-                onGoToPage(target)
-            },
-        )
     }
 }
 
@@ -452,6 +412,7 @@ private fun ResultsGrid(
 private fun PaginationFooter(
     page: DirectorioPage?,
     onGoToPage: (Int) -> Unit,
+    onJumpToPage: () -> Unit,
 ) {
     if (page == null) return
     if (page.lastPage <= 1) return
@@ -460,6 +421,7 @@ private fun PaginationFooter(
         currentPage = page.page,
         lastPage = page.lastPage,
         onGoToPage = onGoToPage,
+        onJumpToPage = onJumpToPage,
     )
 }
 
@@ -475,6 +437,7 @@ private fun PaginationBar(
     currentPage: Int,
     lastPage: Int,
     onGoToPage: (Int) -> Unit,
+    onJumpToPage: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -513,6 +476,12 @@ private fun PaginationBar(
             contentDescription = stringResource(R.string.directorio_next_page_cd),
             enabled = currentPage < lastPage,
             onClick = { onGoToPage(currentPage + 1) },
+        )
+        TvActionButton(
+            text = stringResource(R.string.directorio_go_to_page),
+            primary = false,
+            compact = true,
+            onClick = onJumpToPage,
         )
     }
 }
