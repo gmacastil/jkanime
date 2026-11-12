@@ -29,7 +29,7 @@ create table if not exists sync_spaces (
     id         uuid primary key default gen_random_uuid(),
     code       text unique not null,
     token      text not null,
-    -- Hash bcrypt de una clave alfanumérica de vinculación de 10 caracteres.
+    -- Hash bcrypt de una clave hexadecimal de vinculación de 6 caracteres.
     -- La clave plana solo se devuelve al cliente al crearla/rotarla.
     recovery_hash text,
     recovery_created_at timestamptz,
@@ -136,9 +136,8 @@ begin
     if v_space is null then raise exception 'invalid_credentials'; end if;
 
     if p_recovery_key is null
-       or length(trim(p_recovery_key)) <> 10
-       or upper(trim(p_recovery_key)) !~ '^[A-Z2-9]+$'
-       or upper(trim(p_recovery_key)) ~ '[IO01]' then
+       or length(trim(p_recovery_key)) <> 6
+       or upper(trim(p_recovery_key)) !~ '^[0-9A-F]+$' then
         raise exception 'invalid_recovery_key_format';
     end if;
     update sync_spaces

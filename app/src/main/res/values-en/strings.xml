@@ -55,8 +55,8 @@
     <string name="sync_space_created">Space created: %1$s</string>
     <string name="sync_space_created_with_recovery">Space created: %1$s. Save the recovery key: %2$s</string>
     <string name="sync_pairing_created">Pairing code (15 min): %1$s</string>
-    <string name="sync_recovery_title">ENTER LINKING KEY (10 CHARACTERS)</string>
-    <string name="sync_recovery_set_title">SET LINKING KEY (10 CHARACTERS)</string>
+    <string name="sync_recovery_title">ENTER LINKING KEY (6 CHARACTERS)</string>
+    <string name="sync_recovery_set_title">SET LINKING KEY (6 CHARACTERS)</string>
     <string name="sync_recovery_saved">Linking key saved</string>
     <string name="sync_result">Synced: %1$d favorites, %2$d progress</string>
     <string name="sync_no_space">No linked space</string>

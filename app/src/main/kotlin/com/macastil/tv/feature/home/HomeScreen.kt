@@ -108,7 +108,7 @@ import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.component.TvIconButton
 import com.macastil.tv.ui.component.TvNumberPad
-import com.macastil.tv.ui.component.TvRecoveryPad
+import com.macastil.tv.ui.component.TvHexPad
 import com.macastil.tv.ui.component.airingStatusColor
 import com.macastil.tv.ui.theme.JkBackground
 import com.macastil.tv.ui.theme.JkGreen
@@ -1107,17 +1107,14 @@ private fun AvatarMenu(
                                 color = JkTextSecondary,
                             )
                             Text(
-                                text = recoveryKey.padEnd(10, '·').chunked(5).joinToString("  "),
+                                text = recoveryKey.padEnd(6, '·').chunked(3).joinToString("  "),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = JkOrange,
                             )
-                            SyncKeypad(
-                                code = recoveryKey,
-                                maxLength = 10,
-                                recovery = true,
-                                onDigit = { if (recoveryKey.length < 10) onRecoveryKeyChange(recoveryKey + it) },
+                            TvHexPad(
+                                onChar = { if (recoveryKey.length < 6) onRecoveryKeyChange(recoveryKey + it) },
                                 onBackspace = { onRecoveryKeyChange(recoveryKey.dropLast(1)) },
-                                onConfirm = { if (recoveryKey.length == 10) onRecoverSpace() },
+                                onConfirm = { if (recoveryKey.length == 6) onRecoverSpace() },
                                 busy = busy,
                                 compact = true,
                                 focusRequester = focusRequester,
@@ -1397,11 +1394,13 @@ private fun SyncKeypad(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
         if (recovery) {
-            TvRecoveryPad(
+            TvHexPad(
                 onChar = onDigit,
                 onBackspace = onBackspace,
                 onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
                 enabled = !busy,
+                busy = busy,
+                compact = compact,
                 focusRequester = focusRequester,
             )
         } else {

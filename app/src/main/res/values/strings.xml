@@ -57,8 +57,8 @@
     <string name="sync_space_created">Espacio creado: %1$s</string>
     <string name="sync_space_created_with_recovery">Espacio creado: %1$s. Guarda la clave de recuperación: %2$s</string>
     <string name="sync_pairing_created">Código para vincular (15 min): %1$s</string>
-    <string name="sync_recovery_title">INTRODUCE CLAVE (10 CARACTERES)</string>
-    <string name="sync_recovery_set_title">DEFINE CLAVE DE VINCULACIÓN (10 CARACTERES)</string>
+    <string name="sync_recovery_title">INTRODUCE CLAVE (6 CARACTERES)</string>
+    <string name="sync_recovery_set_title">DEFINE CLAVE DE VINCULACIÓN (6 CARACTERES)</string>
     <string name="sync_recovery_saved">Clave de vinculación guardada</string>
     <string name="sync_result">Sincronizado: %1$d favoritos, %2$d progresos</string>
     <string name="sync_no_space">No hay espacio vinculado</string>
