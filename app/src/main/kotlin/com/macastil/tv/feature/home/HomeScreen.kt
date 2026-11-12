@@ -637,10 +637,11 @@ private fun Header(
         Box(
             modifier = Modifier
                 .padding(start = 12.dp)
+                .width(22.dp)
                 .height(48.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(JkOrange)
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 0.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
