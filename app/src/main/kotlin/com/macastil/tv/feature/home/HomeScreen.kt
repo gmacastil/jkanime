@@ -636,8 +636,12 @@ private fun Header(
         Text(
             text = BuildConfig.VERSION_NAME,
             style = MaterialTheme.typography.labelSmall,
-            color = JkTextSecondary.copy(alpha = 0.7f),
-            modifier = Modifier.padding(start = 12.dp),
+            color = Color(0xFF141414),
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(JkOrange)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
