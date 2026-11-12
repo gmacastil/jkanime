@@ -157,6 +157,7 @@ fun HomeScreen(
     var showAvatarMenu by remember { mutableStateOf(false) }
     var avatarMenuSyncCode by remember { mutableStateOf("") }
     var avatarMenuRecoveryKey by remember { mutableStateOf("") }
+    var avatarMenuPairingCode by remember { mutableStateOf("") }
     var avatarMenuBusy by remember { mutableStateOf(false) }
     var avatarMenuStatus by remember { mutableStateOf<String?>(null) }
     var avatarMenuMode by remember { mutableStateOf(AvatarMenuMode.MAIN) }
@@ -344,6 +345,7 @@ fun HomeScreen(
                 configFirstItemFocus = configFirstItemFocus,
                 hasSpace = activeProfile?.spaceCode != null,
                 busy = avatarMenuBusy,
+                pairingCode = avatarMenuPairingCode,
                 onSyncNow = {
                     scope.launch {
                         avatarMenuBusy = true
@@ -376,7 +378,9 @@ fun HomeScreen(
                         avatarMenuBusy = true
                         runCatching { syncEngine.createPairingCode() }
                             .onSuccess { pairing ->
+                                avatarMenuPairingCode = pairing.code
                                 avatarMenuStatus = context.getString(R.string.sync_pairing_created, pairing.code.chunked(4).joinToString(" "))
+                                showAvatarMenu = true
                             }
                             .onFailure { avatarMenuStatus = context.getString(R.string.common_error, it.message) }
                         avatarMenuBusy = false
@@ -388,6 +392,7 @@ fun HomeScreen(
                         avatarMenuBusy = true
                         syncEngine.clearSpace()
                         avatarMenuStatus = context.getString(R.string.sync_unlinked)
+                        avatarMenuPairingCode = ""
                         avatarMenuBusy = false
                     }
                 },
@@ -422,6 +427,7 @@ fun HomeScreen(
                 mode = avatarMenuMode,
                 syncCode = avatarMenuSyncCode,
                 recoveryKey = avatarMenuRecoveryKey,
+                pairingCode = avatarMenuPairingCode,
                 busy = avatarMenuBusy,
                 status = avatarMenuStatus,
                 focusRequester = avatarMenuFocus,
@@ -439,6 +445,7 @@ fun HomeScreen(
                     avatarMenuMode = AvatarMenuMode.MAIN
                     avatarMenuSyncCode = ""
                     avatarMenuRecoveryKey = ""
+                    avatarMenuPairingCode = ""
                     avatarMenuStatus = null
                 },
                 onSyncNow = {
@@ -540,6 +547,7 @@ fun HomeScreen(
                         avatarMenuStatus = null
                         syncEngine.clearSpace()
                         avatarMenuStatus = context.getString(R.string.sync_unlinked)
+                        avatarMenuPairingCode = ""
                         avatarMenuMode = AvatarMenuMode.MAIN
                         avatarMenuBusy = false
                     }
@@ -810,6 +818,7 @@ private fun SideDrawer(
     onRecovery: () -> Unit,
     onProfileSwitch: () -> Unit,
     onLanguage: () -> Unit,
+    pairingCode: String,
     onSelectSection: (ProgramacionSection) -> Unit,
     onFavorites: () -> Unit,
     onDirectorio: () -> Unit,
@@ -898,6 +907,7 @@ private fun SideDrawer(
                     onRecovery = onRecovery,
                     onProfileSwitch = onProfileSwitch,
                     onLanguage = onLanguage,
+                    pairingCode = pairingCode,
                 )
             }
         }
@@ -927,6 +937,7 @@ private fun AvatarMenu(
     mode: AvatarMenuMode,
     syncCode: String,
     recoveryKey: String,
+    pairingCode: String,
     busy: Boolean,
     status: String?,
     focusRequester: FocusRequester,
@@ -1055,6 +1066,7 @@ private fun AvatarMenu(
                                 onProfileSwitch()
                             },
                             onLanguage = { onModeChange(AvatarMenuMode.LANGUAGE) },
+                            pairingCode = pairingCode,
                         )
 
                         AvatarMenuMode.JOIN_CODE -> Column(
@@ -1264,6 +1276,7 @@ private fun AvatarDrawerMain(
     onRecovery: () -> Unit,
     onProfileSwitch: () -> Unit,
     onLanguage: () -> Unit,
+    pairingCode: String,
 ) {
     if (!hasSpace) {
         Text(
@@ -1292,6 +1305,16 @@ private fun AvatarDrawerMain(
             compact = true,
             onClick = onGeneratePairing,
         )
+        if (pairingCode.isNotEmpty()) {
+            DrawerItem(
+                label = pairingCode.padEnd(8, '·').chunked(4).joinToString("  "),
+                icon = null,
+                selected = false,
+                enabled = false,
+                compact = true,
+                onClick = {},
+            )
+        }
         DrawerItem(
             label = stringResource(R.string.home_drawer_set_recovery),
             icon = Icons.Filled.Add,
