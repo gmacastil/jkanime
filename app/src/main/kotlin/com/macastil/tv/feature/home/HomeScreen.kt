@@ -633,6 +633,12 @@ private fun Header(
             onMoveDown = onMoveDown,
             modifier = Modifier.weight(1f),
         )
+        Text(
+            text = BuildConfig.VERSION_NAME,
+            style = MaterialTheme.typography.labelSmall,
+            color = JkTextSecondary.copy(alpha = 0.7f),
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
 }
 
@@ -880,12 +886,6 @@ private fun SideDrawer(
                     onRecovery = onRecovery,
                     onProfileSwitch = onProfileSwitch,
                     onLanguage = onLanguage,
-                )
-                Text(
-                    text = stringResource(R.string.update_version_label, BuildConfig.VERSION_NAME),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = JkTextSecondary.copy(alpha = 0.7f),
-                    modifier = Modifier.align(Alignment.End).padding(end = 20.dp, top = 10.dp),
                 )
             }
         }
