@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +32,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -46,6 +54,9 @@ import com.macastil.tv.ui.theme.JkOrange
 import com.macastil.tv.ui.theme.JkSurfaceHigh
 import com.macastil.tv.ui.theme.JkTextPrimary
 import com.macastil.tv.ui.theme.JkTextSecondary
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Tarjeta vertical 2:3 con el póster del anime.
@@ -76,6 +87,9 @@ fun PosterCard(
     isFavorite: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val keyScope = rememberCoroutineScope()
+    var centerPressJob by remember { mutableStateOf<Job?>(null) }
+    var longPressTriggered by remember { mutableStateOf(false) }
     val focused by interactionSource.collectIsFocusedAsState()
     // `tween` en vez del spring por defecto: con rebote el zoom del póster
     // se "pasaba" de 1.06 y volvía, y en movimiento se notaba como un pulso.
@@ -108,6 +122,37 @@ fun PosterCard(
                 .then(
                     if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
                 )
+                .onPreviewKeyEvent { event ->
+                    if (onLongClick == null) return@onPreviewKeyEvent false
+                    if (event.key != Key.DirectionCenter && event.key != Key.Enter) {
+                        return@onPreviewKeyEvent false
+                    }
+
+                    when (event.type) {
+                        KeyEventType.KeyDown -> {
+                            if (centerPressJob == null) {
+                                longPressTriggered = false
+                                centerPressJob = keyScope.launch {
+                                    delay(600)
+                                    longPressTriggered = true
+                                    centerPressJob = null
+                                    onLongClick()
+                                }
+                            }
+                            true
+                        }
+
+                        KeyEventType.KeyUp -> {
+                            centerPressJob?.cancel()
+                            centerPressJob = null
+                            if (!longPressTriggered) onClick()
+                            longPressTriggered = false
+                            true
+                        }
+
+                        else -> false
+                    }
+                }
                 .combinedClickable(
                     interactionSource = interactionSource,
                     indication = null,
