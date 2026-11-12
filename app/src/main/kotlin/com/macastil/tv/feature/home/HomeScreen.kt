@@ -637,7 +637,7 @@ private fun Header(
         Box(
             modifier = Modifier
                 .padding(start = 12.dp)
-                .width(22.dp)
+                .width(28.dp)
                 .height(48.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(JkOrange)
