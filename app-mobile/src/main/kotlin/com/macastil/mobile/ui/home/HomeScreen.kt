@@ -32,6 +32,8 @@ import kotlinx.coroutines.flow.StateFlow
 @Composable
 fun HomeScreen(
     onOpenDetail: (String) -> Unit,
+    onOpenFavorites: () -> Unit = {},
+    onOpenSync: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModelFactory(JkanimeRepository()),

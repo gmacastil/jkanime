@@ -29,6 +29,7 @@ import com.macastil.tv.ui.theme.JkTextSecondary
 fun DetailScreen(
     slug: String,
     onPlay: (String, Int, String, String) -> Unit,
+    onBack: () -> Unit = {},
 ) {
     val viewModel: DetailViewModel = viewModel(
         factory = DetailViewModelFactory(JkanimeRepository(), slug),
@@ -57,6 +58,7 @@ fun DetailScreen(
                 detail = current.detail,
                 episodes = current.episodes,
                 onPlay = onPlay,
+                onBack = onBack,
             )
         }
     }
@@ -68,11 +70,17 @@ private fun DetailContent(
     detail: AnimeDetail,
     episodes: List<Episode>,
     onPlay: (String, Int, String, String) -> Unit,
+    onBack: () -> Unit,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(text = detail.title) },
+                navigationIcon = {
+                    androidx.compose.material3.IconButton(onClick = onBack) {
+                        Text(text = "◀", color = JkTextPrimary)
+                    }
+                },
             )
         },
     ) {

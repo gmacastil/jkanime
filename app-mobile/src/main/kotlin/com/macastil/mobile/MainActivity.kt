@@ -14,15 +14,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.macastil.mobile.ui.detail.DetailScreen
+import com.macastil.mobile.ui.favorites.FavoritesScreen
 import com.macastil.mobile.ui.home.HomeScreen
 import com.macastil.mobile.ui.home.HomeViewModel
 import com.macastil.mobile.ui.home.HomeViewModelFactory
 import com.macastil.mobile.ui.player.PlayerScreen
+import com.macastil.mobile.ui.sync.SyncScreen
 import com.macastil.tv.catalog.JkanimeRepository
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 sealed interface Screen {
     object Home : Screen
+    object Favorites : Screen
+    object Sync : Screen
     data class Detail(val slug: String) : Screen
     data class Player(
         val slug: String,
@@ -59,11 +63,30 @@ fun MobileApp() {
                 onOpenDetail = { slug ->
                     screen = Screen.Detail(slug)
                 },
+                onOpenFavorites = {
+                    screen = Screen.Favorites
+                },
+                onOpenSync = {
+                    screen = Screen.Sync
+                },
+            )
+            Screen.Favorites -> FavoritesScreen(
+                onBack = {
+                    screen = Screen.Home
+                },
+            )
+            Screen.Sync -> SyncScreen(
+                onBack = {
+                    screen = Screen.Home
+                },
             )
             is Screen.Detail -> DetailScreen(
                 slug = current.slug,
                 onPlay = { slug, episodeNumber, episodeUrl, episodeTitle ->
                     screen = Screen.Player(slug, episodeNumber, episodeUrl, episodeTitle)
+                },
+                onBack = {
+                    screen = Screen.Home
                 },
             )
             is Screen.Player -> PlayerScreen(
