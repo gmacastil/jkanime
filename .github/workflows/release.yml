@@ -79,12 +79,22 @@ jobs:
             -PJK_SUPABASE_URL="$JK_SUPABASE_URL" \
             -PJK_SUPABASE_ANON_KEY="$JK_SUPABASE_ANON_KEY"
 
+          # AGP usa un nombre distinto para el módulo móvil. Copiamos ambos
+          # artefactos a nombres estables para GitHub Release.
+          TV_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' -print -quit)"
+          MOBILE_APK="$(find app-mobile/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' -print -quit)"
+          test -n "$TV_APK" || TV_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -n "$MOBILE_APK" || MOBILE_APK="$(find app-mobile/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -n "$TV_APK" && test -n "$MOBILE_APK"
+          cp "$TV_APK" "jkanime-tv-${VERSION_NAME}.apk"
+          cp "$MOBILE_APK" "jkanime-mobile-${VERSION_NAME}.apk"
+
       - name: Publicar GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            app/build/outputs/apk/release/app-release.apk \
-            app-mobile/build/outputs/apk/release/app-release.apk \
+            jkanime-tv-*.apk \
+            jkanime-mobile-*.apk \
             --title "jkanime $GITHUB_REF_NAME" \
             --generate-notes
