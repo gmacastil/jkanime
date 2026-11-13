@@ -1,4 +1,4 @@
-name: Release Android TV
+name: Release Android TV y Mobile
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
           }
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/jkanimetv-release.keystore"
 
-      - name: Construir APK firmado
+      - name: Construir APKs firmados (TV + Mobile)
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/jkanimetv-release.keystore
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -61,9 +61,19 @@ jobs:
           }
           # versionCode = 100 + nº de commits: siempre crece con el repo y
           # supera a los builds locales de sideload (GITHUB_RUN_NUMBER se
-          # reinicia por repo y podía quedar por debajo de una TV ya actualizada).
+          # reinicia por repo y podía quedar por debajo de una release ya publicada).
           VERSION_CODE=$((100 + $(git rev-list --count HEAD)))
+          echo "Versión: $VERSION_NAME (code $VERSION_CODE)"
+
+          # Construir APK de Android TV
           ./gradlew :app:assembleRelease \
+            -PVERSION_NAME="$VERSION_NAME" \
+            -PVERSION_CODE="$VERSION_CODE" \
+            -PJK_SUPABASE_URL="$JK_SUPABASE_URL" \
+            -PJK_SUPABASE_ANON_KEY="$JK_SUPABASE_ANON_KEY"
+
+          # Construir APK de Android Mobile
+          ./gradlew :app-mobile:assembleRelease \
             -PVERSION_NAME="$VERSION_NAME" \
             -PVERSION_CODE="$VERSION_CODE" \
             -PJK_SUPABASE_URL="$JK_SUPABASE_URL" \
@@ -75,5 +85,6 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             app/build/outputs/apk/release/app-release.apk \
-            --title "jkanimetv $GITHUB_REF_NAME" \
+            app-mobile/build/outputs/apk/release/app-release.apk \
+            --title "jkanime $GITHUB_REF_NAME" \
             --generate-notes
