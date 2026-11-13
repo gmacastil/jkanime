@@ -17,12 +17,19 @@ import com.macastil.mobile.ui.detail.DetailScreen
 import com.macastil.mobile.ui.home.HomeScreen
 import com.macastil.mobile.ui.home.HomeViewModel
 import com.macastil.mobile.ui.home.HomeViewModelFactory
+import com.macastil.mobile.ui.player.PlayerScreen
 import com.macastil.tv.catalog.JkanimeRepository
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 sealed interface Screen {
     object Home : Screen
     data class Detail(val slug: String) : Screen
+    data class Player(
+        val slug: String,
+        val episodeNumber: Int,
+        val episodeUrl: String,
+        val episodeTitle: String,
+    ) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -56,7 +63,14 @@ fun MobileApp() {
             is Screen.Detail -> DetailScreen(
                 slug = current.slug,
                 onPlay = { slug, episodeNumber, episodeUrl, episodeTitle ->
-                    // Fase 3: reproducir episodio
+                    screen = Screen.Player(slug, episodeNumber, episodeUrl, episodeTitle)
+                },
+            )
+            is Screen.Player -> PlayerScreen(
+                episodeUrl = current.episodeUrl,
+                referer = null,
+                onExit = {
+                    screen = Screen.Detail(current.slug)
                 },
             )
         }

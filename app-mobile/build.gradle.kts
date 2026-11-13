@@ -103,5 +103,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime)
 
+    // Reproductor nativo para m3u8
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.ui)
+
     debugImplementation(libs.compose.ui.tooling)
 }
