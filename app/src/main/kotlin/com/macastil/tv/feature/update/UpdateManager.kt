@@ -6,7 +6,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.macastil.tv.BuildConfig
-import org.json.JSONObject
+import org.json.JSONArray
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -21,37 +21,63 @@ object UpdateManager {
     private const val REPOSITORY = "gmacastil/jkanime"
     private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
 
+    /**
+     * Prefijos de asset válidos para esta app. Se ordenan del más nuevo al
+     * histórico: los releases antiguos publicaban `app-release.apk`.
+     */
+    private val ASSET_PREFIXES = listOf("jkanime-tv-")
+
     suspend fun check(context: Context): AppUpdate? = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences("jk-updates", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         if (now - prefs.getLong("last_check", 0L) < CHECK_INTERVAL_MS) return@withContext null
         prefs.edit().putLong("last_check", now).apply()
 
+        // Se lista en vez de pedir `/releases/latest`: desde 1.4.8 el último
+        // release del repositorio puede ser el de móvil. Ver ReleaseSelector.
         runCatching {
             val connection = URL(
-                "https://api.github.com/repos/$REPOSITORY/releases/latest",
+                "https://api.github.com/repos/$REPOSITORY/releases?per_page=30",
             ).openConnection() as HttpURLConnection
             connection.connectTimeout = 10_000
             connection.readTimeout = 15_000
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("User-Agent", "jkanimetv/${BuildConfig.VERSION_NAME}")
-            connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
+            JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
                 .also { connection.disconnect() }
-        }.getOrNull()?.let { release ->
-            val version = release.optString("tag_name").removePrefix("v")
-            val apk = release.optJSONArray("assets")?.let { assets ->
-                (0 until assets.length())
-                    .map { assets.getJSONObject(it) }
-                    .firstOrNull { it.optString("name").endsWith(".apk") }
-            }
-            if (apk != null && isNewer(version, BuildConfig.VERSION_NAME)) {
-                AppUpdate(
-                    versionName = version,
-                    downloadUrl = apk.optString("browser_download_url"),
-                    releaseUrl = release.optString("html_url"),
+        }.getOrNull()?.let { releases ->
+            val parsed = (0 until releases.length()).mapNotNull { index ->
+                val release = releases.optJSONObject(index) ?: return@mapNotNull null
+                val assets = release.optJSONArray("assets")
+                    ?.let { array ->
+                        (0 until array.length()).mapNotNull { assetIndex ->
+                            array.optJSONObject(assetIndex)?.let { asset ->
+                                ReleaseAsset(
+                                    name = asset.optString("name"),
+                                    downloadUrl = asset.optString("browser_download_url"),
+                                )
+                            }
+                        }
+                    }
+                    .orEmpty()
+
+                ReleaseInfo(
+                    tag = release.optString("tag_name"),
+                    htmlUrl = release.optString("html_url"),
+                    assets = assets,
                 )
-            } else {
-                null
+            }
+
+            ReleaseSelector.select(
+                releases = parsed,
+                assetPrefixes = ASSET_PREFIXES,
+                currentVersion = BuildConfig.VERSION_NAME,
+            )?.let { selected ->
+                AppUpdate(
+                    versionName = selected.versionName,
+                    downloadUrl = selected.downloadUrl,
+                    releaseUrl = selected.releaseUrl,
+                )
             }
         }
     }
@@ -78,15 +104,4 @@ object UpdateManager {
         }
     }
 
-    private fun isNewer(candidate: String, current: String): Boolean {
-        val left = candidate.split('.').mapNotNull { it.toIntOrNull() }
-        val right = current.split('.').mapNotNull { it.toIntOrNull() }
-        if (left.isEmpty() || right.isEmpty()) return false
-        for (index in 0 until maxOf(left.size, right.size)) {
-            val a = left.getOrElse(index) { 0 }
-            val b = right.getOrElse(index) { 0 }
-            if (a != b) return a > b
-        }
-        return false
-    }
 }

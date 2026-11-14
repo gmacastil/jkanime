@@ -1,10 +1,16 @@
-# JK TV — cliente Android TV para jkanime.net
+# JK — clientes de jkanime.net para Android TV y móvil
 
-App de Android TV (Leanback + Compose for TV) que lista la sección **Programación**
-de jkanime.net como tarjetas, muestra descripción y capítulos, reproduce los
-episodios con Media3/ExoPlayer y fuentes HLS, guarda favoritos/progreso, sincroniza
-entre dispositivos (Supabase) y soporta varios perfiles locales en la misma TV
-(estilo Netflix).
+Dos apps en un mismo repositorio, con el mismo scraping y los mismos parsers:
+
+| App | Módulo | Paquete | UI |
+|---|---|---|---|
+| **JK TV** | `:app` | `com.macastil.tv` | Leanback + Compose for TV, D-pad, apaisado |
+| **JK Mobile** | `:app-mobile` | `com.macastil.mobile` | Compose Material3 táctil, vertical |
+
+Listan la sección **Programación** de jkanime.net como tarjetas, muestran
+descripción y capítulos, reproducen los episodios, guardan favoritos y progreso,
+y sincronizan entre dispositivos (Supabase). La app de TV añade varios perfiles
+locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 
 > ⚠️ Uso personal. JKanime distribuye contenido con derechos de autor sin licencia:
 > este proyecto no se publica en Play Store (violaría la política de Google) y no
@@ -99,8 +105,10 @@ físico).
 ## Módulos
 
 ```
-:app              Activities + navegación + features (home, detail, player,
+:app              TV: Activities + navegación + features (home, detail, player,
                   directorio, profiles, sync) + Room (favoritos/progreso/perfiles)
+:app-mobile       Móvil: navegación por estado + home/detail/player/favoritos/sync,
+                  biblioteca persistida en SharedPreferences + JSON
 :core:model       Modelos puros (AnimeCard, AnimeDetail, Episode, VideoServer, ...)
 :core:network     OkHttp + cookie jar de sesión + rate limit + token CSRF
 :core:ui          Design system TV (PosterCard, EpisodeTile, TvActionButton, estados)
@@ -135,13 +143,25 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### Release firmado y publicación
 
-El workflow `.github/workflows/release.yml` se ejecuta únicamente cuando se
-publica un tag `v*`. Construye el APK release con la clave permanente, crea el
-GitHub Release y adjunta el APK:
+El workflow `.github/workflows/release.yml` se ejecuta cuando se publica un tag
+`vX.Y.Z`. Construye **las dos** APKs con la clave permanente y publica **dos
+releases separados**, cada uno con una sola APK:
+
+| Tag publicado | APK | Para |
+|---|---|---|
+| `vX.Y.Z-tv` | `jkanime-tv-X.Y.Z.apk` | Android TV (Leanback) |
+| `vX.Y.Z-mobile` | `jkanime-mobile-X.Y.Z.apk` | teléfono / tablet |
+
+Así, al abrir la página de releases desde un celular solo se ofrece la APK
+móvil (y desde el televisor solo la de TV). El job verifica con `aapt2 dump
+badging` que la APK de TV declara Leanback y la móvil no, y aborta si se
+cruzan. Los tags `-tv` / `-mobile` están excluidos del disparador para no
+relanzar el pipeline.
 
 ```bash
-git tag -a v0.1.4 -m "jkanimetv v0.1.4"
-git push origin v0.1.4
+# 1) subir VERSION_NAME en gradle.properties y commitear
+git tag -a v1.4.8 -m "jkanime 1.4.8"
+git push origin main v1.4.8
 ```
 
 Para un build release local:

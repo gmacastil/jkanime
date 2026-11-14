@@ -115,4 +115,5 @@ dependencies {
     implementation(libs.androidx.media3.ui)
 
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation(libs.junit)
 }
