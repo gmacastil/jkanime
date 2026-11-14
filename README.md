@@ -118,6 +118,20 @@ físico).
 `core:model`, `core:network` y `data:catalog` son módulos JVM puros: los parsers se
 testean sin emulador ni Robolectric.
 
+### Iconos
+
+Las dos apps comparten icono de marca (el conejo enmascarado, silueta naranja
+sobre `#0E0E11`) y se generan con un solo script:
+
+```bash
+python3 tools/make-icons.py
+```
+
+Escribe `mipmap-anydpi-v26/ic_launcher.xml` (adaptive, con capa monocroma),
+los PNG legacy por densidad y las capas `drawable/ic_launcher_foreground.png` /
+`ic_launcher_monochrome.png` en `:app` y `:app-mobile`. La fuente es
+`app/src/main/res/drawable/caiman_icon.png`.
+
 ## Build
 
 Requisitos: JDK 17+, Android SDK con `platforms;android-36` y `build-tools;36.0.0`.
@@ -135,6 +149,10 @@ JK_LIVE=1 ./gradlew :data:catalog:test --tests "*LiveSmokeTest*"
 # APK debug
 ./gradlew :app:assembleDebug
 # salida: app/build/outputs/apk/debug/app-debug.apk
+
+# APK debug de la app móvil
+./gradlew :app-mobile:assembleDebug
+# salida: app-mobile/build/outputs/apk/debug/app-mobile-debug.apk
 
 # instalar en el TV / caja Android TV
 adb connect <IP-DEL-TV>:5555

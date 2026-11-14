@@ -38,7 +38,10 @@ fun FavoritesScreen(
     onBack: () -> Unit = {},
 ) {
     val favorites by JkGraph.library.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
-    val visible = favorites.filter { it.deletedAt == null }.sortedBy { it.title.lowercase() }
+    val visible = favorites
+        .filter { it.deletedAt == null }
+        .distinctBy { it.slug }
+        .sortedBy { it.title.lowercase() }
     val scope = rememberCoroutineScope()
 
     Scaffold(

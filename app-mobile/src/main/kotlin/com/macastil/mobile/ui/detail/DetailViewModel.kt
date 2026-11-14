@@ -39,7 +39,11 @@ class DetailViewModel(
                 detail to first.episodes
             }.fold(
                 onSuccess = { (detail, episodes) ->
-                    DetailUiState.Success(detail, episodes)
+                    // El `id` del capítulo es el `key` de la lista: un
+                    // duplicado (el sitio repite capítulos entre páginas o
+                    // entre temporadas) tumba la pantalla con
+                    // "Key ... was already used", igual que en la grilla.
+                    DetailUiState.Success(detail, episodes.distinctBy { it.id })
                 },
                 onFailure = { DetailUiState.Error(it.message ?: "Error") },
             )

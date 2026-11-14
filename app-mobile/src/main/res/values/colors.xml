@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="jk_background">#000000</color>
+    <!-- Fondo del icono adaptativo (tools/make-icons.py). -->
+    <color name="ic_launcher_background">#FF0E0E11</color>
 </resources>

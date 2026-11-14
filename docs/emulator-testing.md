@@ -1489,3 +1489,88 @@ Verificado en `jkphone` (API 36):
 - **`LibraryRepository.toggleFavorite` alterna** (si existe, lo borra). Para
   el merge de sync hace falta `upsertFavorite`/`upsertProgress`, o el pull
   remoto deshace favoritos locales.
+
+## 1.5.0 — crash de la app móvil en teléfono real e iconos nuevos (verificado 2026-11-13)
+
+### El síntoma
+
+En el Pixel 7 (Android 17) la app instalada desde `v1.4.9-mobile` se quedaba en
+**pantalla negra**. En el emulador `jkphone` (API 36) la misma APK arrancaba
+bien, y `logcat` del arranque no mostraba ninguna excepción.
+
+El crash sí estaba registrado, pero no en el buffer de `logcat` ni en
+`dumpsys dropbox` a la primera: aparece en **`dumpsys activity exit-info`**
+(`reason=4 APP CRASH(EXCEPTION)`) y, con el nombre exacto del evento, en
+`dumpsys dropbox --print`:
+
+```
+2026-11-13 22:47:05 data_app_crash
+Process: com.macastil.mobile
+java.lang.IllegalArgumentException: Key "bai-jia-jue-zhi-jianghu-gui-shi-lu"
+was already used. If you are using LazyColumn/Row please make sure you provide
+a unique key for each item.
+```
+
+### La causa
+
+El Home del móvil aplanaba las secciones de Programación en una sola lista y
+usaba el `slug` como `key` de la `LazyVerticalGrid`. Pero **el sitio publica un
+card por episodio**: ese día `bai-jia-jue-zhi-jianghu-gui-shi-lu` tenía los
+episodios 11, 13 y 12 en la portada, así que el mismo `slug` aparecía tres
+veces. Compose no admite claves repetidas y mata el proceso.
+
+Por eso era intermitente y no salía en el emulador: depende del contenido del
+día. Comprobación contra el HTML real:
+
+```bash
+curl -s https://jkanime.net > home.html
+grep -o 'bai-jia-jue-zhi-jianghu-gui-shi-lu' home.html | wc -l     # 6 (3 fichas, href + slug)
+```
+
+En TV no ocurría porque su grilla usa `key = section.name + episodeUrl`.
+
+### El fix
+
+- `HomeViewModel.mergeSections()` (función pura, `:app-mobile`): un card por
+  anime, en la posición de su primera aparición y **con el capítulo más alto**.
+  Cubierto por 8 tests en `app-mobile/src/test/.../MergeSectionsTest.kt`
+  (incluye el caso real 11/13/12 → Ep 13).
+- `DetailViewModel`: `episodes.distinctBy { it.id }` — el `id` del capítulo es
+  el `key` del `LazyColumn` del detalle y el sitio puede repetirlo entre
+  páginas.
+- `FavoritesScreen`: `distinctBy { it.slug }` sobre los favoritos.
+
+### Los iconos
+
+La app móvil tenía como icono un vector de 48 dp con un círculo
+`#FF3DDC84` y un trazo negro relleno (invisible): en el launcher se veía
+literalmente **un punto verde**. La TV usaba `caiman_icon.png` a pelo.
+
+Ahora las dos apps generan su icono con `tools/make-icons.py` a partir del arte
+de marca (`app/src/main/res/drawable/caiman_icon.png`, el conejo enmascarado):
+
+- Fondo `#0E0E11` (jk_background) y silueta `#FF6B35` (jk_orange).
+- `mipmap-anydpi-v26/ic_launcher.xml` + `ic_launcher_round.xml` (adaptive, con
+  capa `<monochrome>` para iconos temáticos de Android 13+).
+- PNG legacy por densidad (48/72/96/144/192) para API < 26.
+- `CONTENT_RATIO = 0.52`: con 0.58 la máscara circular recortaba los hombros.
+- El nombre de la app móvil pasa a **"jkanime"** (antes "jkanime mobile", que el
+  launcher recortaba a "jkanime m…").
+
+### Cómo verificar un crash que no sale en `logcat`
+
+```bash
+adb shell dumpsys activity exit-info com.macastil.mobile | head -40
+adb shell dumpsys dropbox --print | grep -A8 data_app_crash
+```
+
+`exit-info` da la hora, el motivo y el PID; `dropbox --print` el stack. El
+buffer de `logcat` pierde el crash si el proceso murió antes de que se leyera
+(y `logcat -c` lo borra: no limpiar el buffer antes de reproducir).
+
+### Trampa nueva
+
+- **Una `key` repetida en Lazy* mata el proceso**, no degrada la UI. Al usar un
+  campo de datos como `key` hay que garantizar unicidad en el origen (dedupe) y
+  añadir un test: el sitio devuelve varias fichas del mismo anime y el fallo
+  solo aparece según el contenido del día.

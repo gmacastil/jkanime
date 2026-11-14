@@ -1,3 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">jkanime mobile</string>
+    <!-- Corto a propósito: en el launcher de Android el nombre largo
+         ("jkanime mobile") se recortaba a "jkanime m…". La app de TV se llama
+         "jkanimetv". -->
+    <string name="app_name">jkanime</string>
 </resources>
