@@ -1,9 +1,20 @@
 name: Release Android TV y Mobile
 
+# Un solo tag `vX.Y.Z` dispara la compilación de las dos apps y publica DOS
+# releases independientes:
+#
+#   vX.Y.Z-tv      -> jkanime-tv-X.Y.Z.apk      (solo Android TV)
+#   vX.Y.Z-mobile  -> jkanime-mobile-X.Y.Z.apk  (solo teléfono)
+#
+# Así, al abrir la página de releases desde un celular solo se ofrece la APK
+# de móvil, y desde un televisor solo la de TV. Un release único con dos
+# assets confundía: se descargaba e instalaba la APK de TV en el teléfono (app
+# Leanback, sin táctil), que es exactamente el "se traba y se sale" reportado.
+
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
 
 permissions:
   contents: write
@@ -11,6 +22,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Los tags que este mismo job crea (vX.Y.Z-tv / vX.Y.Z-mobile) no deben
+    # relanzar el pipeline.
+    if: >-
+      ${{ !endsWith(github.ref_name, '-tv') &&
+          !endsWith(github.ref_name, '-mobile') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,22 +81,23 @@ jobs:
           VERSION_CODE=$((100 + $(git rev-list --count HEAD)))
           echo "Versión: $VERSION_NAME (code $VERSION_CODE)"
 
-          # Construir APK de Android TV
+          # Android TV
           ./gradlew :app:assembleRelease \
             -PVERSION_NAME="$VERSION_NAME" \
             -PVERSION_CODE="$VERSION_CODE" \
             -PJK_SUPABASE_URL="$JK_SUPABASE_URL" \
             -PJK_SUPABASE_ANON_KEY="$JK_SUPABASE_ANON_KEY"
 
-          # Construir APK de Android Mobile
+          # Android móvil (módulo distinto: :app-mobile)
           ./gradlew :app-mobile:assembleRelease \
             -PVERSION_NAME="$VERSION_NAME" \
             -PVERSION_CODE="$VERSION_CODE" \
             -PJK_SUPABASE_URL="$JK_SUPABASE_URL" \
             -PJK_SUPABASE_ANON_KEY="$JK_SUPABASE_ANON_KEY"
 
-          # AGP usa un nombre distinto para el módulo móvil. Copiamos ambos
-          # artefactos a nombres estables para GitHub Release.
+          # AGP nombra los artefactos con el nombre del módulo, así que el APK
+          # móvil NO es `app-release.apk`. Se localizan con `find` y se copian
+          # a nombres estables para el release.
           TV_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' -print -quit)"
           MOBILE_APK="$(find app-mobile/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' -print -quit)"
           test -n "$TV_APK" || TV_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
@@ -89,12 +106,56 @@ jobs:
           cp "$TV_APK" "jkanime-tv-${VERSION_NAME}.apk"
           cp "$MOBILE_APK" "jkanime-mobile-${VERSION_NAME}.apk"
 
-      - name: Publicar GitHub Release
+      - name: Verificar que cada APK es del dispositivo correcto
+        run: |
+          VERSION_NAME="$(awk -F= '$1 == "VERSION_NAME" { print $2; exit }' gradle.properties | tr -d '[:space:]')"
+          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          for apk in "jkanime-tv-${VERSION_NAME}.apk" "jkanime-mobile-${VERSION_NAME}.apk"; do
+            echo "== $apk =="
+            "$BUILD_TOOLS/aapt2" dump badging "$apk" | grep -E "^package:|launchable-activity:|uses-feature:.*leanback|uses-feature:.*touchscreen" || true
+          done
+          # Salvaguarda: el APK de TV debe declarar Leanback y el de móvil no.
+          "$BUILD_TOOLS/aapt2" dump badging "jkanime-tv-${VERSION_NAME}.apk" | grep -q "leanback" || {
+            echo "El APK de TV no declara Leanback"
+            exit 1
+          }
+          if "$BUILD_TOOLS/aapt2" dump badging "jkanime-mobile-${VERSION_NAME}.apk" | grep -q "leanback"; then
+            echo "El APK móvil declara Leanback: se publicaría la app equivocada"
+            exit 1
+          fi
+
+      - name: Publicar release de Android TV
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            jkanime-tv-*.apk \
-            jkanime-mobile-*.apk \
-            --title "jkanime $GITHUB_REF_NAME" \
-            --generate-notes
+          VERSION_NAME="$(awk -F= '$1 == "VERSION_NAME" { print $2; exit }' gradle.properties | tr -d '[:space:]')"
+          printf '%s\n' \
+            'APK para **Android TV / Google TV** (Leanback, mando a distancia).' \
+            '' \
+            "Instalar con \`adb install jkanime-tv-${VERSION_NAME}.apk\` o por sideload en el televisor." \
+            '' \
+            'Comparte la misma cuenta de sincronización que la app móvil: vincula el código de 8 dígitos desde el menú de perfil.' \
+            > /tmp/notes-tv.md
+          gh release create "v${VERSION_NAME}-tv" \
+            "jkanime-tv-${VERSION_NAME}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "jkanime TV ${VERSION_NAME}" \
+            --notes-file /tmp/notes-tv.md
+
+      - name: Publicar release de Android móvil
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION_NAME="$(awk -F= '$1 == "VERSION_NAME" { print $2; exit }' gradle.properties | tr -d '[:space:]')"
+          printf '%s\n' \
+            'APK para **teléfono y tablet Android** (táctil, vertical).' \
+            '' \
+            "Instalar abriendo el archivo en el dispositivo (permitir orígenes desconocidos) o con \`adb install jkanime-mobile-${VERSION_NAME}.apk\`." \
+            '' \
+            'Comparte la misma cuenta de sincronización que la app de TV: vincula el código de 8 dígitos desde el menú → Sincronización.' \
+            > /tmp/notes-mobile.md
+          gh release create "v${VERSION_NAME}-mobile" \
+            "jkanime-mobile-${VERSION_NAME}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "jkanime Mobile ${VERSION_NAME}" \
+            --notes-file /tmp/notes-mobile.md

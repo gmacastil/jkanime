@@ -1394,3 +1394,98 @@ badge, y las tarjetas vecinas no se mueven.
   desinstalar, compilar con `-PVERSION_CODE=<actual+1>` y **re-firmar** con el
   keystore de release (`apksigner sign --ks …`); si no, Android rechaza por
   downgrade o por firma distinta.
+
+## App móvil (`:app-mobile`) — verificado 2026-11-13
+
+Segunda app del repositorio, para teléfono/tablet. UI propia con Compose
+Material3 táctil; comparte `:core:model`, `:core:network`, `:core:ui` y
+`:data:catalog` con la app de TV (mismo scraping, mismo rate limit, mismos
+parsers).
+
+### El "se traba y se sale" en el celular
+
+No era un fallo de la app móvil: el pipeline publicaba **un solo release con
+las dos APKs**, y desde el teléfono se descargaba la primera
+(`app-release.apk`), que es la de **TV** (Leanback, sin táctil). Instalada en
+un celular se queda sin entrada táctil y Android la cierra.
+
+Desde 1.4.7 el workflow publica **dos releases**, cada uno con una sola APK:
+
+| Tag | APK | Público |
+|---|---|---|
+| `vX.Y.Z-tv` | `jkanime-tv-X.Y.Z.apk` | Android TV |
+| `vX.Y.Z-mobile` | `jkanime-mobile-X.Y.Z.apk` | teléfono/tablet |
+
+El job verifica con `aapt2 dump badging` que la de TV declara Leanback y la
+móvil no, y aborta si se cruzan. Los tags `-tv`/`-mobile` están excluidos del
+disparador para no relanzar el pipeline.
+
+### Cambios de la app móvil
+
+- **`JkGraph`**: DI manual de una sola instancia por proceso (repositorio,
+  biblioteca, motor de sync, `appScope`). Antes cada composable creaba su
+  propio `JkanimeRepository()` —con su `OkHttpClient`, su cookie jar y su
+  límite de 700 ms— en cada recomposición, y el `HomeViewModel` se instanciaba
+  dos veces (en `MainActivity` y dentro de `HomeScreen`).
+- **Persistencia**: `LibraryRepository` guarda favoritos, progreso y
+  credenciales en `SharedPreferences` con JSON (`kotlinx.serialization`). Se
+  descartó Room otra vez: KSP falla en `:app-mobile` con
+  `java.lang.IllegalStateException` sin mensaje. La app de TV sigue con Room.
+- **Detalle**: póster + metadatos + sinopsis + filas de episodio (miniatura
+  112×64, barra de avance, verde si está visto) en un único `LazyColumn`.
+  Antes reutilizaba `PosterCard` con `width = null` y cada capítulo ocupaba
+  una pantalla entera.
+- **Reproductor**: `WebPlayer` (copia adaptada del de TV, con el mismo
+  `HOOK_SCRIPT` de bloqueo de anuncios y el puente `JkBridge`) sobre el embed
+  del servidor, más selector de servidores en chips y barra de tiempo. El
+  progreso se guarda cada 5 s y al salir; el detalle ofrece "Continuar Ep N".
+- **Tema**: esquema **oscuro** de Material3 con los colores de `:core:ui`.
+  Con el tema claro por defecto `JkTextPrimary` (#F4F4F6) era invisible.
+- **Atrás**: `BackHandler` en `MobileApp` para que BACK cierre reproductor y
+  detalle en lugar de sacar de la app.
+- **Sync real**: `pull`/`push` contra las RPC de `docs/supabase/schema.sql`
+  con los nombres de parámetro correctos (`p_favorites`/`p_progress`) y merge
+  last-write-wins con tombstones. Antes `pull` devolvía vacío y `push` enviaba
+  `favorites`/`progress` (parámetros inexistentes), por lo que "sincronizaba"
+  sin mover datos.
+
+### Cómo probarlo
+
+```bash
+# Imagen de teléfono (una vez)
+sdkmanager "system-images;android-36;default;x86_64"
+avdmanager create avd -n jkphone -k "system-images;android-36;default;x86_64" -d pixel_6
+
+emulator -avd jkphone -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect -no-audio &
+adb install -r app-mobile/build/outputs/apk/debug/app-mobile-debug.apk
+adb shell am start -n com.macastil.mobile/.MainActivity
+```
+
+Verificado en `jkphone` (API 36):
+
+1. Home carga las tarjetas de Programación (póster, badge `Ep N`).
+2. Tap en tarjeta → detalle con póster, estado en naranja y 7 capítulos.
+3. Tap en un capítulo → reproductor con `0:12 / 23:39`, decodificador H.264
+   activo y chips Streamwish/Vidhide/VOE/Filemoon.
+4. BACK → vuelve al detalle (la app **no** se cierra) y aparece
+   "Continuar Ep 1" con el progreso guardado:
+   `progress=[{"slug":"aoki-denshou-welsh-shedar","episode":1,"positionMs":25542,...}]`.
+5. Corazón del detalle → favorito; pantalla Favoritos muestra "Favoritos (1)".
+6. Menú → Sincronización → "Crear espacio nuevo" devuelve código real; al
+   "Sincronizar ahora" informa `1 favoritos · 1 progresos`.
+
+### Trampas nuevas
+
+- **`screencap` sale negro en el área del WebView** también en móvil (capa de
+  vídeo), igual que en TV. Para confirmar reproducción, `logcat` con
+  `CCodecConfig ... string input.media-type.value = "video/avc"` y
+  `MediaFocusControl: requestAudioFocus()`.
+- **Los colores de `:core:ui` son para fondo oscuro.** Reutilizarlos sobre el
+  tema claro por defecto de Material3 deja títulos y subtítulos casi
+  invisibles; la app móvil monta un `darkColorScheme` propio.
+- **`Icons.Filled.Sync` no existe** en `material-icons-core`. Para acciones
+  secundarias se usa un `DropdownMenu` (Actualizar / Sincronización) en vez de
+  inventar iconos.
+- **`LibraryRepository.toggleFavorite` alterna** (si existe, lo borra). Para
+  el merge de sync hace falta `upsertFavorite`/`upsertProgress`, o el pull
+  remoto deshace favoritos locales.

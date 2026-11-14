@@ -83,28 +83,21 @@ class SyncEngine(
         if (!client.isConfigured) return SyncResult.NotConfigured
 
         return runCatching {
+            // 1) pull: traer la foto remota
             val remote = client.pull(credentials)
 
-            // Merge favoritos remotos
-            remote.favorites.forEach { fav ->
-                val existing = runBlocking { library.getAllFavorites().firstOrNull { it.slug == fav.slug } }
-                val now = System.currentTimeMillis()
-                if (existing == null || existing.deletedAt != null) {
-                    runBlocking { library.toggleFavorite(fav.slug, fav.title, fav.posterUrl, fav.animeId, fav.statusLabel) }
-                } else if (fav.updatedAt > (existing.updatedAt ?: 0)) {
-                    runBlocking { library.toggleFavorite(fav.slug, fav.title, fav.posterUrl, fav.animeId, fav.statusLabel) }
-                }
-            }
+            // 2) merge local: last-write-wins por `updatedAt`, con tombstones
+            remote.favorites.forEach { library.upsertFavorite(it) }
+            remote.progress.forEach { library.upsertProgress(it) }
 
-            // Push favoritos locales
-            val localFavorites = runBlocking { library.getAllFavorites() }
-            val localProgress = runBlocking { library.getAllProgress() }
-
+            // 3) push: subir la biblioteca ya mergeada
+            val localFavorites = library.getAllFavorites()
+            val localProgress = library.getAllProgress()
             val pushed = client.push(credentials, localFavorites, localProgress)
 
             SyncResult.Success(
-                favorites = pushed.favorites.size,
-                progress = pushed.progress.size,
+                favorites = pushed.favorites,
+                progress = pushed.progress,
             )
         }.getOrElse { SyncResult.Failure(it.message ?: it::class.java.simpleName) }
     }
@@ -117,8 +110,10 @@ class SyncEngine(
 }
 
 /** Función de fábrica para crear el motor de sync. */
-fun createSyncEngine(context: android.content.Context): SyncEngine {
-    val library = LibraryRepository()
+fun createSyncEngine(
+    context: android.content.Context,
+    library: LibraryRepository = LibraryRepository(context),
+): SyncEngine {
     val client = createSyncClient(context)
     return SyncEngine(
         library = library,

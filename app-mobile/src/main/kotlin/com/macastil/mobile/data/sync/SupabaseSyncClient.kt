@@ -130,65 +130,101 @@ class SupabaseSyncClient(
             )
         }
 
-    /** Pull: lee datos remotos. Por ahora retorna lista vacía. */
+    /** Pull: foto remota del espacio (favoritos + progreso). */
     suspend fun pull(credentials: SyncCredentials): RemoteSnapshot =
         withContext(Dispatchers.IO) {
-            RemoteSnapshot(favorites = emptyList(), progress = emptyList())
+            val response = rpc(
+                "sync_pull",
+                JSONObject()
+                    .put("p_code", credentials.code)
+                    .put("p_token", credentials.token),
+            )
+
+            val favorites = response.optJSONArray("favorites").orEmptyArray().mapObjects { obj ->
+                FavoriteEntity(
+                    slug = obj.getString("slug"),
+                    animeId = obj.optInt("anime_id", 0),
+                    title = obj.optString("title"),
+                    posterUrl = obj.optStringOrNull("poster_url"),
+                    addedAt = obj.optLong("added_at", 0L),
+                    lastWatchedEpisode = obj.optIntOrNull("last_watched_episode"),
+                    lastAiredEpisode = obj.optIntOrNull("last_aired_episode"),
+                    totalEpisodes = obj.optIntOrNull("total_episodes"),
+                    statusLabel = obj.optStringOrNull("status_label"),
+                    syncedAt = obj.optLong("synced_at", 0L),
+                    updatedAt = obj.optLong("updated_at", 0L),
+                    deletedAt = obj.optLongOrNull("deleted_at"),
+                )
+            }
+
+            val progress = response.optJSONArray("progress").orEmptyArray().mapObjects { obj ->
+                ProgressEntity(
+                    slug = obj.getString("slug"),
+                    episode = obj.getInt("episode"),
+                    positionMs = obj.optLong("position_ms", 0L),
+                    durationMs = obj.optLong("duration_ms", 0L),
+                    completed = obj.optBoolean("completed", false),
+                    updatedAt = obj.optLong("updated_at", 0L),
+                )
+            }
+
+            RemoteSnapshot(favorites = favorites, progress = progress)
         }
 
     suspend fun push(
         credentials: SyncCredentials,
         favorites: List<FavoriteEntity>,
         progress: List<ProgressEntity>,
-    ) = withContext(Dispatchers.IO) {
-        val favoritesJson = JSONArray()
-        favorites.forEach { fav ->
-            favoritesJson.put(
-                JSONObject()
-                    .put("slug", fav.slug)
-                    .put("title", fav.title)
-                    .put("anime_id", fav.animeId)
-                    .put("poster_url", fav.posterUrl)
-                    .put("added_at", fav.addedAt)
-                    .put("last_watched_episode", fav.lastWatchedEpisode)
-                    .put("last_aired_episode", fav.lastAiredEpisode)
-                    .put("total_episodes", fav.totalEpisodes)
-                    .put("status_label", fav.statusLabel)
-                    .put("updated_at", fav.updatedAt)
-                    .put("deleted_at", fav.deletedAt)
-                    .put("owner", 0),
-            )
-        }
-
-        val progressJson = JSONArray()
-        progress.forEach { prog ->
-            progressJson.put(
-                JSONObject()
-                    .put("slug", prog.slug)
-                    .put("episode", prog.episode)
-                    .put("position_ms", prog.positionMs)
-                    .put("duration_ms", prog.durationMs)
-                    .put("completed", prog.completed)
-                    .put("updated_at", prog.updatedAt)
-                    .put("owner", 0),
-            )
-        }
-
+    ): PushResult = withContext(Dispatchers.IO) {
         val response = rpc(
             "sync_push",
             JSONObject()
                 .put("p_code", credentials.code)
                 .put("p_token", credentials.token)
-                .put("favorites", favoritesJson)
-                .put("progress", progressJson),
+                .put("p_favorites", JSONArray().apply { favorites.forEach { put(it.toJson()) } })
+                .put("p_progress", JSONArray().apply { progress.forEach { put(it.toJson()) } }),
         )
-
-        RemoteSnapshot(
-            favorites = emptyList(),
-            progress = emptyList(),
+        PushResult(
+            favorites = response.optInt("favorites", favorites.size),
+            progress = response.optInt("progress", progress.size),
         )
     }
 }
+
+/** Recuentos aplicados por `sync_push`. */
+data class PushResult(val favorites: Int, val progress: Int)
+
+private fun FavoriteEntity.toJson(): JSONObject = JSONObject()
+    .put("slug", slug)
+    .put("anime_id", animeId)
+    .put("title", title)
+    .put("poster_url", posterUrl)
+    .put("last_watched_episode", lastWatchedEpisode)
+    .put("last_aired_episode", lastAiredEpisode)
+    .put("total_episodes", totalEpisodes)
+    .put("status_label", statusLabel)
+    .put("updated_at", updatedAt)
+    .put("deleted_at", deletedAt)
+
+private fun ProgressEntity.toJson(): JSONObject = JSONObject()
+    .put("slug", slug)
+    .put("episode", episode)
+    .put("position_ms", positionMs)
+    .put("duration_ms", durationMs)
+    .put("completed", completed)
+    .put("updated_at", updatedAt)
+
+private fun JSONObject.optStringOrNull(key: String): String? =
+    if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() && it != "null" }
+
+private fun JSONObject.optIntOrNull(key: String): Int? = if (isNull(key)) null else optInt(key)
+
+private fun JSONObject.optLongOrNull(key: String): Long? = if (isNull(key)) null else optLong(key)
+
+private fun JSONArray?.orEmptyArray(): JSONArray = this ?: JSONArray()
+
+private fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> =
+    (0 until length()).mapNotNull { index -> optJSONObject(index)?.let(transform) }
 
 /** Función de fábrica para crear el cliente desde BuildConfig. */
 fun createSyncClient(context: Context): SupabaseSyncClient {
