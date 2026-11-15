@@ -178,7 +178,7 @@
     <string name="lang_title">Idioma</string>
     <string name="lang_section">IDIOMA</string>
     <string name="lang_hint">Se aplica a toda la app al instante.</string>
-    <string name="lang_system">Sistema (predeterminado)</string>
+    <string name="lang_system">Sistema</string>
     <string name="lang_es" translatable="false">Español</string>
     <string name="lang_en" translatable="false">English</string>
 </resources>
