@@ -1681,3 +1681,68 @@ vídeo**, en el mismo `Column`, y el reproductor ocupa el resto:
 
 `./gradlew test` → 76 tests, 0 fallos, 1 skipped. `:app` y `:app-mobile`
 compilan (`assembleDebug`).
+
+---
+
+## 1.5.2 — los modos de sincronización de la TV en el móvil (verificado 2026-11-15)
+
+El menú móvil llevaba a `SyncScreen`, pero esa pantalla solo tenía "crear" y
+"vincular con código". La TV ofrece **cuatro modos con espacio** y **tres sin
+espacio**; el motor ya los soportaba (`setRecoveryKey`, `recoverSpace`), faltaba
+la UI. Se replicaron tal cual y se verificaron contra el Supabase real.
+
+| Sin espacio | Con espacio |
+|---|---|
+| Crear espacio de sync | Sincronizar ahora (+ última sincronización) |
+| Tengo un código de vinculación (8 dígitos, 15 min) | Generar código para otro dispositivo |
+| Tengo una clave de recuperación (6 hex) | Configurar clave de vinculación |
+| — | Desvincular espacio |
+
+Comportamientos copiados de la TV:
+
+- **Crear espacio abre directo el panel de la clave** ("Espacio creado: 6864
+  6267" + "Elige una clave de 6 caracteres"), con un `Ahora no` para salir.
+  Sin clave, perder el token equivale a perder el espacio.
+- **La clave se normaliza** a hex en mayúsculas y se cortan los 6 caracteres:
+  la RPC `sync_set_recovery` exige `length = 6` y `^[0-9A-F]+$`, así que
+  escribir `ab12cd` a mano acabaría en `invalid_recovery_key_format`.
+- **Código y espacio se muestran agrupados** (`0489 5806`), como en la TV.
+- **Auto-sync al arrancar**: `JkGraph.syncEngine.syncInBackground()` en
+  `MainActivity.onCreate` (en la TV lo dispara el gate de perfiles). Antes el
+  teléfono solo sincronizaba con el botón.
+
+### Errores de la API: de "No value for code" a un mensaje útil
+
+`SupabaseSyncClient.rpc` no miraba el código HTTP: PostgREST devuelve
+`{"code":..,"message":..}` en los errores y el fallo saltaba más tarde, al leer
+`getString("code")`, con un `JSONException` sin sentido para el usuario. Ahora
+`rpc` lanza `SyncException` con el recurso de texto ya traducido:
+
+| Respuesta | Mensaje |
+|---|---|
+| `PGRST202` / 404 "Could not find the function" | Falta ejecutar `docs/supabase/schema.sql` |
+| `invalid_pairing_code` | Código inválido o vencido |
+| `invalid_recovery_key` (y `_format`) | Clave de recuperación inválida |
+| otro | `message` del servidor o `HTTP n: cuerpo` |
+
+`SyncException` lleva `@StringRes` + args (no texto): el idioma lo aplica el
+Context de la activity con `AppLocale`, nunca el Application del cliente.
+
+### Verificación (emulador `jkphone`, API 36, es + en)
+
+| Caso | Resultado |
+|---|---|
+| Sin espacio | 3 opciones: crear / código de vinculación / clave de recuperación |
+| Crear espacio | espacio `6864 6267` + panel de clave abierto solo |
+| "Ahora no" | cierra el panel |
+| Guardar clave `ff00aa` | se muestra `FF00AA`, "Clave de vinculación guardada" y el panel se cierra con la nota verde |
+| Generar código | `Código: 47424871` + "caduca en 15 minutos" |
+| Vincular con ese código | "Dispositivo vinculado" y vuelve el mismo espacio |
+| Desvincular | vuelve a las 3 opciones |
+| Recuperar con `FF00AA` | "Espacio recuperado", mismo espacio `0489 5806` con sus datos |
+| Recuperar con `000000` | **"Clave de recuperación inválida"** (antes: `No value for code`) |
+| Sincronizar ahora | "Última sincronización: 0 favoritos · 4 progresos" |
+
+`./gradlew test` → 88 tests, 0 fallos, 1 skipped (6 nuevos de
+`SyncKeysTest`: normalización de clave y código, corte a 6/8 y formato del
+espacio).

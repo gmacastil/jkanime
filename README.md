@@ -40,6 +40,7 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 | F13 | Internacionalización completa español/inglés y selector de idioma por perfil | ✅ |
 | F14 | Release firmado, actualización en línea y correcciones de filtros/foco | ✅ |
 | 1.5.1 | App móvil: menú con perfil/idioma/sync, reproductor usable y grilla completa | ✅ |
+| 1.5.2 | App móvil: todos los modos de sincronización de la TV + auto-sync al arrancar | ✅ |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo
@@ -78,12 +79,23 @@ físico).
 - **En el móvil hay un solo perfil** (no es multiusuario): el menú lateral
   muestra su nombre, permite renombrarlo y expone las mismas opciones de idioma
   y sincronización que un perfil de la TV.
+- **La sincronización del móvil replica los cuatro modos de la TV**: crear
+  espacio, vincular con código temporal (8 dígitos, 15 min), recuperar con
+  clave (6 hex) y — ya con espacio — sincronizar ahora, generar código para
+  otro dispositivo, definir la clave de recuperación y desvincular.
+- Tras crear el espacio se pide la clave de recuperación, igual que en la TV:
+  sin ella, perder el token del dispositivo equivale a perder el espacio.
+- El móvil sincroniza solo al arrancar (además del botón manual), como la TV al
+  entrar en un perfil.
 - Aislamiento de favoritos, progreso y credenciales de sincronización por perfil.
 - Creación, activación, eliminación y cambio de perfil.
 - Sincronización multi-dispositivo mediante Supabase.
 - Merge last-write-wins con `updated_at` y tombstones para borrados.
 - Emparejamiento mediante código temporal de un solo uso, válido durante 15
   minutos; el token completo nunca se introduce en el mando.
+- Errores de la API de sync traducidos: código vencido, clave inválida o
+  `schema.sql` sin aplicar se explican en pantalla en vez de mostrar un
+  `JSONException`.
 - Sincronización automática al arrancar y al entrar/cambiar de perfil.
 
 ### Idiomas

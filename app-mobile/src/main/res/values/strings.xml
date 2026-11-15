@@ -38,7 +38,7 @@
     <!-- Selector de idioma -->
     <string name="lang_title">Idioma</string>
     <string name="lang_hint">Se aplica a toda la app al instante.</string>
-    <string name="lang_system">Sistema (predeterminado)</string>
+    <string name="lang_system">Sistema</string>
     <string name="lang_es" translatable="false">Español</string>
     <string name="lang_en" translatable="false">English</string>
 
@@ -80,8 +80,18 @@
     <string name="sync_title">Sincronización</string>
     <string name="sync_intro">Comparte favoritos y progreso entre el televisor y el teléfono.</string>
     <string name="sync_not_linked">Sin espacio vinculado</string>
-    <string name="sync_create">Crear espacio nuevo</string>
-    <string name="sync_have_code">¿Ya tienes un espacio en otro dispositivo?</string>
+    <string name="sync_create">Crear espacio de sync</string>
+    <string name="sync_have_code_button">Tengo un código de vinculación</string>
+    <string name="sync_join_intro">Escribe el código de 8 dígitos que muestra el otro dispositivo. Caduca en 15 minutos y sirve una sola vez.</string>
+    <string name="sync_recovery_join">Tengo una clave de recuperación</string>
+    <string name="sync_recovery_intro">Escribe la clave de 6 caracteres que definiste en el otro dispositivo.</string>
+    <string name="sync_recovery_set">Configurar clave de vinculación</string>
+    <string name="sync_recovery_set_intro">Define una clave de 6 caracteres (0-9 y A-F). Servirá para recuperar el espacio desde otro dispositivo si pierdes este.</string>
+    <string name="sync_recovery_hint">Clave de 6 caracteres</string>
+    <string name="sync_recovery_save">Guardar clave</string>
+    <string name="sync_recovery_recover">Recuperar espacio</string>
+    <string name="sync_recovery_skip">Ahora no</string>
+    <string name="sync_recovery_saved_note">Clave de vinculación guardada en este espacio.</string>
     <string name="sync_code_hint">Código de 8 dígitos</string>
     <string name="sync_link_device">Vincular este dispositivo</string>
     <string name="sync_space_label">Espacio</string>
@@ -91,13 +101,23 @@
     <string name="sync_code">Código: %1$s</string>
     <string name="sync_code_note">Escríbelo en el otro dispositivo. Caduca en 15 minutos.</string>
     <string name="sync_unlink">Desvincular espacio</string>
+    <string name="sync_help">El código de vinculación es temporal y de un solo uso; la clave de recuperación es permanente y la eliges tú.</string>
     <string name="sync_msg_creating">Creando espacio…</string>
-    <string name="sync_msg_created">Espacio creado</string>
+    <string name="sync_msg_created">Espacio creado: %1$s</string>
     <string name="sync_msg_generating">Generando código…</string>
     <string name="sync_msg_code_ready">Código válido 15 minutos y de un solo uso</string>
     <string name="sync_msg_linked">Dispositivo vinculado</string>
+    <string name="sync_msg_recovering">Recuperando espacio…</string>
+    <string name="sync_msg_recovered">Espacio recuperado</string>
+    <string name="sync_msg_saving_key">Guardando clave…</string>
+    <string name="sync_msg_recovery_saved">Clave de vinculación guardada</string>
     <string name="sync_msg_result">%1$d favoritos · %2$d progresos</string>
     <string name="sync_msg_need_space">Primero crea o vincula un espacio</string>
     <string name="sync_msg_not_configured">Falta configurar Supabase en local.properties</string>
     <string name="sync_msg_unlinked">Espacio desvinculado</string>
+    <string name="sync_err_not_configured">Falta configurar Supabase en local.properties</string>
+    <string name="sync_err_schema">Falta ejecutar docs/supabase/schema.sql en Supabase (función ausente)</string>
+    <string name="sync_err_pairing">Código inválido o vencido. Es el código del espacio: genera un código temporal desde el otro dispositivo.</string>
+    <string name="sync_err_recovery">Clave de recuperación inválida</string>
+    <string name="sync_err_http">HTTP %1$s: %2$s</string>
 </resources>

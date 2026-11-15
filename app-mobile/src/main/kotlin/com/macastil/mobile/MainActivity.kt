@@ -61,6 +61,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         JkGraph.init(applicationContext)
+        // Paridad con la TV: al entrar al perfil se sincroniza en segundo plano
+        // (en la TV lo dispara el gate de perfiles). Sin esto la biblioteca del
+        // teléfono solo se actualizaba con el botón "Sincronizar ahora".
+        JkGraph.syncEngine.syncInBackground(applicationContext)
         setContent {
             MaterialTheme(colorScheme = JkMobileColors) {
                 MobileApp(

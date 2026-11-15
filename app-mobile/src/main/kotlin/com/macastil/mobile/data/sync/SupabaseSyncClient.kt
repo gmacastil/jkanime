@@ -1,6 +1,8 @@
 package com.macastil.mobile.data.sync
 
 import android.content.Context
+import androidx.annotation.StringRes
+import com.macastil.mobile.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.macastil.mobile.BuildConfig
@@ -55,6 +57,7 @@ class SupabaseSyncClient(
         get() = baseUrl.startsWith("http") && anonKey.isNotBlank()
 
     private suspend fun rpc(function: String, params: JSONObject): JSONObject {
+        if (!isConfigured) throw SyncException(res = R.string.sync_err_not_configured)
         val url = "$baseUrl/rest/v1/rpc/$function"
         val body = params.toString().toRequestBody(jsonMedia)
         val request = Request.Builder()
@@ -66,7 +69,12 @@ class SupabaseSyncClient(
             .build()
         val response = http.newCall(request).execute()
         val responseBody = response.use { it.body?.string() ?: "" }
-        return JSONObject(responseBody)
+        // PostgREST responde con `{"code":..,"message":..}` en los errores.
+        // Sin esta comprobación reventaba más tarde en `getString("code")` con
+        // "No value for code" en vez de decir qué pasó (código vencido, clave
+        // incorrecta, falta ejecutar schema.sql…).
+        if (!response.isSuccessful) throw syncError(response.code, responseBody)
+        return if (responseBody.isBlank()) JSONObject() else JSONObject(responseBody)
     }
 
     suspend fun createSpace(): SyncCredentials = withContext(Dispatchers.IO) {
@@ -193,6 +201,53 @@ class SupabaseSyncClient(
 
 /** Recuentos aplicados por `sync_push`. */
 data class PushResult(val favorites: Int, val progress: Int)
+
+/**
+ * Error de la API de sync.
+ *
+ * Lleva el recurso de texto (`res`) en vez del texto ya formateado por el mismo
+ * motivo que [com.macastil.mobile.ui.sync.UiText]: el idioma lo elige el perfil
+ * y lo aplica el Context de la activity, no el Application que tiene este
+ * cliente. Si no hay recurso aplicable, cae en `message`.
+ */
+class SyncException(
+    @StringRes val res: Int? = null,
+    val args: List<Any> = emptyList(),
+    message: String = "",
+) : Exception(message.ifEmpty { "sync error" })
+
+/**
+ * Traduce el error de PostgREST a algo legible en pantalla.
+ *
+ * `PGRST202` (función ausente) casi siempre significa que falta ejecutar
+ * `docs/supabase/schema.sql`.
+ */
+private fun syncError(httpCode: Int, body: String): SyncException {
+    val parsed = runCatching { JSONObject(body) }.getOrNull()
+    val serverMessage = parsed?.optString("message").orEmpty()
+    val code = parsed?.optString("code").orEmpty()
+
+    return when {
+        code == "PGRST202" ||
+            (httpCode == 404 && serverMessage.contains("Could not find the function")) ->
+            SyncException(res = R.string.sync_err_schema, message = serverMessage)
+
+        serverMessage.contains("invalid_pairing_code", ignoreCase = true) ->
+            SyncException(res = R.string.sync_err_pairing, message = serverMessage)
+
+        // Cubre también `invalid_recovery_key_format` (clave de 6 hex).
+        serverMessage.contains("invalid_recovery_key", ignoreCase = true) ->
+            SyncException(res = R.string.sync_err_recovery, message = serverMessage)
+
+        serverMessage.isNotBlank() -> SyncException(message = serverMessage)
+
+        else -> SyncException(
+            res = R.string.sync_err_http,
+            args = listOf(httpCode.toString(), body.take(120)),
+            message = body.take(120),
+        )
+    }
+}
 
 private fun FavoriteEntity.toJson(): JSONObject = JSONObject()
     .put("slug", slug)

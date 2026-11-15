@@ -1,6 +1,7 @@
 package com.macastil.mobile.data.sync
 
 import android.content.Context
+import com.macastil.mobile.R
 import com.macastil.mobile.data.local.FavoriteEntity
 import com.macastil.mobile.data.local.LibraryRepository
 import com.macastil.mobile.data.local.ProgressEntity
@@ -17,7 +18,13 @@ sealed interface SyncResult {
     data object NotPaired : SyncResult
     data object NotConfigured : SyncResult
     data class Success(val favorites: Int, val progress: Int) : SyncResult
-    data class Failure(val message: String) : SyncResult
+
+    /**
+     * [error] viaja aparte de [message] para que la pantalla pueda formatear el
+     * texto con el idioma del perfil (`@StringRes`) en vez de con el del
+     * Application que capturó el motor.
+     */
+    data class Failure(val message: String, val error: SyncException? = null) : SyncResult
 }
 
 /**
@@ -47,13 +54,13 @@ class SyncEngine(
 
     suspend fun createPairingCode(): PairingCode {
         val credentials = currentCredentials()
-            ?: throw IllegalStateException("No hay espacio vinculado")
+            ?: throw SyncException(res = R.string.sync_msg_need_space)
         return client.newPairingCode(credentials)
     }
 
     suspend fun setRecoveryKey(recoveryKey: String): RecoveryKey {
         val credentials = currentCredentials()
-            ?: throw IllegalStateException("No hay espacio vinculado")
+            ?: throw SyncException(res = R.string.sync_msg_need_space)
         return client.setRecoveryKey(credentials, recoveryKey)
     }
 
@@ -99,7 +106,12 @@ class SyncEngine(
                 favorites = pushed.favorites,
                 progress = pushed.progress,
             )
-        }.getOrElse { SyncResult.Failure(it.message ?: it::class.java.simpleName) }
+        }.getOrElse {
+            SyncResult.Failure(
+                message = it.message ?: it::class.java.simpleName,
+                error = it as? SyncException,
+            )
+        }
     }
 
     fun syncInBackground(context: android.content.Context) {

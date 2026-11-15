@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.macastil.mobile.JkGraph
 import com.macastil.mobile.R
 import com.macastil.mobile.data.sync.PairingCode
+import com.macastil.mobile.data.sync.SyncException
 import com.macastil.mobile.data.sync.SyncResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,14 +35,24 @@ data class SyncUiState(
     val pairing: PairingCode? = null,
     /** Último sync: nº de favoritos y de progresos que llegaron. */
     val lastSync: Pair<Int, Int>? = null,
+    /**
+     * Tras crear el espacio se pide definir la clave de recuperación, igual que
+     * en la TV: sin clave no se puede volver a entrar desde otro dispositivo si
+     * se pierde el token.
+     */
+    val askRecoveryKey: Boolean = false,
+    /** Clave de recuperación ya guardada (para mostrarla en el panel). */
+    val recoverySaved: Boolean = false,
 )
 
 /**
- * Estado de la pantalla de sincronización.
+ * Estado de la sincronización del perfil.
  *
- * El espacio de sync es el mismo que usa la app TV (RPC de
- * `docs/supabase/schema.sql`): se puede compartir biblioteca entre televisor
- * y teléfono vinculando el código de emparejamiento.
+ * Reproduce los modos de la app TV sobre el mismo esquema (`docs/supabase/schema.sql`):
+ * - **Sin espacio**: crear, unirse con código temporal (8 dígitos) o recuperar
+ *   con clave (6 hex).
+ * - **Con espacio**: sincronizar ahora, generar código para otro dispositivo,
+ *   definir clave de recuperación y desvincular.
  */
 class SyncViewModel : ViewModel() {
 
@@ -58,7 +69,9 @@ class SyncViewModel : ViewModel() {
         val credentials = JkGraph.syncEngine.createSpace()
         _state.value = _state.value.copy(
             code = credentials.code,
-            message = UiText(R.string.sync_msg_created),
+            message = UiText(R.string.sync_msg_created, listOf(formatCode(credentials.code))),
+            // Mismo paso que la TV: espacio creado → define la clave.
+            askRecoveryKey = true,
         )
     }
 
@@ -71,12 +84,41 @@ class SyncViewModel : ViewModel() {
     }
 
     fun join(code: String) = run(R.string.sync_msg_creating) {
-        JkGraph.syncEngine.joinSpace(code.trim())
+        JkGraph.syncEngine.joinSpace(normalizePairingCode(code))
         val credentials = JkGraph.library.getCredentials()
         _state.value = _state.value.copy(
             code = credentials?.code,
+            pairing = null,
+            askRecoveryKey = false,
             message = UiText(R.string.sync_msg_linked),
         )
+    }
+
+    /** Recupera el espacio en otro dispositivo a partir de la clave de 6 hex. */
+    fun recover(recoveryKey: String) = run(R.string.sync_msg_recovering) {
+        JkGraph.syncEngine.recoverSpace(normalizeRecoveryKey(recoveryKey))
+        val credentials = JkGraph.library.getCredentials()
+        _state.value = _state.value.copy(
+            code = credentials?.code,
+            pairing = null,
+            askRecoveryKey = false,
+            message = UiText(R.string.sync_msg_recovered),
+        )
+    }
+
+    /** Define la clave con la que se podrá recuperar el espacio desde otro dispositivo. */
+    fun setRecoveryKey(recoveryKey: String) = run(R.string.sync_msg_saving_key) {
+        JkGraph.syncEngine.setRecoveryKey(normalizeRecoveryKey(recoveryKey))
+        _state.value = _state.value.copy(
+            askRecoveryKey = false,
+            recoverySaved = true,
+            message = UiText(R.string.sync_msg_recovery_saved),
+        )
+    }
+
+    /** Descarta el paso de definir clave tras crear el espacio. */
+    fun skipRecoveryKey() {
+        _state.value = _state.value.copy(askRecoveryKey = false, message = null)
     }
 
     fun syncNow() = run(R.string.sync_now) {
@@ -98,7 +140,8 @@ class SyncViewModel : ViewModel() {
             )
 
             is SyncResult.Failure -> _state.value = _state.value.copy(
-                message = UiText(R.string.common_error, listOf(result.message)),
+                message = result.error?.let { UiText(it.res ?: R.string.common_error, it.args) }
+                    ?: UiText(R.string.common_error, listOf(result.message)),
             )
         }
     }
@@ -109,6 +152,8 @@ class SyncViewModel : ViewModel() {
             code = null,
             pairing = null,
             lastSync = null,
+            askRecoveryKey = false,
+            recoverySaved = false,
             message = UiText(R.string.sync_msg_unlinked),
         )
     }
@@ -127,11 +172,13 @@ class SyncViewModel : ViewModel() {
             try {
                 block()
             } catch (error: Exception) {
+                // `SyncException` trae el recurso; el resto, el mensaje crudo.
                 _state.value = _state.value.copy(
-                    message = UiText(
-                        R.string.common_error,
-                        listOf(error.message ?: ""),
-                    ),
+                    message = if (error is SyncException && error.res != null) {
+                        UiText(error.res, error.args)
+                    } else {
+                        UiText(R.string.common_error, listOf(error.message ?: ""))
+                    },
                 )
             }
             _state.value = _state.value.copy(busy = false)
