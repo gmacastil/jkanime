@@ -41,6 +41,7 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 | F14 | Release firmado, actualización en línea y correcciones de filtros/foco | ✅ |
 | 1.5.1 | App móvil: menú con perfil/idioma/sync, reproductor usable y grilla completa | ✅ |
 | 1.5.2 | App móvil: todos los modos de sincronización de la TV + auto-sync al arrancar | ✅ |
+| 1.5.3 | Fix del vídeo negro en móvil (documento colapsado a 0 px) + vídeo 16:9 en horizontal | ✅ |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo

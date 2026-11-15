@@ -83,6 +83,35 @@ private const val HOOK_SCRIPT = """
   window.__jkHooked = true;
   window.open = function(){ return null; };
 
+  // --- Viewport colapsado: la causa real de la "pantalla negra" ---
+  // El embed (DPlayer) maqueta con `html, body { width:100%; height:100% }`.
+  // En el WebView del móvil ese `height:100%` -y también `100vh`- se resuelven
+  // a **0 px** aunque la vista sí tiene tamaño (medido por CDP: `innerHeight`
+  // = 235 y `documentElement.clientHeight` = 235, pero un `div` con
+  // `height:100vh` mide 0). Con el documento a 0 de alto y `overflow:hidden`
+  // no se pinta NADA: pantalla negra, mientras el <video> decodifica, el
+  // tiempo avanza y el audio suena (por eso "se escucha pero no se ve").
+  // Si el documento resolvió a 0, se le da la altura real de la vista en px.
+  // Solo se toca cuando está a 0: en un WebView sano (que ya resuelve el
+  // `height:100%`) esto no hace nada.
+  function fitDocumentHeight() {
+    try {
+      var de = document.documentElement, b = document.body;
+      if (!de || !b) return;
+      var vh = Math.max(window.innerHeight || 0, de.clientHeight || 0);
+      if (vh <= 0) return;
+      if (de.getBoundingClientRect().height < 1) {
+        de.style.setProperty('height', vh + 'px', 'important');
+      }
+      if (b.getBoundingClientRect().height < 1) {
+        b.style.setProperty('height', vh + 'px', 'important');
+      }
+    } catch (e) { /* nunca romper la reproducción por esto */ }
+  }
+  fitDocumentHeight();
+  window.addEventListener('resize', fitDocumentHeight);
+  window.addEventListener('orientationchange', fitDocumentHeight);
+
   // El <video> puede vivir en el documento superior (Desu/jkplayer) o dentro
   // de un iframe same-origin (varios hosts de terceros). Antes solo se miraba
   // el documento superior, así que con el player en un iframe no llegaban
@@ -306,6 +335,7 @@ private const val HOOK_SCRIPT = """
   setInterval(hitTestSweep, 1200);
 
   setInterval(function(){
+    fitDocumentHeight();
     var v = findVideo(document, 3);
     if (!v) return;
    if (!v.__jkBound) {
@@ -345,6 +375,11 @@ private const val HOOK_SCRIPT = """
         ' dur=' + (v.duration || 0).toFixed(1) +
         ' paused=' + v.paused +
         ' rect=' + Math.round(r.width) + 'x' + Math.round(r.height) +
+        // Altura del documento: si es 0 con rect>0, la página no se pinta
+        // (el bug de viewport de arriba). Es el dato que faltaba para
+        // distinguir "no decodifica" de "decodifica pero no se ve".
+        ' doc=' + Math.round(document.documentElement.getBoundingClientRect().height) +
+        '/' + Math.round(document.body.getBoundingClientRect().height) +
         ' vis=' + cs.visibility + '/' + cs.display + '/' + cs.opacity +
         ' src=' + (v.currentSrc || '').slice(0, 60)
       );
@@ -376,6 +411,13 @@ fun WebPlayer(
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
+            // En debug se habilita la inspección del WebView: sin ella no hay
+            // forma de saber si el fallo es de la página (frames negros) o de
+            // la composición de la superficie de vídeo en Android, porque
+            // `screencap` de un `<video>` sale negro siempre.
+            if (com.macastil.mobile.BuildConfig.DEBUG) {
+                runCatching { WebView.setWebContentsDebuggingEnabled(true) }
+            }
             WebView(context).apply {
                 setBackgroundColor(android.graphics.Color.BLACK)
                 // Dejamos que la ventana acelerada gestione la capa de vídeo.

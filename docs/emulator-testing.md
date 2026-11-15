@@ -1746,3 +1746,100 @@ Context de la activity con `AppLocale`, nunca el Application del cliente.
 `./gradlew test` → 88 tests, 0 fallos, 1 skipped (6 nuevos de
 `SyncKeysTest`: normalización de clave y código, corte a 6/8 y formato del
 espacio).
+
+---
+
+## 1.5.3 — vídeo negro en el móvil: `html/body` colapsados a 0 px (verificado 2026-11-15)
+
+Síntoma: en el teléfono **se escuchaba el audio y el tiempo avanzaba, pero la
+imagen no aparecía** (pantalla negra). Solo pasaba en el móvil; la TV no lo
+reproducía porque ese episodio va por `NativePlayer` (m3u8) y no por el WebView.
+
+### Por qué las verificaciones anteriores no lo detectaron
+
+| Fuente | Qué prueba | Sirve para este fallo |
+|---|---|---|
+| `logcat` (`video info ... readyState=4`) | que el stream **decodifica** | NO: decodificar ≠ pintarse |
+| `adb exec-out screencap` | la pantalla, salvo la capa de vídeo | NO: el vídeo sale negro siempre |
+| CDP `Page.captureScreenshot` | el DOM pintado, **sin** la capa de vídeo | NO para el vídeo, sí para el resto del documento |
+| **Foto de la ventana del emulador en el host** (`ffmpeg -f x11grab`) | lo que realmente se ve, capa de vídeo incluida | **SÍ** |
+
+La primera prueba anterior ("reproduce OK") se basó solo en `logcat`, que solo
+demuestra decodificación.
+
+### Causa raíz
+
+El embed (`jkplayer`, DPlayer + MSE sobre `blob:`) maqueta con
+`html, body { width: 100%; height: 100%; overflow: hidden }`. En el WebView del
+móvil ese `height: 100%` **y también `100vh`** se resuelven a **0 px**, aunque la
+vista sí tiene tamaño. Medido por CDP:
+
+```
+innerWidth x innerHeight        = 818 x 235
+documentElement.clientWidth/Height = 818 x 235
+document.body (computed)        = … height: 0px, overflow: hidden
+documentElement (computed)      = … height: 0px
+div de prueba con height:100vh  = 0          <-- la clave
+video (getBoundingClientRect)   = 818 x 241 @0,0
+video.readyState / currentTime  = 4 / avanzando
+```
+
+Con el documento a 0 de alto y `overflow:hidden` **no se pinta nada** (ni los
+controles de DPlayer: la captura CDP salía `(0,0,0)` en todos los píxeles), pero
+el `<video>` sigue decodificando y sonando. De ahí el "se escucha pero no se ve".
+
+Comprobaciones que acotan el problema a la vista y no a la página:
+
+- Con `document.open()`/`write()` de una página en blanco, `100vh` sigue dando 0
+  ⇒ no es CSS del embed.
+- Un cambio real de tamaño (`wm size 1000x2200`) actualiza `innerWidth/innerHeight`
+  (746x205) pero `100vh` sigue 0 ⇒ no son métricas obsoletas.
+- Apagar `useWideViewPort`/`loadWithOverviewMode` no cambia nada.
+- El `<video>` sí tiene frames: `canvas.drawImage(video)` da píxeles reales y la
+  luminancia cambia entre tomas (139 → 148) ⇒ decodificación y frames correctos.
+
+### Fix
+
+En `HOOK_SCRIPT` de `app-mobile` (`WebPlayer.kt`) se añade `fitDocumentHeight()`:
+si `html` o `body` miden **menos de 1 px**, se les pone la altura real de la vista
+en píxeles (`innerHeight`, `!important`). Se reaplica en `resize`,
+`orientationchange` y en el bucle de 1.2 s que ya existía (DPlayer recalcula su
+maquetación). En un WebView sano (que sí resuelve el `height:100%`) no toca nada.
+
+Solo se aplica en móvil: el WebView de la TV resuelve bien los porcentajes y la
+TV tiene `NativePlayer` para los servidores con `m3u8`.
+
+Extra en la misma versión: en horizontal la caja del vídeo se limita a **16:9**
+centrada. Antes ocupaba todo el ancho (≈3.5:1) y como el embed ajusta el vídeo a
+la altura, quedaban dos franjas negras enormes a los lados; ahora el vídeo llena
+su área.
+
+### Diagnóstico permanente
+
+La línea `video info` incluye `doc=<alto html>/<alto body>`:
+
+```
+doc=0/0      -> documento colapsado: no se pinta (bug de viewport)
+doc=246/246  -> documento con altura: se pinta
+```
+
+Con eso, un reporte de "pantalla negra" se resuelve mirando `logcat -s JkPlayer`
+sin necesidad de CDP.
+
+### Verificación (emulador `jkphone`, API 36)
+
+| Momento | `logcat` | Foto del host |
+|---|---|---|
+| Antes (1.5.2) | `rect=818x241 doc=0/0` | documento entero negro `(0,0,0)` |
+| Después (1.5.3) | `rect=418x246 doc=246/246` | vídeo reproduciendo (frame de "KODANSHA", logo de la productora) |
+
+Foto del host:
+```bash
+for W in $(wmctrl -l | grep -i "Android Emulator" | awk '{print $1}'); do
+  eval "$(xdotool getwindowgeometry --shell $W)"
+  ffmpeg -v error -f x11grab -video_size ${WIDTH}x${HEIGHT} -i :0.0+${X},${Y} \
+    -frames:v 1 -y /tmp/opencode/host.png
+done
+```
+En debug, `WebView.setWebContentsDebuggingEnabled(true)` deja inspeccionar el
+player por CDP (`adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`).

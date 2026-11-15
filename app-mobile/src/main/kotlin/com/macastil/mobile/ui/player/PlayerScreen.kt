@@ -212,9 +212,15 @@ fun PlayerScreen(
                     .padding(padding),
             ) {
                 val videoModifier = if (landscape) {
+                    // El embed (DPlayer) ajusta el vídeo a la ALTURA del
+                    // WebView, así que si la caja ocupa todo el ancho (3.5:1 en
+                    // un teléfono apaisado) el vídeo queda con dos franjas
+                    // negras enormes a los lados. Se limita la caja a 16:9 y se
+                    // centra: el vídeo llena el área y las franjas desaparecen.
                     Modifier
-                        .fillMaxWidth()
                         .weight(1f)
+                        .aspectRatio(16f / 9f)
+                        .align(Alignment.CenterHorizontally)
                 } else {
                     Modifier
                         .fillMaxWidth()
