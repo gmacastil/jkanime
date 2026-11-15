@@ -1574,3 +1574,110 @@ buffer de `logcat` pierde el crash si el proceso murió antes de que se leyera
   campo de datos como `key` hay que garantizar unicidad en el origen (dedupe) y
   añadir un test: el sitio devuelve varias fichas del mismo anime y el fallo
   solo aparece según el contenido del día.
+
+---
+
+## 1.5.1 — la app móvil al nivel de la TV (verificado 2026-11-15)
+
+Reporte del usuario sobre `:app-mobile` 1.5.0: el menú no tenía las opciones de
+la TV (idioma y sincronización), la reproducción fallaba, los controles de
+pausa/adelantar no respondían y la primera fila de la grilla salía cortada.
+
+Los cuatro se corrigieron y se verificaron en el emulador `jkphone`
+(API 36, idioma español e inglés).
+
+### 1. Primera fila cortada por la `TopAppBar`
+
+`HomeContent` envolvía `Scaffold` y **descartaba** el `padding` que le llega en
+el `content` (reservado para la `TopAppBar`), así que la grilla empezaba en
+`y=0` y la barra tapaba la primera tarjeta. Fix: `.padding(padding)` en el
+`LazyVerticalGrid`.
+
+### 2. Menú lateral con perfil único, idioma y sync
+
+La app móvil tenía un `DropdownMenu` de tres entradas. Ahora tiene el mismo
+`ModalDrawerSheet` que la TV (`ui/menu/AppDrawer.kt`), con estas diferencias:
+
+- **Un solo perfil** (la TV es multiusuario). El menú muestra el nombre y una
+  nota "Perfil único del dispositivo"; el lápiz lo renombra
+  (`RenameProfileDialog`). El nombre vive en `data/local/ProfileStore.kt`
+  (`SharedPreferences` `jk-mobile-settings`, clave `profile_name`); **vacío =
+  nombre por defecto traducido**, para que no se quede congelado en el idioma
+  de la primera instalación.
+- **Grupo PERFIL**: `Idioma / <actual>` → `LanguageDialog` (Sistema / Español /
+  English) y `Sincronización / <estado>`, que navega a `SyncScreen` y muestra
+  el código de espacio vinculado o "Sin vincular".
+- **Grupo BIBLIOTECA**: Favoritos, Actualizar (recarga el home) y la versión.
+- Idioma: `AppLocale` propio del módulo + `attachBaseContext` +
+  `recreate()`, igual que en la TV pero en el módulo móvil (no se puede
+  depender del de `:app`).
+
+### 3. La reproducción fallaba
+
+Dos causas, ambas en `WebPlayer`:
+
+1. **User-Agent de TV.** El móvil reusaba el UA de la TV (`... SmartTV ...`).
+   Con ese UA los hosts (`Streamwish`, `vibuxer`, `hanerix`, `audinifer`)
+   servían una variante del player **sin zonas táctiles y con el `<video>`
+   fuera de tamaño**. Fix: `WebSettings.getDefaultUserAgent(context)` quitando
+   el sufijo `"; wv"` (Chrome del sistema, sin delatar que es un WebView).
+2. **El barrido de anuncios borraba el reproductor.** `hitTestSweep` comparaba
+   el elemento "superficial" con el "perforado" y eliminaba el contenedor
+   cuando diferían; con el DOM de esos hosts el contenedor del anuncio
+   resultaba ser un ancestro del `<video>` y se iba todo. Fix: `findVideo()` /
+   `containsVideo()` en `HOOK_SCRIPT` y `continue` cuando el candidato contiene
+   un `<video>` en hasta 3 niveles (shadow DOM e iframes same-origin incluidos).
+
+### 4. Controles de parada y adelantamiento
+
+Antes eran un overlay sobre el WebView: el WebView se quedaba con el gesto y
+los botones no recibían el toque. Ahora la barra de transporte va **debajo del
+vídeo**, en el mismo `Column`, y el reproductor ocupa el resto:
+
+- `Slider` con `onValueChange` (arrastre) + `onValueChangeFinished` (`seekTo`).
+- `−10 s` / `+10 s` (`seekBy`), pausa/play grande (52 dp) y `✕` que detiene y
+  vuelve al detalle.
+- En apaisado el vídeo lleva `weight(1f)` (≈690 px de alto, antes 374 px), la
+  `TopAppBar` se oculta, la barra mínima (volver / título / recargar) se
+  superpone al vídeo y se quita la etiqueta "Servidor" para ganar alto.
+- El icono de pausa se dibuja a mano (`PauseGlyph`): `Icons.Filled.Pause` no
+  existe en `material-icons-core`.
+
+### Trampas nuevas
+
+- **`ViewConfiguration`/`configChanges` congela la orientación.** El manifest
+  móvil declara `configChanges="orientation|screenSize|screenLayout|..."`, así
+  que la activity **no se recrea** al girar; y el Context que devuelve
+  `AppLocale.wrap` (`createConfigurationContext`) nace con la `Configuration`
+  del arranque. Resultado: en apaisado `LocalConfiguration.orientation` seguía
+  diciendo `1` (portrait) y `LocalWindowInfo.containerSize` seguía dando el
+  tamaño vertical → el vídeo medía 1207 px en una pantalla de 1080 y la barra
+  de transporte quedaba fuera. **La orientación se mide**, no se pregunta:
+  `Modifier.onSizeChanged { landscape = it.width > it.height }`.
+- **Nunca formatear mensajes de ViewModel con `getString`.** En un
+  `AndroidViewModel`, `getString` usa el **Application** (idioma del sistema),
+  no el Context de la activity al que se le aplicó `AppLocale`: con la UI en
+  español los mensajes del sync salían en inglés ("Space created"). El estado
+  guarda `UiText(@StringRes, args)` y la pantalla resuelve con `stringResource`.
+  Aplica a `SyncViewModel`, `HomeViewModel` y cualquier mensaje de error.
+- **`screencap` no sirve para saber si el vídeo avanza** (capa hardware del
+  WebView → negro). Verificar con `logcat`: `JkPlayer: video info ... ct=`,
+  `paused=`, `readyState=4` y `CCodecConfig video/avc`.
+
+### Verificación (emulador `jkphone`, API 36)
+
+| Caso | Resultado |
+|---|---|
+| Home | primera fila completa, sin solape con la `TopAppBar` |
+| Menú | "Mi perfil"/"Alejandro", "Idioma / Español", "Sincronización / Sin vincular", BIBLIOTECA, Favoritos, Actualizar, "Versión 1.5.0" |
+| Renombrar | el nombre persiste tras reiniciar el proceso |
+| Idioma | cambio en caliente a English (`recreate()`) y vuelta a Sistema sin perder datos |
+| Sync | "Crear espacio nuevo" → `04895806`; "Sincronizar ahora" → "Última sincronización: 0 favoritos · 0 progresos" |
+| Reproducción | Desu (`blob:`) con `video/avc`, `readyState=4` |
+| Pausa | `paused=true` y el icono pasa a ▶ |
+| ±10 s | 19.1 → 29.1; dos `−10` → 9.1 |
+| Slider | tap → 788.3 s; arrastre → 145.2 s |
+| Detener | vuelve al detalle en retrato con "Continuar Ep 1" y la barra guardada |
+
+`./gradlew test` → 76 tests, 0 fallos, 1 skipped. `:app` y `:app-mobile`
+compilan (`assembleDebug`).

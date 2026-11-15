@@ -2,6 +2,7 @@ package com.macastil.mobile
 
 import android.content.Context
 import com.macastil.mobile.data.local.LibraryRepository
+import com.macastil.mobile.data.local.ProfileStore
 import com.macastil.mobile.data.sync.SyncEngine
 import com.macastil.mobile.data.sync.createSyncEngine
 import com.macastil.tv.catalog.JkanimeRepository
@@ -31,6 +32,10 @@ object JkGraph {
     lateinit var syncEngine: SyncEngine
         private set
 
+    /** Perfil único del dispositivo (nombre del menú lateral). */
+    lateinit var profile: ProfileStore
+        private set
+
     /** Scope de vida del proceso: sobrevive a la navegación. */
     val appScope: CoroutineScope by lazy {
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -44,6 +49,7 @@ object JkGraph {
             repository = JkanimeRepository()
             library = LibraryRepository(app)
             syncEngine = createSyncEngine(app, library)
+            profile = ProfileStore(app)
             ready = true
         }
     }

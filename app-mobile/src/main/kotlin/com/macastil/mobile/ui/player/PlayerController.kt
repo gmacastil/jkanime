@@ -60,6 +60,25 @@ class PlayerController {
         )
     }
 
+    /** Pausa explícita ("Detener" del móvil: pausa y vuelve al detalle). */
+    fun pause() {
+        val native = player
+        if (native != null) {
+            native.pause()
+            return
+        }
+        evaluate("(()=>{const v=document.querySelector('video');if(v){v.pause();}})()")
+    }
+
+    fun play() {
+        val native = player
+        if (native != null) {
+            native.play()
+            return
+        }
+        evaluate("(()=>{const v=document.querySelector('video');if(v){v.play();}})()")
+    }
+
     fun reload() {
         webView?.reload()
     }

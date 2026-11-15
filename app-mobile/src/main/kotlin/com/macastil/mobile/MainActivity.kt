@@ -1,5 +1,6 @@
 package com.macastil.mobile
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -15,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.macastil.mobile.data.local.AppLocale
 import com.macastil.tv.ui.theme.JkTextSecondary
 import com.macastil.mobile.ui.detail.DetailScreen
 import com.macastil.mobile.ui.favorites.FavoritesScreen
@@ -47,12 +49,26 @@ sealed interface Screen {
 }
 
 class MainActivity : ComponentActivity() {
+    /**
+     * Idioma elegido en el perfil (AppLocale): hay que envolver el Context base
+     * aquí, antes de que se resuelvan los recursos, igual que en la app TV.
+     * Al cambiarlo desde el menú se recrea la activity para volver a pasar.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase?.let { AppLocale.wrap(it) } ?: newBase)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         JkGraph.init(applicationContext)
         setContent {
             MaterialTheme(colorScheme = JkMobileColors) {
-                MobileApp()
+                MobileApp(
+                    onLanguageChanged = {
+                        AppLocale.set(applicationContext, it)
+                        recreate()
+                    },
+                )
             }
         }
     }
@@ -76,7 +92,7 @@ private val JkMobileColors = darkColorScheme(
 )
 
 @Composable
-fun MobileApp() {
+fun MobileApp(onLanguageChanged: (String) -> Unit = {}) {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
 
     // Botón/gesto "atrás" de Android: cierra el reproductor y el detalle en
@@ -98,6 +114,7 @@ fun MobileApp() {
                 onOpenDetail = { slug -> screen = Screen.Detail(slug) },
                 onOpenFavorites = { screen = Screen.Favorites },
                 onOpenSync = { screen = Screen.Sync },
+                onLanguageChanged = onLanguageChanged,
             )
 
             Screen.Favorites -> FavoritesScreen(

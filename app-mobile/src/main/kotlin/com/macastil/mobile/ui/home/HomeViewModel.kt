@@ -14,7 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 sealed interface HomeUiState {
     data object Loading : HomeUiState
-    data class Error(val message: String) : HomeUiState
+    /** [message] null = no hay texto del servidor: la pantalla usa el genérico. */
+    data class Error(val message: String? = null) : HomeUiState
     data class Success(val cards: List<AnimeCard>) : HomeUiState
 }
 
@@ -38,7 +39,7 @@ class HomeViewModel(
                 onSuccess = { sections ->
                     HomeUiState.Success(mergeSections(sections))
                 },
-                onFailure = { HomeUiState.Error(it.message ?: "Error") },
+                onFailure = { HomeUiState.Error(it.message) },
             )
         }
     }

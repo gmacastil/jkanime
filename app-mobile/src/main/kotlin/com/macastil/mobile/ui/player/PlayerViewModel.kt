@@ -1,9 +1,11 @@
 package com.macastil.mobile.ui.player
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.macastil.mobile.R
 import com.macastil.tv.catalog.JkanimeRepository
 import com.macastil.tv.model.ServerKind
 import com.macastil.tv.model.VideoServer
@@ -14,7 +16,7 @@ import kotlinx.coroutines.launch
 
 sealed interface PlayerUiState {
     data object Loading : PlayerUiState
-    data class Error(val message: String) : PlayerUiState
+    data class Error(@StringRes val messageRes: Int) : PlayerUiState
     data class Ready(
         val servers: List<VideoServer>,
         val selected: VideoServer,
@@ -53,13 +55,13 @@ class PlayerViewModel(
                             ?: pool.firstOrNull { it.kind == ServerKind.STREAM }
                             ?: pool.firstOrNull()
                         if (selected == null) {
-                            PlayerUiState.Error("Este episodio no tiene servidores disponibles")
+                            PlayerUiState.Error(R.string.player_no_servers)
                         } else {
                             PlayerUiState.Ready(servers = pool, selected = selected)
                         }
                     },
                     onFailure = {
-                        PlayerUiState.Error(it.message ?: "No se pudieron cargar los servidores")
+                        PlayerUiState.Error(R.string.player_servers_error)
                     },
                 )
         }
@@ -68,6 +70,18 @@ class PlayerViewModel(
     fun select(server: VideoServer) {
         val current = _state.value as? PlayerUiState.Ready ?: return
         _state.value = current.copy(selected = server)
+    }
+
+    /**
+     * Pasa al siguiente servidor reproducible (circular). Lo usa el aviso de
+     * "no cargó": en el móvil no hay D-pad para abrir el overlay de la TV, así
+     * que se ofrece un botón que cambia de servidor directamente.
+     */
+    fun selectNext() {
+        val current = _state.value as? PlayerUiState.Ready ?: return
+        val index = current.servers.indexOfFirst { it.url == current.selected.url }
+        val next = current.servers[(index + 1).mod(current.servers.size)]
+        _state.value = current.copy(selected = next)
     }
 
     companion object {

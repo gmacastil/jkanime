@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import com.macastil.tv.model.Jk
 
 /**
  * Reproductor MVP: WebView sobre el embed del servidor.
@@ -84,6 +83,46 @@ private const val HOOK_SCRIPT = """
   window.__jkHooked = true;
   window.open = function(){ return null; };
 
+  // El <video> puede vivir en el documento superior (Desu/jkplayer) o dentro
+  // de un iframe same-origin (varios hosts de terceros). Antes solo se miraba
+  // el documento superior, así que con el player en un iframe no llegaban
+  // `onProgress` ni `onReady` y la app se quedaba "cargando" con el vídeo
+  // reproduciéndose dentro. Se busca con profundidad acotada.
+  function findVideo(doc, depth) {
+    if (!doc) return null;
+    var v = null;
+    try { v = doc.querySelector ? doc.querySelector('video') : null; } catch (e) { v = null; }
+    if (v) return v;
+    if (depth <= 0) return null;
+    var frames = [];
+    try { frames = doc.querySelectorAll ? doc.querySelectorAll('iframe') : []; } catch (e) { frames = []; }
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        var inner = frames[i].contentDocument;
+        var found = inner ? findVideo(inner, depth - 1) : null;
+        if (found) return found;
+      } catch (e) { /* cross-origin */ }
+    }
+    return null;
+  }
+
+  // ¿El elemento es, contiene o muestra un <video>? Se usa para NO borrar
+  // nunca el reproductor: antes, con el vídeo dentro de un iframe, el barrido
+  // no lo reconocía como "ancestro del vídeo" y eliminaba el iframe del
+  // player entero (la reproducción "fallaba" al cabo de un segundo).
+  function containsVideo(el) {
+    if (!el) return false;
+    if (el.tagName === 'VIDEO') return true;
+    try { if (el.querySelector && el.querySelector('video')) return true; } catch (e) {}
+    if (el.tagName === 'IFRAME') {
+      try {
+        var d = el.contentDocument;
+        if (d && d.querySelector && d.querySelector('video')) return true;
+      } catch (e) { /* cross-origin: no se puede saber */ }
+    }
+    return false;
+  }
+
   function isAncestorOfVideo(el, video) {
     var n = video;
     while (n) { if (n === el) return true; n = n.parentElement; }
@@ -111,7 +150,8 @@ private const val HOOK_SCRIPT = """
   }
 
   function sweepOverlaysInDoc(doc, isTopDoc) {
-    var video = isTopDoc ? doc.querySelector('video') : null;
+    var video = null;
+    try { video = doc.querySelector ? doc.querySelector('video') : null; } catch (e) { video = null; }
     var vw = window.innerWidth, vh = window.innerHeight;
     // doc puede ser un Document (tiene .body) o un ShadowRoot (no tiene
     // .body, pero sí querySelectorAll directamente sobre sí mismo).
@@ -121,6 +161,7 @@ private const val HOOK_SCRIPT = """
       var el = nodes[i];
       if (el.tagName === 'VIDEO' || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
       if (video && isAncestorOfVideo(el, video)) continue;
+      if (containsVideo(el)) continue;
       var id = (el.id || '') + ' ' + (el.className || '');
       // Nunca se elimina el contenedor directo del propio player (ids/clases
       // típicas de jwplayer/plyr/vjs); solo overlays ajenos a él.
@@ -228,7 +269,7 @@ private const val HOOK_SCRIPT = """
 
   function hitTestSweep() {
     var vw = window.innerWidth, vh = window.innerHeight;
-    var video = document.querySelector('video');
+    var video = findVideo(document, 3);
     var cols = 14, rows = 10;
     var seen = {};
     var removedTopEls = [];
@@ -241,8 +282,11 @@ private const val HOOK_SCRIPT = """
         if (!topEl || topEl === document.documentElement || topEl === document.body) continue;
         if (topEl.tagName === 'VIDEO' || topEl.tagName === 'HTML' || topEl.tagName === 'BODY') continue;
         if (video && isAncestorOfVideo(topEl, video)) continue;
+        // Nunca se toca nada que contenga el vídeo (ni el iframe del player).
+        if (containsVideo(topEl)) continue;
         var el;
         try { el = pierceElementAt(x, y); } catch (e) { el = topEl; }
+        if (containsVideo(el)) continue;
         var id = (el.id || '') + ' ' + (el.className || '');
         if (/jw-|plyr|video-js|vjs-/i.test(id) && !/captcha|robot|ads|popup|overlay|close/i.test(id)) continue;
         var key = el.tagName + '#' + id;
@@ -262,7 +306,7 @@ private const val HOOK_SCRIPT = """
   setInterval(hitTestSweep, 1200);
 
   setInterval(function(){
-    var v = document.querySelector('video');
+    var v = findVideo(document, 3);
     if (!v) return;
    if (!v.__jkBound) {
       v.__jkBound = true;
@@ -280,6 +324,12 @@ private const val HOOK_SCRIPT = """
         JkBridge.onProgress(v.currentTime * 1000, (v.duration || 0) * 1000);
       });
        v.addEventListener('ended', function(){ JkBridge.onEnded(); });
+       // Estado real de reproducción para el botón play/pausa de Compose.
+       // Sin esto el icono habría que invertirlo a mano y quedaría al revés.
+       v.addEventListener('play', function(){ JkBridge.onPlaying(true); });
+       v.addEventListener('playing', function(){ JkBridge.onPlaying(true); });
+       v.addEventListener('pause', function(){ JkBridge.onPlaying(false); });
+       JkBridge.onPlaying(!v.paused);
        JkBridge.onReady();
     }
     // Diagnóstico periódico: si readyState/videoWidth nunca avanzan, el
@@ -312,8 +362,16 @@ fun WebPlayer(
     onEnded: () -> Unit,
     onReady: () -> Unit,
     modifier: Modifier = Modifier,
+    onPlayingChanged: (Boolean) -> Unit = {},
 ) {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    // UA del propio dispositivo (quitando el marcador "; wv" que delata al
+    // WebView). Antes se enviaba el UA de Android TV: varios hosts
+    // (Streamwish/VOE/Filemoon) detectan "TV" y devuelven un player sin
+    // controles táctiles, o directamente nada, y ahí empezaba el "falla la
+    // reproducción" reportado en el móvil.
+    val userAgent = remember(appContext) { mobileUserAgent(appContext) }
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
@@ -326,13 +384,10 @@ fun WebPlayer(
                 // frames de vídeo en algunos Android TV.
                 setLayerType(android.view.View.LAYER_TYPE_NONE, null)
 
-                // El WebView pide el foco al cargar y se queda con TODO el
-                // D-pad: Chromium navega su propio reproductor y el overlay de
-                // Compose ("Usar otro servidor", "Salir") queda inalcanzable.
-                // Como al WebView solo le hablamos por JS (play, seek, tiempo),
-                // no necesita foco. `isFocusable = false` no basta: Chromium
-                // llama requestFocus() por dentro, así que la subclase lo
-                // rechaza explícitamente.
+                // En móvil el WebView NO esconde el overlay de Compose: la
+                // barra de transporte vive fuera del vídeo. Se deja sin foco
+                // para que la barra y el botón atrás sigan siendo dueños del
+                // teclado/foco, igual que en la TV.
                 isFocusable = false
                 isFocusableInTouchMode = false
                 descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -346,13 +401,15 @@ fun WebPlayer(
                     allowContentAccess = false
                     cacheMode = WebSettings.LOAD_DEFAULT
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    userAgentString = Jk.USER_AGENT
+                    userAgentString = userAgent
                     useWideViewPort = true
                     loadWithOverviewMode = true
+                    builtInZoomControls = false
+                    displayZoomControls = false
                 }
 
                 addJavascriptInterface(
-                    Bridge(onProgress, onEnded, onReady, mainHandler),
+                    Bridge(onProgress, onEnded, onReady, onPlayingChanged, mainHandler),
                     "JkBridge",
                 )
 
@@ -453,6 +510,23 @@ private class NonFocusableWebView(context: android.content.Context) : WebView(co
 }
 
 /**
+ * UA móvil real del dispositivo, sin el marcador `"; wv"` de WebView.
+ *
+ * Los hosts de video deciden con el UA qué player sirven; con el UA de Android
+ * TV devolvían un reproductor pensado para D-pad (sin zonas táctiles útiles) o
+ * una página vacía. `getDefaultUserAgent` da el Chrome del sistema; quitar
+ * `; wv` evita que se detecte el WebView.
+ */
+private fun mobileUserAgent(context: android.content.Context): String =
+    runCatching {
+        WebSettings.getDefaultUserAgent(context)
+            .replace("; wv", "")
+            .replace("Version/4.0 ", "")
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+        ?: ("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36")
+
+/**
  * Puente JS -> Kotlin.
  *
  * OJO con los nombres: los callbacks se llaman `...Event` a propósito. Si la
@@ -466,6 +540,7 @@ private class Bridge(
     private val onProgressEvent: (Long, Long) -> Unit,
     private val onEndedEvent: () -> Unit,
     private val onReadyEvent: () -> Unit,
+    private val onPlayingEvent: (Boolean) -> Unit,
     private val handler: Handler,
 ) {
     @JavascriptInterface
@@ -481,6 +556,11 @@ private class Bridge(
     @JavascriptInterface
     fun onReady() {
         handler.post { onReadyEvent() }
+    }
+
+    @JavascriptInterface
+    fun onPlaying(playing: Boolean) {
+        handler.post { onPlayingEvent(playing) }
     }
 
     @JavascriptInterface

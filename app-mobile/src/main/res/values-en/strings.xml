@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  English texts for the mobile app. Must mirror every key of `values/strings.xml`
+  (same placeholders, same order is not required).
+-->
+<resources>
+    <!-- General -->
+    <string name="app_name" translatable="false">jkanime</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_back">Back</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_save">Save</string>
+    <string name="common_volver">Back</string>
+    <string name="common_error">Error: %1$s</string>
+    <string name="common_error_generic">Could not load the content</string>
+
+    <!-- Drawer / profile -->
+    <string name="home_menu_cd">Menu</string>
+    <string name="home_favorites_cd">Favorites</string>
+    <string name="home_drawer_group_profile">PROFILE</string>
+    <string name="home_drawer_profile_default">My profile</string>
+    <string name="home_drawer_profile_single_note">Single profile on this device</string>
+    <string name="home_drawer_rename">Rename</string>
+    <string name="profile_rename_title">Profile name</string>
+    <string name="profile_rename_hint">Name</string>
+    <string name="home_drawer_group_library">LIBRARY</string>
+    <string name="home_drawer_favorites">Favorites</string>
+    <string name="home_drawer_refresh">Refresh</string>
+    <string name="home_drawer_sync_linked">Space %1$s</string>
+    <string name="home_drawer_sync_unlinked">Not linked</string>
+    <string name="home_drawer_version">Version %1$s</string>
+
+    <!-- Language picker -->
+    <string name="lang_title">Language</string>
+    <string name="lang_hint">Applies to the whole app instantly.</string>
+    <string name="lang_system">System (default)</string>
+    <string name="lang_es" translatable="false">Español</string>
+    <string name="lang_en" translatable="false">English</string>
+
+    <!-- Anime detail -->
+    <string name="detail_chapters">Episodes (%1$d)</string>
+    <string name="detail_tap_to_play">Tap to play</string>
+    <string name="detail_episodes_count">Episodes: %1$d</string>
+    <string name="detail_favorite_add">Add to favorites</string>
+    <string name="detail_favorite_add_cd">Add to favorites</string>
+    <string name="detail_favorite_remove_cd">Remove from favorites</string>
+    <string name="detail_in_favorites">In favorites</string>
+    <string name="detail_continue_episode">Continue Ep %1$s</string>
+    <string name="detail_episode">Ep %1$s</string>
+    <string name="detail_episode_watched">Ep %1$s · Watched</string>
+
+    <!-- Favorites -->
+    <string name="favorites_title">Favorites (%1$d)</string>
+    <string name="favorites_empty_title">No favorites yet</string>
+    <string name="favorites_empty_hint">Long-press a card on Home to add it.</string>
+
+    <!-- Player -->
+    <string name="player_episode_title">Ep %1$d · %2$s</string>
+    <string name="player_reload_cd">Reload servers</string>
+    <string name="player_servers">Server</string>
+    <string name="player_hint">If the player does not load, try another server. Desu is the site own player and the most stable one.</string>
+    <string name="player_play_cd">Play</string>
+    <string name="player_pause_cd">Pause</string>
+    <string name="player_rewind_cd">Rewind 10 seconds</string>
+    <string name="player_forward_cd">Forward 10 seconds</string>
+    <string name="player_stop_cd">Stop and leave</string>
+    <string name="player_seek_cd">Video position</string>
+    <string name="player_loading">Preparing player…</string>
+    <string name="player_no_servers">This episode has no available servers</string>
+    <string name="player_servers_error">Could not load the servers</string>
+    <string name="player_stalled">%1$s did not load. Try another server.</string>
+    <string name="player_try_next">Try another server</string>
+
+    <!-- Sync -->
+    <string name="sync_title">Sync</string>
+    <string name="sync_intro">Share favorites and progress between the TV and the phone.</string>
+    <string name="sync_not_linked">No linked space</string>
+    <string name="sync_create">Create new space</string>
+    <string name="sync_have_code">Already have a space on another device?</string>
+    <string name="sync_code_hint">8-digit code</string>
+    <string name="sync_link_device">Link this device</string>
+    <string name="sync_space_label">Space</string>
+    <string name="sync_now">Sync now</string>
+    <string name="sync_last">Last sync: %1$s</string>
+    <string name="sync_generate">Generate code for another device</string>
+    <string name="sync_code">Code: %1$s</string>
+    <string name="sync_code_note">Type it on the other device. It expires in 15 minutes.</string>
+    <string name="sync_unlink">Unlink space</string>
+    <string name="sync_msg_creating">Creating space…</string>
+    <string name="sync_msg_created">Space created</string>
+    <string name="sync_msg_generating">Generating code…</string>
+    <string name="sync_msg_code_ready">Code valid for 15 minutes, single use</string>
+    <string name="sync_msg_linked">Device linked</string>
+    <string name="sync_msg_result">%1$d favorites · %2$d progress entries</string>
+    <string name="sync_msg_need_space">Create or link a space first</string>
+    <string name="sync_msg_not_configured">Supabase is not configured in local.properties</string>
+    <string name="sync_msg_unlinked">Space unlinked</string>
+</resources>

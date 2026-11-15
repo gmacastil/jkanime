@@ -24,9 +24,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.macastil.mobile.JkGraph
+import com.macastil.mobile.R
 import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.theme.JkTextSecondary
 import kotlinx.coroutines.launch
@@ -47,10 +49,10 @@ fun FavoritesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Favoritos (${visible.size})") },
+                title = { Text(stringResource(R.string.favorites_title, visible.size)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.common_volver))
                     }
                 },
             )
@@ -66,11 +68,11 @@ fun FavoritesScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "Todavía no tienes favoritos",
+                        text = stringResource(R.string.favorites_empty_title),
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = "Mantén pulsada una tarjeta en Inicio para añadirla.",
+                        text = stringResource(R.string.favorites_empty_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                     )

@@ -1,7 +1,103 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Textos visibles de la app móvil, en español (idioma por defecto).
+
+  Reglas (las mismas que `:app`):
+  - Claves en snake_case, agrupadas por pantalla.
+  - `values-en/strings.xml` debe tener TODAS las mismas claves y placeholders.
+  - NO van aquí: logs, etiquetas que vienen del sitio (statusLabel, títulos,
+    nombres de servidor) ni claves de SharedPreferences.
+-->
 <resources>
-    <!-- Corto a propósito: en el launcher de Android el nombre largo
-         ("jkanime mobile") se recortaba a "jkanime m…". La app de TV se llama
-         "jkanimetv". -->
+    <!-- General -->
     <string name="app_name">jkanime</string>
+    <string name="common_retry">Reintentar</string>
+    <string name="common_back">Atrás</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_save">Guardar</string>
+    <string name="common_volver">Volver</string>
+    <string name="common_error">Error: %1$s</string>
+    <string name="common_error_generic">No se pudo cargar el contenido</string>
+
+    <!-- Menú lateral / perfil -->
+    <string name="home_menu_cd">Menú</string>
+    <string name="home_favorites_cd">Favoritos</string>
+    <string name="home_drawer_group_profile">PERFIL</string>
+    <string name="home_drawer_profile_default">Mi perfil</string>
+    <string name="home_drawer_profile_single_note">Perfil único de este dispositivo</string>
+    <string name="home_drawer_rename">Cambiar nombre</string>
+    <string name="profile_rename_title">Nombre del perfil</string>
+    <string name="profile_rename_hint">Nombre</string>
+    <string name="home_drawer_group_library">BIBLIOTECA</string>
+    <string name="home_drawer_favorites">Favoritos</string>
+    <string name="home_drawer_refresh">Actualizar</string>
+    <string name="home_drawer_sync_linked">Espacio %1$s</string>
+    <string name="home_drawer_sync_unlinked">Sin vincular</string>
+    <string name="home_drawer_version">Versión %1$s</string>
+
+    <!-- Selector de idioma -->
+    <string name="lang_title">Idioma</string>
+    <string name="lang_hint">Se aplica a toda la app al instante.</string>
+    <string name="lang_system">Sistema (predeterminado)</string>
+    <string name="lang_es" translatable="false">Español</string>
+    <string name="lang_en" translatable="false">English</string>
+
+    <!-- Detalle del anime -->
+    <string name="detail_chapters">Capítulos (%1$d)</string>
+    <string name="detail_tap_to_play">Toca para reproducir</string>
+    <string name="detail_episodes_count">Episodios: %1$d</string>
+    <string name="detail_favorite_add">Añadir a favoritos</string>
+    <string name="detail_favorite_add_cd">Añadir a favoritos</string>
+    <string name="detail_favorite_remove_cd">Quitar de favoritos</string>
+    <string name="detail_in_favorites">En favoritos</string>
+    <string name="detail_continue_episode">Continuar Ep %1$s</string>
+    <string name="detail_episode">Ep %1$s</string>
+    <string name="detail_episode_watched">Ep %1$s · Visto</string>
+
+    <!-- Favoritos -->
+    <string name="favorites_title">Favoritos (%1$d)</string>
+    <string name="favorites_empty_title">Todavía no tienes favoritos</string>
+    <string name="favorites_empty_hint">Mantén pulsada una tarjeta en Inicio para añadirla.</string>
+
+    <!-- Reproductor -->
+    <string name="player_episode_title">Ep %1$d · %2$s</string>
+    <string name="player_reload_cd">Recargar servidores</string>
+    <string name="player_servers">Servidor</string>
+    <string name="player_hint">Si el reproductor no carga, prueba otro servidor. Desu es el del propio sitio y el más estable.</string>
+    <string name="player_play_cd">Reproducir</string>
+    <string name="player_pause_cd">Pausar</string>
+    <string name="player_rewind_cd">Retroceder 10 segundos</string>
+    <string name="player_forward_cd">Avanzar 10 segundos</string>
+    <string name="player_stop_cd">Detener y salir</string>
+    <string name="player_seek_cd">Posición del video</string>
+    <string name="player_loading">Preparando reproductor…</string>
+    <string name="player_no_servers">Este episodio no tiene servidores disponibles</string>
+    <string name="player_servers_error">No se pudieron cargar los servidores</string>
+    <string name="player_stalled">%1$s no cargó. Prueba otro servidor.</string>
+    <string name="player_try_next">Probar otro servidor</string>
+
+    <!-- Sincronización -->
+    <string name="sync_title">Sincronización</string>
+    <string name="sync_intro">Comparte favoritos y progreso entre el televisor y el teléfono.</string>
+    <string name="sync_not_linked">Sin espacio vinculado</string>
+    <string name="sync_create">Crear espacio nuevo</string>
+    <string name="sync_have_code">¿Ya tienes un espacio en otro dispositivo?</string>
+    <string name="sync_code_hint">Código de 8 dígitos</string>
+    <string name="sync_link_device">Vincular este dispositivo</string>
+    <string name="sync_space_label">Espacio</string>
+    <string name="sync_now">Sincronizar ahora</string>
+    <string name="sync_last">Última sincronización: %1$s</string>
+    <string name="sync_generate">Generar código para otro dispositivo</string>
+    <string name="sync_code">Código: %1$s</string>
+    <string name="sync_code_note">Escríbelo en el otro dispositivo. Caduca en 15 minutos.</string>
+    <string name="sync_unlink">Desvincular espacio</string>
+    <string name="sync_msg_creating">Creando espacio…</string>
+    <string name="sync_msg_created">Espacio creado</string>
+    <string name="sync_msg_generating">Generando código…</string>
+    <string name="sync_msg_code_ready">Código válido 15 minutos y de un solo uso</string>
+    <string name="sync_msg_linked">Dispositivo vinculado</string>
+    <string name="sync_msg_result">%1$d favoritos · %2$d progresos</string>
+    <string name="sync_msg_need_space">Primero crea o vincula un espacio</string>
+    <string name="sync_msg_not_configured">Falta configurar Supabase en local.properties</string>
+    <string name="sync_msg_unlinked">Espacio desvinculado</string>
 </resources>

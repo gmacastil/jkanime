@@ -39,6 +39,7 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 | F12 | Ajustes de UI: Directorio simplificado, Recientes, badges de favoritos e icono de menú | ✅ |
 | F13 | Internacionalización completa español/inglés y selector de idioma por perfil | ✅ |
 | F14 | Release firmado, actualización en línea y correcciones de filtros/foco | ✅ |
+| 1.5.1 | App móvil: menú con perfil/idioma/sync, reproductor usable y grilla completa | ✅ |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo
@@ -74,6 +75,9 @@ físico).
 ### Perfiles y sincronización
 
 - Perfiles locales múltiples en la misma TV, con selector tipo Netflix.
+- **En el móvil hay un solo perfil** (no es multiusuario): el menú lateral
+  muestra su nombre, permite renombrarlo y expone las mismas opciones de idioma
+  y sincronización que un perfil de la TV.
 - Aislamiento de favoritos, progreso y credenciales de sincronización por perfil.
 - Creación, activación, eliminación y cambio de perfil.
 - Sincronización multi-dispositivo mediante Supabase.
@@ -91,6 +95,8 @@ físico).
   Activity.
 - La preferencia se guarda en `SharedPreferences` (`jk-profiles`, clave
   `lang`).
+- En el móvil el idioma vive en su propio `AppLocale` (módulo
+  `:app-mobile`, prefs `jk-mobile-settings`) con las mismas tres opciones.
 
 ### Reproducción
 
@@ -98,6 +104,11 @@ físico).
   pantalla negra observada en algunos televisores con WebView.
 - Fallback entre servidores Desu y Magi cuando una fuente falla o no inicia.
 - Controles TV de reproducción, pausa, avance/retroceso y cambio de servidor.
+- En el móvil la barra de transporte va **debajo** del vídeo (apaisado con el
+  vídeo a pantalla completa): pausa, ±10 s, `✕` para detener y volver, y slider
+  arrastrable para buscar.
+- El `WebPlayer` móvil usa el User-Agent del Chrome del sistema (con UA de TV
+  los hosts servían un player sin zonas táctiles).
 - Guardado periódico del progreso y reanudación en la posición anterior.
 - Bloqueo de anuncios y overlays en los embeds mediante interceptación de red y
   hit-test sweep cuando aplica al reproductor web.
@@ -108,7 +119,8 @@ físico).
 :app              TV: Activities + navegación + features (home, detail, player,
                   directorio, profiles, sync) + Room (favoritos/progreso/perfiles)
 :app-mobile       Móvil: navegación por estado + home/detail/player/favoritos/sync,
-                  biblioteca persistida en SharedPreferences + JSON
+                  menú lateral (perfil único, idioma, sync), biblioteca persistida
+                  en SharedPreferences + JSON, recursos es/en propios
 :core:model       Modelos puros (AnimeCard, AnimeDetail, Episode, VideoServer, ...)
 :core:network     OkHttp + cookie jar de sesión + rate limit + token CSRF
 :core:ui          Design system TV (PosterCard, EpisodeTile, TvActionButton, estados)
@@ -275,11 +287,22 @@ adb logcat -s JkBridge chromium AndroidRuntime
 > no significa que falle en el TV: compara con `adb logcat chromium`. Arranca con
 > `-gpu host` (lo hace el script) para tener decodificación por GPU.
 
+Y para la app **móvil**, un AVD de teléfono:
+
+```bash
+emulator -avd jkphone -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect -no-audio &
+adb install -r app-mobile/build/outputs/apk/debug/app-mobile-debug.apk
+adb shell am start -n com.macastil.mobile/.MainActivity
+adb shell input tap 66 130          # ☰ del menú lateral
+```
+
 Todas las fases (F0–F14) están verificadas end-to-end en emulador: Home,
 tabs, búsqueda real del sitio, Directorio, Detail, selector/fallback de
 servidor del Player, bloqueo de anuncios, favoritos/progreso con Room, sync
 multi-dispositivo con Supabase (incluido emparejamiento por código), idiomas
-español/inglés y el gate de perfiles con tarjetas Material Design 3. Detalle completo, bugs
+español/inglés y el gate de perfiles con tarjetas Material Design 3. La app
+móvil tiene su propia verificación (1.5.1): menú con perfil/idioma/sync,
+reproductor con barra de transporte y grilla completa. Detalle completo, bugs
 encontrados/corregidos y trampas de cada fase en
 [docs/emulator-testing.md](docs/emulator-testing.md).
 

@@ -30,10 +30,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.macastil.mobile.R
 import com.macastil.tv.ui.theme.JkTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,10 +50,13 @@ fun SyncScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sincronización") },
+                title = { Text(stringResource(R.string.sync_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(
+                            Icons.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.common_volver),
+                        )
                     }
                 },
             )
@@ -65,7 +70,7 @@ fun SyncScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Comparte favoritos y progreso entre el televisor y el teléfono.",
+                text = stringResource(R.string.sync_intro),
                 style = MaterialTheme.typography.bodyMedium,
                 color = JkTextSecondary,
             )
@@ -75,7 +80,7 @@ fun SyncScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
-                            text = "Sin espacio vinculado",
+                            text = stringResource(R.string.sync_not_linked),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Button(
@@ -83,18 +88,18 @@ fun SyncScreen(
                             enabled = !state.busy,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Crear espacio nuevo")
+                            Text(stringResource(R.string.sync_create))
                         }
 
                         Text(
-                            text = "¿Ya tienes un espacio en otro dispositivo?",
+                            text = stringResource(R.string.sync_have_code),
                             style = MaterialTheme.typography.bodySmall,
                             color = JkTextSecondary,
                         )
                         OutlinedTextField(
                             value = joinCode,
                             onValueChange = { joinCode = it.filter(Char::isDigit).take(8) },
-                            label = { Text("Código de 8 dígitos") },
+                            label = { Text(stringResource(R.string.sync_code_hint)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -103,7 +108,7 @@ fun SyncScreen(
                             enabled = !state.busy && joinCode.length == 8,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Vincular este dispositivo")
+                            Text(stringResource(R.string.sync_link_device))
                         }
                     }
                 }
@@ -111,7 +116,7 @@ fun SyncScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
-                            text = "Espacio",
+                            text = stringResource(R.string.sync_space_label),
                             style = MaterialTheme.typography.labelLarge,
                             color = JkTextSecondary,
                         )
@@ -126,12 +131,19 @@ fun SyncScreen(
                             enabled = !state.busy,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Sincronizar ahora")
+                            Text(stringResource(R.string.sync_now))
                         }
 
-                        state.lastSync?.let {
+                        state.lastSync?.let { (favorites, progress) ->
                             Text(
-                                text = "Última sincronización: $it",
+                                text = stringResource(
+                                    R.string.sync_last,
+                                    stringResource(
+                                        R.string.sync_msg_result,
+                                        favorites,
+                                        progress,
+                                    ),
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF3DDC84),
                             )
@@ -142,18 +154,18 @@ fun SyncScreen(
                             enabled = !state.busy,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Generar código para otro dispositivo")
+                            Text(stringResource(R.string.sync_generate))
                         }
 
                         val pairing = state.pairing
                         if (pairing != null) {
                             Text(
-                                text = "Código: ${pairing.code}",
+                                text = stringResource(R.string.sync_code, pairing.code),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = Color(0xFFFF6B35),
                             )
                             Text(
-                                text = "Escríbelo en el otro dispositivo. Caduca en 15 minutos.",
+                                text = stringResource(R.string.sync_code_note),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = JkTextSecondary,
                             )
@@ -164,7 +176,7 @@ fun SyncScreen(
                             enabled = !state.busy,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Desvincular espacio")
+                            Text(stringResource(R.string.sync_unlink))
                         }
                     }
                 }
@@ -181,7 +193,7 @@ fun SyncScreen(
                         CircularProgressIndicator(Modifier.height(20.dp))
                     }
                     Text(
-                        text = message,
+                        text = stringResource(message.res, *message.args.toTypedArray()),
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                     )

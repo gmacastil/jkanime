@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.macastil.mobile.JkGraph
+import com.macastil.mobile.R
 import com.macastil.mobile.data.local.ProgressEntity
 import com.macastil.tv.model.AnimeDetail
 import com.macastil.tv.model.Episode
@@ -83,7 +85,7 @@ fun DetailScreen(
                     )
                     Spacer(Modifier.height(16.dp))
                     androidx.compose.material3.Button(onClick = viewModel::load) {
-                        Text("Reintentar")
+                        Text(stringResource(R.string.common_retry))
                     }
                 }
             }
@@ -133,7 +135,7 @@ private fun DetailContent(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Atrás")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
                     }
                 },
             )
@@ -177,13 +179,13 @@ private fun DetailContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Capítulos (${episodes.size})",
+                        text = stringResource(R.string.detail_chapters, episodes.size),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = JkTextPrimary,
                     )
                     Text(
-                        text = "Toca para reproducir",
+                        text = stringResource(R.string.detail_tap_to_play),
                         style = MaterialTheme.typography.labelSmall,
                         color = JkTextSecondary,
                     )
@@ -251,7 +253,7 @@ private fun Header(
                 }
                 detail.totalEpisodes?.let {
                     Text(
-                        text = "Episodios: $it",
+                        text = stringResource(R.string.detail_episodes_count, it),
                         style = MaterialTheme.typography.bodySmall,
                         color = JkTextSecondary,
                     )
@@ -261,12 +263,20 @@ private fun Header(
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
                             imageVector = Icons.Filled.Favorite,
-                            contentDescription = if (isFavorite) "Quitar favorito" else "Añadir favorito",
+                            contentDescription = if (isFavorite) {
+                                stringResource(R.string.detail_favorite_remove_cd)
+                            } else {
+                                stringResource(R.string.detail_favorite_add_cd)
+                            },
                             tint = if (isFavorite) Color(0xFFFF6B35) else JkTextSecondary,
                         )
                     }
                     Text(
-                        text = if (isFavorite) "En favoritos" else "Añadir a favoritos",
+                        text = if (isFavorite) {
+                            stringResource(R.string.detail_in_favorites)
+                        } else {
+                            stringResource(R.string.detail_favorite_add)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = JkTextSecondary,
                     )
@@ -285,7 +295,13 @@ private fun Header(
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Continuar Ep ${episodes.firstOrNull { it.number.toInt() == resume.episode }?.numberLabel ?: resume.episode}")
+                    Text(
+                        stringResource(
+                            R.string.detail_continue_episode,
+                            episodes.firstOrNull { it.number.toInt() == resume.episode }?.numberLabel
+                                ?: resume.episode.toString(),
+                        ),
+                    )
                 }
             }
         }
@@ -343,9 +359,9 @@ private fun EpisodeRow(
 
         Column(modifier = Modifier.weight(1f)) {
             val label = if (progress?.completed == true) {
-                "Ep ${episode.numberLabel} · Visto"
+                stringResource(R.string.detail_episode_watched, episode.numberLabel)
             } else {
-                "Ep ${episode.numberLabel}"
+                stringResource(R.string.detail_episode, episode.numberLabel)
             }
             Text(
                 text = label,
