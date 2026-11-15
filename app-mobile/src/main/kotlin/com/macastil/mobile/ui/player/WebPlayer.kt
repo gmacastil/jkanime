@@ -112,6 +112,48 @@ private const val HOOK_SCRIPT = """
   window.addEventListener('resize', fitDocumentHeight);
   window.addEventListener('orientationchange', fitDocumentHeight);
 
+  // --- Controles duplicados del embed ---
+  // El embed de jkplayer/Streamwish es DPlayer: pinta su propia barra
+  // (`.dplayer-controller`, con play, tiempo, barra, volumen y fullscreen) y,
+  // en móvil, un botón de play gigante sobre el vídeo. Como la app ya tiene
+  // su barra de Compose debajo del vídeo, se veían DOS barras y el vídeo
+  // parecía un mini-reproductor dentro de otro. Se oculta todo el chrome del
+  // player y se fuerza el <video> a ocupar la caja completa (`object-fit:
+  // contain` para respetar la relación de aspecto dentro de la caja).
+  function injectPlayerStyle(doc) {
+    try {
+      if (!doc || !doc.createElement || doc.getElementById('jk-player-style')) return;
+      var st = doc.createElement('style');
+      st.id = 'jk-player-style';
+      st.textContent = [
+        '.dplayer-controller,.dplayer-controller-mask,.dplayer-mobile-play,',
+        '.dplayer-bezel,.dplayer-notice,.dplayer-menu,.dplayer-menu-show,',
+        '.dplayer-icons,.dplayer-bar-wrap,.dplayer-danmaku,.dplayer-subtitle,',
+        '.dplayer-info-panel,.dplayer-setting,.dplayer-comment{display:none!important}',
+        '.dplayer,.dplayer-video-wrap,.dplayer-video{background:#000!important}',
+        '.dplayer,.dplayer-video-wrap{width:100%!important;height:100%!important}',
+        '.dplayer-video,video{width:100%!important;height:100%!important;',
+        'object-fit:contain!important;display:block!important}'
+      ].join('');
+      var head = doc.head || doc.documentElement;
+      if (head) head.appendChild(st);
+    } catch (e) { /* si falla, el player sigue usable con sus controles */ }
+  }
+
+  // El player puede estar en el documento superior o en un iframe same-origin.
+  function stylePlayer() {
+    injectPlayerStyle(document);
+    var frames = [];
+    try { frames = document.querySelectorAll('iframe'); } catch (e) { frames = []; }
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        var inner = frames[i].contentDocument;
+        if (inner) injectPlayerStyle(inner);
+      } catch (e) { /* cross-origin */ }
+    }
+  }
+  stylePlayer();
+
   // El <video> puede vivir en el documento superior (Desu/jkplayer) o dentro
   // de un iframe same-origin (varios hosts de terceros). Antes solo se miraba
   // el documento superior, así que con el player en un iframe no llegaban
@@ -255,9 +297,9 @@ private const val HOOK_SCRIPT = """
     sweepOverlaysInDoc(document, true);
   }
 
-  var observer = new MutationObserver(function(){ sweepOverlays(); });
+  var observer = new MutationObserver(function(){ stylePlayer(); sweepOverlays(); });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  setInterval(sweepOverlays, 1000);
+  setInterval(function(){ stylePlayer(); sweepOverlays(); }, 1000);
 
   // Defensa principal: algunos anuncios se pintan dentro de un iframe/
   // shadow root totalmente inaccesible por recorrido de árbol (ni
@@ -336,6 +378,7 @@ private const val HOOK_SCRIPT = """
 
   setInterval(function(){
     fitDocumentHeight();
+    stylePlayer();
     var v = findVideo(document, 3);
     if (!v) return;
    if (!v.__jkBound) {
@@ -359,6 +402,12 @@ private const val HOOK_SCRIPT = """
        v.addEventListener('play', function(){ JkBridge.onPlaying(true); });
        v.addEventListener('playing', function(){ JkBridge.onPlaying(true); });
        v.addEventListener('pause', function(){ JkBridge.onPlaying(false); });
+       // Con los controles del embed ocultos, un toque sobre el vídeo debe
+       // seguir reanudando (si el navegador rechazó el autoplay o el usuario
+       // pausó desde la barra de Compose).
+       v.addEventListener('click', function(){
+         if (v.paused) { try { v.play(); } catch (e) {} }
+       });
        JkBridge.onPlaying(!v.paused);
        JkBridge.onReady();
     }

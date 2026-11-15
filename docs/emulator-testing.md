@@ -1843,3 +1843,138 @@ done
 ```
 En debug, `WebView.setWebContentsDebuggingEnabled(true)` deja inspeccionar el
 player por CDP (`adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`).
+
+## 1.5.4 — formularios de sync unificados + reproductor móvil a pantalla completa (verificado 2026-11-15)
+
+Tres frentes en la misma versión: un bug de la TV en instalación nueva, la
+unificación de las credenciales en un módulo compartido y el chrome duplicado
+del reproductor del móvil.
+
+### Bug: la clave de recuperación de la TV pedía 10 caracteres
+
+En `ProfileGateScreen.kt` → `SyncChoiceScreen` (el sync que se ofrece al crear el
+**primer** perfil) la clave de recuperación se trataba como una credencial de
+**10 caracteres base32**:
+
+```kotlin
+syncCode.padEnd(if (recovering || settingRecovery) 10 else 8, '·')…
+maxLength = if (recovering || settingRecovery) 10 else 8
+if (syncCode.length == if (…) 10 else 8) { … }
+```
+
+y usaba `TvRecoveryPad` (A-Z + dígitos). Pero el título decía "6 CARACTERES" y
+la RPC `sync_set_recovery` / `sync_recover` en `docs/supabase/schema.sql` exige
+**exactamente 6 hex**:
+
+```sql
+if length(trim(key)) <> 6 or upper(trim(key)) !~ '^[0-9A-F]+$' then raise …
+```
+
+Resultado: solo se podía confirmar con 10 caracteres y el servidor rechazaba
+siempre. El cajón del avatar (`HomeScreen.kt`) sí usaba 6 hex, y por eso la
+recuperación funcionaba **después** de crear el perfil.
+
+Fix: el gate usa el mismo componente (`TvHexPad`), 6 caracteres, display en
+grupos de 3 y `✓` disponible con la clave completa. `TvRecoveryPad` se elimina de
+`:core:ui`: su alfabeto base32 no puede cumplir la RPC, así que era una trampa
+esperando a que alguien lo reutilizara.
+
+### `SyncKeys` compartido (`:core:model`)
+
+La normalización existía solo en el móvil (`app-mobile/.../ui/sync/SyncKeys.kt`).
+Ahora vive en `core/model/src/main/kotlin/com/macastil/tv/model/SyncKeys.kt`
+(módulo JVM puro, con tests) y la usan las dos apps:
+
+| Función | Regla | La usa |
+|---|---|---|
+| `normalizeRecoveryKey` | hex, mayúsculas, corta a 6 | TV (gate + cajón), móvil |
+| `isCompleteRecoveryKey` | `length == 6` | botones de guardar/recuperar |
+| `normalizePairingCode` | solo dígitos, corta a 8 | TV (gate + cajón), móvil |
+| `isCompletePairingCode` | `length == 8` | confirmación del teclado |
+| `formatCode` / `formatRecoveryKey` / `formatPairingCode` | display (`0489 5806`, `FF0· ···`) | las dos apps |
+
+Además de normalizar en la UI, **los dos `SyncEngine` normalizan antes de llamar
+al cliente** (`setRecoveryKey`, `recoverSpace`, `joinSpace`): cualquier pantalla
+futura queda protegida aunque se salte el teclado. `SyncKeysTest` pasa al módulo
+compartido (8 tests) y el del móvil se borra para no tener dos verdades.
+
+### Reproductor móvil: dos barras y sin pantalla completa
+
+Síntomas reportados: "se ve una barra de controles abajo, y luego otro
+mini-reproductor al fondo con otros controles, y no se pone en fullscreen".
+
+Causa: el embed es **DPlayer**, que pinta su propia barra
+(`.dplayer-controller`: play, tiempo, barra, volumen, fullscreen) y, en móvil, un
+botón de play gigante. Como la app añade su `TransportBar` de Compose, se veían
+dos juegos de controles y el vídeo parecía metido dentro de otro player.
+
+Fix, en `WebPlayer.HOOK_SCRIPT`:
+
+- `injectPlayerStyle(doc)` añade un `<style id="jk-player-style">` que oculta
+  `.dplayer-controller`, `.dplayer-controller-mask`, `.dplayer-mobile-play`,
+  `.dplayer-bezel`, `.dplayer-notice`, `.dplayer-menu`, `.dplayer-icons`,
+  `.dplayer-bar-wrap`, `.dplayer-danmaku` y `.dplayer-subtitle`, y fuerza
+  `.dplayer`, `.dplayer-video-wrap` y `video` a `100% x 100%` con
+  `object-fit: contain`.
+- `stylePlayer()` lo aplica al documento superior **y a los iframes
+  same-origin** (algunos hosts montan el player en un iframe); se reaplica en el
+  `MutationObserver` y en el bucle de 1.2 s.
+- Como los controles del embed ya no existen, un toque sobre el vídeo llama a
+  `play()` si está pausado (si el navegador rechazó el autoplay, o tras pausar
+  desde Compose). `mediaPlaybackRequiresUserGesture` sigue en `false`.
+
+En `PlayerScreen.kt`, apaisado pasa a ser pantalla completa de verdad:
+
+- `DisposableEffect` con `WindowInsetsControllerCompat.hide(systemBars)` (inmersivo,
+  `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`); se restauran al salir.
+- La caja del vídeo es `fillMaxWidth().weight(1f)` (antes 16:9 centrada, que en un
+  teléfono 2.2:1 dejaba el vídeo más pequeño de lo posible).
+- La `TransportBar` se **superpone** al vídeo con fondo `0xB3000000` en apaisado
+  (y sigue debajo del vídeo en retrato, donde el alto no sobra).
+- Los chips de servidor se ocultan en apaisado salvo que el servidor haya
+  fallado (`stalled`), que es justo cuando hacen falta.
+
+### Verificación
+
+Formularios (emulador `jktv`, gate de instalación nueva con `pm clear` y la APK
+debug; los cuatro flujos del gate):
+
+| Flujo | Entrada | Resultado en pantalla |
+|---|---|---|
+| Crear espacio | — | `Save this code: 0074 0020` |
+| Definir clave | teclado hex, `C0FFEE` | "Linking key saved" |
+| Recuperar con clave | `FF00AA` | "Device linked to the space" → espacio `04895806` |
+| Vincular con código | `58364653` | "Device linked to the space" |
+
+Comprobado también **contra el servidor** (curl a PostgREST):
+
+```
+sync_recover {"p_recovery_key":"C0FFEE"} -> {"code":"00740020", …}
+sync_recover {"p_recovery_key":"FF00AA"} -> {"code":"04895806", …}
+sync_new_pairing (04895806)             -> {"pairing_code":"58364653", …}
+```
+
+Reproductor (emulador `jkphone` + foto del host):
+
+| Momento | `logcat` (`video info`) | Foto del host |
+|---|---|---|
+| 1.5.3 (caja 16:9 + barra debajo) | `rect=866x303 doc=303/303` | vídeo en una franja + barra de Compose **y** barra de DPlayer dentro del WebView |
+| 1.5.4 (pantalla completa) | `rect=866x422 doc=422/422` | vídeo a pantalla completa (914x411 del host), **una sola** barra superpuesta, sin barras de sistema |
+
+### Trampa al fotografiar la ventana del host
+
+`wmctrl -l | grep -i "Android Emulator"` puede devolver **la terminal** cuando el
+título de la ventana es el propio comando (`… grep -i "Android Emulator"`), y
+`ffmpeg -f x11grab` captura **lo que se ve en pantalla** en esas coordenadas: si
+el emulador está tapado por otra ventana, la foto sale de la ventana que está
+encima. Filtrar por el nombre del AVD y subir la ventana antes de capturar:
+
+```bash
+wmctrl -a "Android Emulator - jkphone:5554"
+W=$(wmctrl -l | awk '$NF=="jkphone:5554"{print $1}')
+eval "$(xdotool getwindowgeometry --shell $W)"
+ffmpeg -v error -f x11grab -video_size ${WIDTH}x${HEIGHT} -i :0.0+${X},${Y} -frames:v 1 -y out.png
+```
+
+Para leerla hay que girarla 90° (`PIL rotate(90, expand=True)`): la ventana del
+emulador es vertical aunque el contenido esté en apaisado.

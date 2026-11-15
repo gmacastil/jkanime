@@ -108,6 +108,13 @@ import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.component.TvIconButton
 import com.macastil.tv.ui.component.TvNumberPad
+import com.macastil.tv.model.PAIRING_CODE_LENGTH
+import com.macastil.tv.model.RECOVERY_KEY_LENGTH
+import com.macastil.tv.model.formatCode
+import com.macastil.tv.model.formatPairingCode
+import com.macastil.tv.model.formatRecoveryKey
+import com.macastil.tv.model.normalizePairingCode
+import com.macastil.tv.model.normalizeRecoveryKey
 import com.macastil.tv.ui.component.TvHexPad
 import com.macastil.tv.ui.component.airingStatusColor
 import com.macastil.tv.ui.theme.JkBackground
@@ -367,7 +374,7 @@ fun HomeScreen(
                                 showAvatarMenu = true
                                 avatarMenuMode = AvatarMenuMode.RECOVERY
                                 avatarMenuRecoveryKey = ""
-                                avatarMenuStatus = context.getString(R.string.sync_space_created, it.code.chunked(4).joinToString(" "))
+                                avatarMenuStatus = context.getString(R.string.sync_space_created, formatCode(it.code))
                             }
                             .onFailure { avatarMenuStatus = context.getString(R.string.common_error, it.message) }
                         avatarMenuBusy = false
@@ -379,7 +386,7 @@ fun HomeScreen(
                         runCatching { syncEngine.createPairingCode() }
                             .onSuccess { pairing ->
                                 avatarMenuPairingCode = pairing.code
-                                avatarMenuStatus = context.getString(R.string.sync_pairing_created, pairing.code.chunked(4).joinToString(" "))
+                                avatarMenuStatus = context.getString(R.string.sync_pairing_created, formatCode(pairing.code))
                                 showAvatarMenu = true
                             }
                             .onFailure { avatarMenuStatus = context.getString(R.string.common_error, it.message) }
@@ -438,8 +445,8 @@ fun HomeScreen(
                         avatarMenuStatus = null
                     }
                 },
-                onCodeChange = { avatarMenuSyncCode = it },
-                onRecoveryKeyChange = { avatarMenuRecoveryKey = it },
+                onCodeChange = { avatarMenuSyncCode = normalizePairingCode(it) },
+                onRecoveryKeyChange = { avatarMenuRecoveryKey = normalizeRecoveryKey(it) },
                 onClose = {
                     showAvatarMenu = false
                     avatarMenuMode = AvatarMenuMode.MAIN
@@ -479,7 +486,7 @@ fun HomeScreen(
                             .onSuccess { creds ->
                                 avatarMenuStatus = context.getString(
                                     R.string.sync_space_created,
-                                    creds.code.chunked(4).joinToString(" "),
+                                    formatCode(creds.code),
                                 )
                                 avatarMenuRecoveryKey = ""
                                 avatarMenuMode = AvatarMenuMode.RECOVERY
@@ -560,7 +567,7 @@ fun HomeScreen(
                             .onSuccess { pairing ->
                                 avatarMenuStatus = context.getString(
                                     R.string.sync_pairing_created,
-                                    pairing.code.chunked(4).joinToString(" "),
+                                    formatCode(pairing.code),
                                 )
                             }
                             .onFailure {
@@ -1079,15 +1086,15 @@ private fun AvatarMenu(
                                 color = JkTextSecondary,
                             )
                             Text(
-                                text = syncCode.padEnd(8, '·').chunked(4).joinToString("  "),
+                                text = formatPairingCode(syncCode),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = JkOrange,
                             )
                             SyncKeypad(
                                 code = syncCode,
-                                onDigit = { if (syncCode.length < 8) onCodeChange(syncCode + it) },
+                                onDigit = { if (syncCode.length < PAIRING_CODE_LENGTH) onCodeChange(syncCode + it) },
                                 onBackspace = { onCodeChange(syncCode.dropLast(1)) },
-                                onConfirm = { if (syncCode.length == 8) onJoinSpace() },
+                                onConfirm = { if (syncCode.length == PAIRING_CODE_LENGTH) onJoinSpace() },
                                  busy = busy,
                                  compact = true,
                                  focusRequester = focusRequester,
@@ -1107,14 +1114,14 @@ private fun AvatarMenu(
                                 color = JkTextSecondary,
                             )
                             Text(
-                                text = recoveryKey.padEnd(6, '·').chunked(3).joinToString("  "),
+                                text = formatRecoveryKey(recoveryKey),
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = JkOrange,
                             )
                             TvHexPad(
-                                onChar = { if (recoveryKey.length < 6) onRecoveryKeyChange(recoveryKey + it) },
+                                onChar = { if (recoveryKey.length < RECOVERY_KEY_LENGTH) onRecoveryKeyChange(recoveryKey + it) },
                                 onBackspace = { onRecoveryKeyChange(recoveryKey.dropLast(1)) },
-                                onConfirm = { if (recoveryKey.length == 6) onRecoverSpace() },
+                                onConfirm = { if (recoveryKey.length == RECOVERY_KEY_LENGTH) onRecoverSpace() },
                                 busy = busy,
                                 compact = true,
                                 focusRequester = focusRequester,
@@ -1304,7 +1311,7 @@ private fun AvatarDrawerMain(
         )
         if (pairingCode.isNotEmpty()) {
             DrawerItem(
-                label = pairingCode.padEnd(8, '·').chunked(4).joinToString("  "),
+                label = formatPairingCode(pairingCode),
                 icon = null,
                 selected = false,
                 enabled = false,

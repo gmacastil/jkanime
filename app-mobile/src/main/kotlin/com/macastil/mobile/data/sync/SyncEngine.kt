@@ -6,6 +6,8 @@ import com.macastil.mobile.data.local.FavoriteEntity
 import com.macastil.mobile.data.local.LibraryRepository
 import com.macastil.mobile.data.local.ProgressEntity
 import com.macastil.mobile.data.local.SyncCredentialsEntity
+import com.macastil.tv.model.normalizePairingCode
+import com.macastil.tv.model.normalizeRecoveryKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -61,18 +63,18 @@ class SyncEngine(
     suspend fun setRecoveryKey(recoveryKey: String): RecoveryKey {
         val credentials = currentCredentials()
             ?: throw SyncException(res = R.string.sync_msg_need_space)
-        return client.setRecoveryKey(credentials, recoveryKey)
+        return client.setRecoveryKey(credentials, normalizeRecoveryKey(recoveryKey))
     }
 
     suspend fun joinSpace(pairingCode: String) {
-        val credentials = client.joinWithCode(pairingCode)
+        val credentials = client.joinWithCode(normalizePairingCode(pairingCode))
         runBlocking {
             library.setCredentials(credentials.code, credentials.token)
         }
     }
 
     suspend fun recoverSpace(recoveryKey: String) {
-        val credentials = client.recoverWithKey(recoveryKey)
+        val credentials = client.recoverWithKey(normalizeRecoveryKey(recoveryKey))
         runBlocking {
             library.setCredentials(credentials.code, credentials.token)
         }

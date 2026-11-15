@@ -4,6 +4,8 @@ import android.content.Context
 import com.macastil.tv.R
 import com.macastil.tv.data.local.LibraryRepository
 import com.macastil.tv.data.local.ProfileManager
+import com.macastil.tv.model.normalizePairingCode
+import com.macastil.tv.model.normalizeRecoveryKey
 
 /**
  * Motor de sincronización: pull → merge local → push.
@@ -77,7 +79,7 @@ class SyncEngine(
     suspend fun setRecoveryKey(recoveryKey: String): RecoveryKey {
         val credentials = currentCredentials()
             ?: throw IllegalStateException(appContext.getString(R.string.sync_device_not_linked))
-        return client.setRecoveryKey(credentials, recoveryKey)
+        return client.setRecoveryKey(credentials, normalizeRecoveryKey(recoveryKey))
     }
 
     /**
@@ -85,7 +87,7 @@ class SyncEngine(
      * temporal: el token lo entrega el servidor, nunca se teclea.
      */
     suspend fun joinSpace(pairingCode: String) {
-        val credentials = client.joinWithCode(pairingCode)
+        val credentials = client.joinWithCode(normalizePairingCode(pairingCode))
         val profile = profiles.activeProfile()
         if (profile != null) {
             profiles.setSpace(profile.id, credentials.code, credentials.token)
@@ -95,7 +97,7 @@ class SyncEngine(
     }
 
     suspend fun recoverSpace(recoveryKey: String) {
-        val credentials = client.recoverWithKey(recoveryKey)
+        val credentials = client.recoverWithKey(normalizeRecoveryKey(recoveryKey))
         val profile = profiles.activeProfile()
         if (profile != null) {
             profiles.setSpace(profile.id, credentials.code, credentials.token)

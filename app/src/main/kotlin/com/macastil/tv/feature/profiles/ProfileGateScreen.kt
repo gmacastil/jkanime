@@ -71,9 +71,14 @@ import kotlinx.coroutines.launch
 import com.macastil.tv.Graph
 import com.macastil.tv.R
 import com.macastil.tv.data.local.ProfileEntity
+import com.macastil.tv.model.PAIRING_CODE_LENGTH
+import com.macastil.tv.model.RECOVERY_KEY_LENGTH
+import com.macastil.tv.model.formatCode
+import com.macastil.tv.model.formatPairingCode
+import com.macastil.tv.model.formatRecoveryKey
 import com.macastil.tv.ui.component.TvActionButton
+import com.macastil.tv.ui.component.TvHexPad
 import com.macastil.tv.ui.component.TvNumberPad
-import com.macastil.tv.ui.component.TvRecoveryPad
 import com.macastil.tv.ui.component.TvIconButton
 import com.macastil.tv.ui.theme.JkBackground
 import com.macastil.tv.ui.theme.JkGreen
@@ -273,7 +278,7 @@ fun ProfileGateScreen(
                             stringResource(R.string.profiles_select_delete)
                         } else {
                             stringResource(R.string.profiles_own_data)
-                        },
+                    },
                         style = MaterialTheme.typography.bodyMedium,
                         color = JkTextSecondary,
                     )
@@ -440,6 +445,8 @@ fun ProfileGateScreen(
                     syncStatus = syncStatus,
                     linked = syncLinked,
                     needsRecoveryKey = syncNeedsRecoveryKey,
+                    // La normalización (8 dígitos / 6 hex) la aplica también
+                    // `SyncEngine`; aquí acota lo que se puede teclear.
                     onCodeChange = { syncCode = it },
                     onCreateSpace = {
                         syncBusy = true
@@ -451,7 +458,7 @@ fun ProfileGateScreen(
                                     // vez de `stringResource`.
                                     syncStatus = context.getString(
                                         R.string.profiles_sync_save_code,
-                                        creds.code.chunked(4).joinToString(" "),
+                                        formatCode(creds.code),
                                     )
                                     syncNeedsRecoveryKey = true
                                 }
@@ -462,7 +469,7 @@ fun ProfileGateScreen(
                             syncBusy = false
                         }
                     },
-                            onJoinSpace = {
+                    onJoinSpace = {
                         syncBusy = true
                         syncStatus = null
                         scope.launch {
@@ -481,46 +488,46 @@ fun ProfileGateScreen(
                                 }
                             syncBusy = false
                         }
-                            },
-                             onRecoverSpace = {
-                                syncBusy = true
-                                syncStatus = null
-                                scope.launch {
-                                    runCatching { Graph.sync(context).recoverSpace(syncCode) }
-                                        .onSuccess {
-                                            syncStatus = context.getString(R.string.profiles_sync_linked_ok)
-                                            syncLinked = true
-                                            Graph.syncInBackground(context)
-                                        }
-                                        .onFailure {
-                                            syncStatus = context.getString(
-                                                R.string.sync_link_failed,
-                                                it.message,
-                                            )
-                                        }
-                                    syncBusy = false
-                                }
-                             },
-                             onSetRecoveryKey = {
-                                 syncBusy = true
-                                 syncStatus = null
-                                 scope.launch {
-                                     runCatching { Graph.sync(context).setRecoveryKey(syncCode) }
-                                         .onSuccess {
-                                             syncStatus = context.getString(R.string.sync_recovery_saved)
-                                             syncLinked = true
-                                             syncNeedsRecoveryKey = false
-                                             Graph.syncInBackground(context)
-                                         }
-                                         .onFailure {
-                                             syncStatus = context.getString(
-                                                 R.string.sync_link_failed,
-                                                 it.message,
-                                             )
-                                         }
-                                     syncBusy = false
-                                 }
-                             },
+                    },
+                         onRecoverSpace = {
+                            syncBusy = true
+                            syncStatus = null
+                            scope.launch {
+                                runCatching { Graph.sync(context).recoverSpace(syncCode) }
+                                    .onSuccess {
+                                        syncStatus = context.getString(R.string.profiles_sync_linked_ok)
+                                        syncLinked = true
+                                        Graph.syncInBackground(context)
+                                    }
+                                    .onFailure {
+                                        syncStatus = context.getString(
+                                            R.string.sync_link_failed,
+                                            it.message,
+                                        )
+                                    }
+                                syncBusy = false
+                            }
+                         },
+                         onSetRecoveryKey = {
+                             syncBusy = true
+                             syncStatus = null
+                             scope.launch {
+                                 runCatching { Graph.sync(context).setRecoveryKey(syncCode) }
+                                     .onSuccess {
+                                         syncStatus = context.getString(R.string.sync_recovery_saved)
+                                         syncLinked = true
+                                         syncNeedsRecoveryKey = false
+                                         Graph.syncInBackground(context)
+                                     }
+                                     .onFailure {
+                                         syncStatus = context.getString(
+                                             R.string.sync_link_failed,
+                                             it.message,
+                                         )
+                                     }
+                                 syncBusy = false
+                             }
+                         },
                     onSkip = {
                         onReady()
                     },
@@ -635,7 +642,7 @@ private fun SyncChoiceScreen(
                             stringResource(R.string.profiles_sync_creating)
                         } else {
                             stringResource(R.string.sync_create_space)
-                        },
+                    },
                         primary = true,
                         enabled = !syncBusy,
                         modifier = Modifier
@@ -650,7 +657,7 @@ private fun SyncChoiceScreen(
                         onClick = {
                             onCodeChange("")
                             joining = true
-                        },
+                    },
                     )
                     TvActionButton(
                         text = stringResource(R.string.sync_have_recovery_key),
@@ -659,7 +666,7 @@ private fun SyncChoiceScreen(
                         onClick = {
                             onCodeChange("")
                             recovering = true
-                        },
+                    },
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TvActionButton(
@@ -675,10 +682,19 @@ private fun SyncChoiceScreen(
                         )
                     }
                 } else {
+                    // Dos credenciales distintas con longitudes distintas: el
+                    // código temporal de vinculación son 8 dígitos y la clave
+                    // de recuperación son 6 hex (lo que exige
+                    // `sync_set_recovery`). Antes esta pantalla pedía 10
+                    // caracteres base32 para la clave y el servidor la
+                    // rechazaba siempre.
+                    val recoveryMode = recovering || settingRecovery
                     Text(
-                        text = syncCode.padEnd(if (recovering || settingRecovery) 10 else 8, '·')
-                            .chunked(if (recovering || settingRecovery) 5 else 4)
-                            .joinToString("  "),
+                        text = if (recoveryMode) {
+                            formatRecoveryKey(syncCode)
+                        } else {
+                            formatPairingCode(syncCode)
+                    },
                         style = MaterialTheme.typography.headlineSmall,
                         color = JkOrange,
                     )
@@ -692,25 +708,35 @@ private fun SyncChoiceScreen(
                             textAlign = TextAlign.Center,
                         )
                     }
-                    SyncKeypad(
-                        code = syncCode,
-                        maxLength = if (recovering || settingRecovery) 10 else 8,
-                        recovery = recovering || settingRecovery,
-                        onDigit = { if (syncCode.length < if (recovering || settingRecovery) 10 else 8) onCodeChange(syncCode + it) },
-                        onBackspace = { onCodeChange(syncCode.dropLast(1)) },
-                        onConfirm = {
-                            if (syncCode.length == if (recovering || settingRecovery) 10 else 8) {
+                    if (recoveryMode) {
+                        TvHexPad(
+                            onChar = { if (syncCode.length < RECOVERY_KEY_LENGTH) onCodeChange(syncCode + it) },
+                            onBackspace = { onCodeChange(syncCode.dropLast(1)) },
+                            onConfirm = {
                                 when {
                                     settingRecovery -> onSetRecoveryKey()
-                                    recovering -> onRecoverSpace()
-                                    else -> onJoinSpace()
+                                    else -> onRecoverSpace()
                                 }
-                            }
-                        },
-                        busy = syncBusy,
-                        compact = true,
-                        focusRequester = focusRequester,
-                    )
+                            },
+                            enabled = !syncBusy,
+                            busy = syncBusy,
+                            compact = true,
+                            focusRequester = focusRequester,
+                        )
+                    } else {
+                        TvNumberPad(
+                            onDigit = { if (syncCode.length < PAIRING_CODE_LENGTH) onCodeChange(syncCode + it) },
+                            onBackspace = { onCodeChange(syncCode.dropLast(1)) },
+                            onConfirm = if (syncCode.length == PAIRING_CODE_LENGTH && !syncBusy) {
+                                onJoinSpace
+                            } else {
+                                null
+                            },
+                            enabled = !syncBusy,
+                            compact = true,
+                            focusRequester = focusRequester,
+                        )
+                    }
                 }
 
                 if (!linked && !joining) {
@@ -725,45 +751,6 @@ private fun SyncChoiceScreen(
                 }
             }
         }
-    }
-}
-
-/**
- * Teclado numérico estilo TV para entrar el código de 8 dígitos.
- */
-@Composable
-private fun SyncKeypad(
-    code: String,
-    maxLength: Int = 8,
-    recovery: Boolean = false,
-    onDigit: (String) -> Unit,
-    onBackspace: () -> Unit,
-    onConfirm: () -> Unit,
-    busy: Boolean,
-    compact: Boolean = false,
-    focusRequester: FocusRequester? = null,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
-        if (recovery) {
-            TvRecoveryPad(
-                onChar = onDigit,
-                onBackspace = onBackspace,
-                onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
-                enabled = !busy,
-                focusRequester = focusRequester,
-            )
-        } else {
-            TvNumberPad(
-                onDigit = onDigit,
-                onBackspace = onBackspace,
-                onConfirm = if (code.length == maxLength && !busy) onConfirm else null,
-                enabled = !busy,
-                compact = compact,
-                focusRequester = focusRequester,
-            )
-        }
-        // Acciones: confirmar (solo con 8 dígitos) + volver, en la misma fila
-        // para no desbordar el panel en 1080p.
     }
 }
 

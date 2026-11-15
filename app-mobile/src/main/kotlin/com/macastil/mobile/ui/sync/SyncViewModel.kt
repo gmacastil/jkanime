@@ -8,6 +8,9 @@ import com.macastil.mobile.R
 import com.macastil.mobile.data.sync.PairingCode
 import com.macastil.mobile.data.sync.SyncException
 import com.macastil.mobile.data.sync.SyncResult
+import com.macastil.tv.model.formatCode
+import com.macastil.tv.model.normalizePairingCode
+import com.macastil.tv.model.normalizeRecoveryKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

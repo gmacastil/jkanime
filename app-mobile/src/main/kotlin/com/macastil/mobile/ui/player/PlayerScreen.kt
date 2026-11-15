@@ -114,6 +114,22 @@ fun PlayerScreen(
         }
     }
 
+    // Pantalla inmersiva mientras dura el reproductor: sin barras de estado ni
+    // de navegación el vídeo ocupa la pantalla completa. Se restauran al salir
+    // (el `onDispose` devuelve las barras a la activity, no al player).
+    DisposableEffect(Unit) {
+        val window = activity?.window
+        val insets = window?.let {
+            androidx.core.view.WindowCompat.getInsetsController(it, it.decorView)
+        }
+        insets?.systemBarsBehavior =
+            androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        insets?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        onDispose {
+            insets?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
     // OJO con la orientación: NO se puede leer de `LocalConfiguration` ni de
     // `LocalWindowInfo`. El manifest declara
     // `configChanges="orientation|screenSize|..."`, así que la activity no se
@@ -211,16 +227,34 @@ fun PlayerScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
+                // Detener: guarda el progreso, pausa y vuelve al detalle.
+                val onStopPlayback: () -> Unit = {
+                    controller.pause()
+                    JkGraph.appScope.launch {
+                        if (durationMs > 0L) {
+                            JkGraph.library.saveProgress(
+                                slug = slug,
+                                episode = episodeNumber,
+                                positionMs = positionMs,
+                                durationMs = durationMs,
+                                completed = ended || positionMs >= durationMs - 5000L,
+                            )
+                        }
+                    }
+                    onExit()
+                }
+
                 val videoModifier = if (landscape) {
-                    // El embed (DPlayer) ajusta el vídeo a la ALTURA del
-                    // WebView, así que si la caja ocupa todo el ancho (3.5:1 en
-                    // un teléfono apaisado) el vídeo queda con dos franjas
-                    // negras enormes a los lados. Se limita la caja a 16:9 y se
-                    // centra: el vídeo llena el área y las franjas desaparecen.
+                    // Video a pantalla completa: en apaisado la caja se come
+                    // todo el alto libre (ya no hay barra superior, ni chips, ni
+                    // ayuda) y el CSS inyectado en el WebView
+                    // (`object-fit: contain`) respeta la relación de aspecto
+                    // dentro de ella. Antes se limitaba a 16:9 y, como la caja
+                    // salía más alta que el hueco real, el sobrante empujaba la
+                    // barra de transporte fuera de la pantalla.
                     Modifier
+                        .fillMaxWidth()
                         .weight(1f)
-                        .aspectRatio(16f / 9f)
-                        .align(Alignment.CenterHorizontally)
                 } else {
                     Modifier
                         .fillMaxWidth()
@@ -325,40 +359,61 @@ fun PlayerScreen(
                                 viewModel.selectNext()
                                 stalled = false
                             },
-                            modifier = Modifier.align(Alignment.BottomCenter),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                // Hueco para la barra superpuesta de apaisado.
+                                .padding(bottom = if (landscape) 88.dp else 0.dp),
+                        )
+                    }
+
+                    if (landscape) {
+                        // Control superpuesto con fondo semitransparente: el
+                        // vídeo queda a pantalla completa y los botones se leen
+                        // sobre cualquier imagen.
+                        TransportBar(
+                            positionMs = scrubbing?.toLong() ?: positionMs,
+                            durationMs = durationMs,
+                            isPlaying = isPlaying,
+                            scrubbing = scrubbing,
+                            onScrub = { scrubbing = it },
+                            onScrubFinished = {
+                                scrubbing?.let { controller.seekTo(it.toLong()) }
+                                scrubbing = null
+                            },
+                            onPlayPause = { controller.togglePlayPause() },
+                            onRewind = { controller.seekBy(-10) },
+                            onForward = { controller.seekBy(10) },
+                            onStop = onStopPlayback,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(Color(0xB3000000)),
                         )
                     }
                 }
 
-                TransportBar(
-                    positionMs = scrubbing?.toLong() ?: positionMs,
-                    durationMs = durationMs,
-                    isPlaying = isPlaying,
-                    scrubbing = scrubbing,
-                    onScrub = { scrubbing = it },
-                    onScrubFinished = {
-                        scrubbing?.let { controller.seekTo(it.toLong()) }
-                        scrubbing = null
-                    },
-                    onPlayPause = { controller.togglePlayPause() },
-                    onRewind = { controller.seekBy(-10) },
-                    onForward = { controller.seekBy(10) },
-                    onStop = {
-                        controller.pause()
-                        JkGraph.appScope.launch {
-                            if (durationMs > 0L) {
-                                JkGraph.library.saveProgress(
-                                    slug = slug,
-                                    episode = episodeNumber,
-                                    positionMs = positionMs,
-                                    durationMs = durationMs,
-                                    completed = ended || positionMs >= durationMs - 5000L,
-                                )
-                            }
-                        }
-                        onExit()
-                    },
-                )
+                // Una sola barra, en dos sitios: debajo del vídeo en retrato
+                // (no hay sitio a los lados y así no tapa la imagen) y
+                // superpuesta en apaisado, para que el vídeo ocupe la pantalla
+                // completa.
+                if (!landscape) {
+                    TransportBar(
+                        positionMs = scrubbing?.toLong() ?: positionMs,
+                        durationMs = durationMs,
+                        isPlaying = isPlaying,
+                        scrubbing = scrubbing,
+                        onScrub = { scrubbing = it },
+                        onScrubFinished = {
+                            scrubbing?.let { controller.seekTo(it.toLong()) }
+                            scrubbing = null
+                        },
+                        onPlayPause = { controller.togglePlayPause() },
+                        onRewind = { controller.seekBy(-10) },
+                        onForward = { controller.seekBy(10) },
+                        onStop = onStopPlayback,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 // La etiqueta "Servidor" sobra en apaisado: el alto es escaso y
                 // los chips se identifican solos.
@@ -372,7 +427,10 @@ fun PlayerScreen(
                     )
                 }
 
-                if (ready != null) {
+                // En apaisado los chips solo aparecen si el servidor falló: si
+                // no, se comen el alto que necesita el vídeo (el aviso de
+                // "servidor no cargó" ya ofrece cambiar al siguiente).
+                if (ready != null && (!landscape || stalled)) {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -422,10 +480,11 @@ private fun TransportBar(
     onRewind: () -> Unit,
     onForward: () -> Unit,
     onStop: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val max = durationMs.coerceAtLeast(1L).toFloat()
 
-    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+    Column(modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
         Slider(
             value = (scrubbing ?: positionMs.toFloat()).coerceIn(0f, max),
             onValueChange = onScrub,

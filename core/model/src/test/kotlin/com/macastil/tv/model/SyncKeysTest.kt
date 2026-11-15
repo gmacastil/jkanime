@@ -1,4 +1,4 @@
-package com.macastil.mobile.ui.sync
+package com.macastil.tv.model
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -6,11 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * La clave de recuperación la valida el servidor con
- * `length(trim(key)) <> 6 or upper(trim(key)) !~ '^[0-9A-F]+$'`
- * (`sync_set_recovery` en `docs/supabase/schema.sql`), así que normalizar antes
- * de enviarla evita un `invalid_recovery_key_format` que el usuario no puede
- * interpretar.
+ * Las reglas salen de `docs/supabase/schema.sql`:
+ * `length(trim(key)) <> 6 or upper(trim(key)) !~ '^[0-9A-F]+$'` en
+ * `sync_set_recovery` / `sync_recover`, y 8 dígitos en `sync_join`.
  */
 class SyncKeysTest {
 
@@ -29,6 +27,8 @@ class SyncKeysTest {
     @Test
     fun `la clave se corta a 6 caracteres`() {
         assertEquals("ABCDEF", normalizeRecoveryKey("abcdef123456"))
+        // El gate de la TV llegaba a mandar 10 y el servidor lo rechazaba.
+        assertEquals("FF00AA", normalizeRecoveryKey("FF00AA1234"))
     }
 
     @Test
@@ -46,8 +46,23 @@ class SyncKeysTest {
     }
 
     @Test
+    fun `el codigo de vinculacion solo esta completo con 8 digitos`() {
+        assertFalse(isCompletePairingCode("1234567"))
+        assertTrue(isCompletePairingCode("1234 5678"))
+        assertFalse(isCompletePairingCode("1234567a"))
+    }
+
+    @Test
     fun `el codigo de espacio se muestra en grupos de cuatro`() {
         assertEquals("0489 5806", formatCode("04895806"))
         assertEquals("1234", formatCode("1234"))
+    }
+
+    @Test
+    fun `los huecos libres se ven en el display de la TV`() {
+        assertEquals("AB·  ···", formatRecoveryKey("AB"))
+        assertEquals("ABC  DEF", formatRecoveryKey("ABCDEF"))
+        assertEquals("1234  ····", formatPairingCode("1234"))
+        assertEquals("1234  5678", formatPairingCode("12345678"))
     }
 }

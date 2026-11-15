@@ -45,6 +45,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.macastil.mobile.R
 import com.macastil.mobile.data.sync.PairingCode
+import com.macastil.tv.model.formatCode
+import com.macastil.tv.model.isCompleteRecoveryKey
+import com.macastil.tv.model.normalizePairingCode
+import com.macastil.tv.model.normalizeRecoveryKey
 import com.macastil.tv.ui.theme.JkGreen
 import com.macastil.tv.ui.theme.JkOrange
 import com.macastil.tv.ui.theme.JkTextSecondary
