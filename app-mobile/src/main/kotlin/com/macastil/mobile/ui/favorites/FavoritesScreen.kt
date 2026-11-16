@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,10 +42,31 @@ fun FavoritesScreen(
     onBack: () -> Unit = {},
 ) {
     val favorites by JkGraph.library.favorites.collectAsStateWithLifecycle(initialValue = emptyList())
+    val progress by JkGraph.library.progress.collectAsStateWithLifecycle(initialValue = emptyList())
     val visible = favorites
         .filter { it.deletedAt == null }
         .distinctBy { it.slug }
         .sortedBy { it.title.lowercase() }
+
+    // No usamos lastWatchedEpisode para decidir si está al día: ese valor solo
+    // representa el capítulo más alto visto y puede ocultar huecos (por ejemplo,
+    // vistos 1 y 3, pero falta el 2). Se comprueba cada capítulo publicado.
+    val statuses = remember(visible, progress) {
+        visible.map { favorite ->
+            val released = (favorite.lastAiredEpisode ?: favorite.totalEpisodes)
+                ?.takeIf { it > 0 }
+            val watched = progress.asSequence()
+                .filter { it.slug == favorite.slug && it.completed && it.episode > 0 }
+                .map { it.episode }
+                .toSet()
+            val pending = released?.let { total ->
+                (1..total).count { it !in watched }
+            }
+            FavoriteStatus(favorite, pending, released != null && pending == 0)
+        }
+    }
+    val pending = statuses.filterNot { it.upToDate }
+    val upToDate = statuses.filter { it.upToDate }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -58,7 +81,7 @@ fun FavoritesScreen(
             )
         },
     ) { padding ->
-        if (visible.isEmpty()) {
+        if (statuses.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -88,34 +111,72 @@ fun FavoritesScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                items(visible, key = { it.slug }) { favorite ->
-                    val pending = favorite.pendingEpisodes
-                    PosterCard(
-                        title = favorite.title,
-                        posterUrl = favorite.posterUrl,
-                        badge = pending?.takeIf { it > 0 }?.let { "+$it" },
-                        badgeColor = Color(0xFF3DDC84),
-                        subtitle = favorite.statusLabel,
-                        subtitleColor = when {
-                            favorite.statusLabel?.contains("emisi", true) == true -> Color(0xFFFF6B35)
-                            favorite.statusLabel?.contains("conclu", true) == true -> Color(0xFF3DDC84)
-                            else -> null
-                        },
-                        width = null,
-                        isFavorite = true,
-                        onClick = { onOpenDetail(favorite.slug) },
-                        onLongClick = {
-                            scope.launch {
-                                JkGraph.library.toggleFavorite(
-                                    slug = favorite.slug,
-                                    title = favorite.title,
-                                    posterUrl = favorite.posterUrl,
-                                )
-                            }
-                        },
-                    )
+                if (pending.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            stringResource(R.string.favorites_section_pending),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = JkTextSecondary,
+                        )
+                    }
+                    items(pending, key = { status -> "pending-${status.favorite.slug}" }) { status ->
+                        FavoriteCard(status, onOpenDetail, scope)
+                    }
+                }
+                if (pending.isNotEmpty() && upToDate.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text("", modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                }
+                if (upToDate.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            stringResource(R.string.favorites_section_up_to_date),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = JkTextSecondary,
+                        )
+                    }
+                    items(upToDate, key = { status -> "uptodate-${status.favorite.slug}" }) { status ->
+                        FavoriteCard(status, onOpenDetail, scope)
+                    }
                 }
             }
         }
     }
+}
+
+private data class FavoriteStatus(
+    val favorite: com.macastil.mobile.data.local.FavoriteEntity,
+    val pendingCount: Int?,
+    val upToDate: Boolean,
+)
+
+@Composable
+private fun FavoriteCard(
+    status: FavoriteStatus,
+    onOpenDetail: (String) -> Unit,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    val favorite = status.favorite
+    PosterCard(
+        title = favorite.title,
+        posterUrl = favorite.posterUrl,
+        badge = status.pendingCount?.takeIf { it > 0 }?.let { "+$it" }
+            ?: if (status.upToDate) stringResource(R.string.favorites_badge_up_to_date) else null,
+        badgeColor = if (status.upToDate) Color(0xFF3DDC84) else Color(0xFFFF6B35),
+        subtitle = favorite.statusLabel,
+        subtitleColor = when {
+            favorite.statusLabel?.contains("emisi", true) == true -> Color(0xFFFF6B35)
+            favorite.statusLabel?.contains("conclu", true) == true -> Color(0xFF3DDC84)
+            else -> null
+        },
+        width = null,
+        isFavorite = true,
+        onClick = { onOpenDetail(favorite.slug) },
+        onLongClick = {
+            scope.launch {
+                JkGraph.library.toggleFavorite(favorite.slug, favorite.title, favorite.posterUrl)
+            }
+        },
+    )
 }

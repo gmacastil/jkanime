@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -40,6 +41,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -189,256 +194,203 @@ fun PlayerScreen(
         if (!videoReady) stalled = true
     }
 
+    var controlsVisible by remember { mutableStateOf(true) }
+    var interactionToken by remember { mutableStateOf(0) }
+    var showServers by remember { mutableStateOf(false) }
+    var videoWidth by remember { mutableStateOf(1) }
+
+    // Como en la TV: mientras reproduce los controles desaparecen; cualquier
+    // toque los muestra y reinicia el temporizador. El doble toque en cada
+    // mitad busca 10 segundos, como YouTube.
+    LaunchedEffect(isPlaying, interactionToken, controlsVisible) {
+        if (isPlaying && controlsVisible) {
+            delay(3_500)
+            controlsVisible = false
+        }
+    }
+
+    val onStopPlayback: () -> Unit = {
+        controller.pause()
+        JkGraph.appScope.launch {
+            if (durationMs > 0L) {
+                JkGraph.library.saveProgress(
+                    slug = slug,
+                    episode = episodeNumber,
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    completed = ended || positionMs >= durationMs - 5000L,
+                )
+            }
+        }
+        onExit()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .onSizeChanged { landscape = it.width > it.height },
-    ) {
-        Scaffold(
-            topBar = {
-                // En apaisado la barra del sistema se superpone al vídeo: el
-                // alto es oro y el título no aporta (ya se ve en el chip del
-                // episodio). Portrait mantiene la barra normal.
-                if (!landscape) {
-                    TopAppBar(
-                        title = { Text(text = title, maxLines = 1) },
-                        navigationIcon = {
-                            IconButton(onClick = onExit) {
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = stringResource(R.string.common_volver),
-                                )
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { viewModel.load(force = true) }) {
-                                Icon(
-                                    Icons.Filled.Refresh,
-                                    contentDescription = stringResource(R.string.player_reload_cd),
-                                )
-                            }
-                        },
-                    )
-                }
+            .background(Color.Black)
+            .onSizeChanged {
+                landscape = it.width > it.height
+                videoWidth = it.width.coerceAtLeast(1)
             },
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                // Detener: guarda el progreso, pausa y vuelve al detalle.
-                val onStopPlayback: () -> Unit = {
-                    controller.pause()
-                    JkGraph.appScope.launch {
-                        if (durationMs > 0L) {
-                            JkGraph.library.saveProgress(
-                                slug = slug,
-                                episode = episodeNumber,
-                                positionMs = positionMs,
-                                durationMs = durationMs,
-                                completed = ended || positionMs >= durationMs - 5000L,
-                            )
+    ) {
+        // El WebView ocupa toda la ventana. La capa de gestos está encima para
+        // que el embed no se quede con los toques del teléfono.
+        Box(Modifier.fillMaxSize()) {
+            when (val current = state) {
+                is PlayerUiState.Loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Color.White)
+                            Spacer(Modifier.height(12.dp))
+                            Text(stringResource(R.string.player_loading), color = Color.White)
                         }
-                    }
-                    onExit()
-                }
-
-                val videoModifier = if (landscape) {
-                    // Video a pantalla completa: en apaisado la caja se come
-                    // todo el alto libre (ya no hay barra superior, ni chips, ni
-                    // ayuda) y el CSS inyectado en el WebView
-                    // (`object-fit: contain`) respeta la relación de aspecto
-                    // dentro de ella. Antes se limitaba a 16:9 y, como la caja
-                    // salía más alta que el hueco real, el sobrante empujaba la
-                    // barra de transporte fuera de la pantalla.
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                } else {
-                    Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                }
-
-                Box(modifier = videoModifier.background(Color.Black)) {
-                    when (val current = state) {
-                        is PlayerUiState.Loading -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularProgressIndicator(color = Color.White)
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(
-                                        text = stringResource(R.string.player_loading),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White,
-                                    )
-                                }
-                            }
-                        }
-
-                        is PlayerUiState.Error -> {
-                            Box(
-                                Modifier.fillMaxSize().padding(24.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = stringResource(current.messageRes),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White,
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-                                    Button(onClick = { viewModel.load(force = true) }) {
-                                        Text(stringResource(R.string.common_retry))
-                                    }
-                                }
-                            }
-                        }
-
-                        is PlayerUiState.Ready -> {
-                            WebPlayer(
-                                url = current.selected.url,
-                                controller = controller,
-                                onProgress = { position, duration ->
-                                    positionMs = position
-                                    durationMs = duration
-                                },
-                                onEnded = { ended = true },
-                                onReady = { videoReady = true },
-                                onPlayingChanged = { playing ->
-                                    isPlaying = playing
-                                    if (playing) {
-                                        videoReady = true
-                                        stalled = false
-                                    }
-                                },
-                            )
-                        }
-                    }
-
-                    if (landscape) {
-                        // Barra mínima sobre el vídeo (volver / título / recargar).
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .fillMaxWidth()
-                                .background(Color(0x99000000))
-                                .padding(horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(onClick = onExit) {
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = stringResource(R.string.common_volver),
-                                    tint = Color.White,
-                                )
-                            }
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(onClick = { viewModel.load(force = true) }) {
-                                Icon(
-                                    Icons.Filled.Refresh,
-                                    contentDescription = stringResource(R.string.player_reload_cd),
-                                    tint = Color.White,
-                                )
-                            }
-                        }
-                    }
-
-                    if (stalled && ready != null) {
-                        StalledNotice(
-                            serverName = ready.selected.name,
-                            onTryNext = {
-                                viewModel.selectNext()
-                                stalled = false
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                // Hueco para la barra superpuesta de apaisado.
-                                .padding(bottom = if (landscape) 88.dp else 0.dp),
-                        )
-                    }
-
-                    if (landscape) {
-                        // Control superpuesto con fondo semitransparente: el
-                        // vídeo queda a pantalla completa y los botones se leen
-                        // sobre cualquier imagen.
-                        TransportBar(
-                            positionMs = scrubbing?.toLong() ?: positionMs,
-                            durationMs = durationMs,
-                            isPlaying = isPlaying,
-                            scrubbing = scrubbing,
-                            onScrub = { scrubbing = it },
-                            onScrubFinished = {
-                                scrubbing?.let { controller.seekTo(it.toLong()) }
-                                scrubbing = null
-                            },
-                            onPlayPause = { controller.togglePlayPause() },
-                            onRewind = { controller.seekBy(-10) },
-                            onForward = { controller.seekBy(10) },
-                            onStop = onStopPlayback,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(Color(0xB3000000)),
-                        )
                     }
                 }
+                is PlayerUiState.Error -> {
+                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(stringResource(current.messageRes), color = Color.White)
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = { viewModel.load(force = true) }) {
+                                Text(stringResource(R.string.common_retry))
+                            }
+                        }
+                    }
+                }
+                is PlayerUiState.Ready -> WebPlayer(
+                    url = current.selected.url,
+                    controller = controller,
+                    onProgress = { position, duration ->
+                        positionMs = position
+                        durationMs = duration
+                    },
+                    onEnded = { ended = true; controlsVisible = true },
+                    onReady = { videoReady = true },
+                    onPlayingChanged = { playing ->
+                        isPlaying = playing
+                        if (playing) {
+                            videoReady = true
+                            stalled = false
+                        } else controlsVisible = true
+                    },
+                )
+            }
+        }
 
-                // Una sola barra, en dos sitios: debajo del vídeo en retrato
-                // (no hay sitio a los lados y así no tapa la imagen) y
-                // superpuesta en apaisado, para que el vídeo ocupe la pantalla
-                // completa.
-                if (!landscape) {
-                    TransportBar(
-                        positionMs = scrubbing?.toLong() ?: positionMs,
-                        durationMs = durationMs,
-                        isPlaying = isPlaying,
-                        scrubbing = scrubbing,
-                        onScrub = { scrubbing = it },
-                        onScrubFinished = {
-                            scrubbing?.let { controller.seekTo(it.toLong()) }
-                            scrubbing = null
+        // Captura el tap simple/doble sin mostrar controles del DPlayer.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(videoWidth) {
+                    detectTapGestures(
+                        onTap = {
+                            controlsVisible = !controlsVisible
+                            interactionToken++
                         },
-                        onPlayPause = { controller.togglePlayPause() },
-                        onRewind = { controller.seekBy(-10) },
-                        onForward = { controller.seekBy(10) },
-                        onStop = onStopPlayback,
-                        modifier = Modifier.fillMaxWidth(),
+                        onDoubleTap = { offset ->
+                            controller.seekBy(if (offset.x < videoWidth / 2f) -10 else 10)
+                            controlsVisible = true
+                            interactionToken++
+                        },
                     )
-                }
+                },
+        )
 
-                // La etiqueta "Servidor" sobra en apaisado: el alto es escaso y
-                // los chips se identifican solos.
-                if (!landscape) {
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                // Barra superior ligera, siempre delante del vídeo.
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .background(Color(0x99000000)),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onExit) {
+                        Icon(Icons.Filled.ArrowBack, stringResource(R.string.common_volver), tint = Color.White)
+                    }
                     Text(
-                        text = stringResource(R.string.player_servers),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        title,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    TextButton(onClick = {
+                        showServers = !showServers
+                        interactionToken++
+                    }) {
+                        Text(stringResource(R.string.player_servers), color = Color.White)
+                    }
+                    IconButton(onClick = { viewModel.load(force = true); interactionToken++ }) {
+                        Icon(Icons.Filled.Refresh, stringResource(R.string.player_reload_cd), tint = Color.White)
+                    }
                 }
 
-                // En apaisado los chips solo aparecen si el servidor falló: si
-                // no, se comen el alto que necesita el vídeo (el aviso de
-                // "servidor no cargó" ya ofrece cambiar al siguiente).
-                if (ready != null && (!landscape || stalled)) {
+                // Zonas laterales visuales, además del doble toque: útiles para
+                // descubrir el gesto de avanzar/retroceder.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                ) {
+                    FilledIconButton(
+                        onClick = { controller.seekBy(-10); interactionToken++ },
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    ) {
+                        Text("−10", color = Color.White)
+                    }
+                    FilledIconButton(
+                        onClick = { controller.togglePlayPause(); interactionToken++ },
+                        modifier = Modifier.align(Alignment.Center).size(76.dp),
+                    ) {
+                        if (isPlaying) PauseGlyph(Color.White) else {
+                            Icon(Icons.Filled.PlayArrow, stringResource(R.string.player_play_cd), tint = Color.White)
+                        }
+                    }
+                    FilledIconButton(
+                        onClick = { controller.seekBy(10); interactionToken++ },
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                    ) {
+                        Text("+10", color = Color.White)
+                    }
+                }
+
+                TransportBar(
+                    positionMs = scrubbing?.toLong() ?: positionMs,
+                    durationMs = durationMs,
+                    isPlaying = isPlaying,
+                    scrubbing = scrubbing,
+                    onScrub = { scrubbing = it; interactionToken++ },
+                    onScrubFinished = {
+                        scrubbing?.let { controller.seekTo(it.toLong()) }
+                        scrubbing = null
+                        interactionToken++
+                    },
+                    onPlayPause = { controller.togglePlayPause(); interactionToken++ },
+                    onRewind = { controller.seekBy(-10); interactionToken++ },
+                    onForward = { controller.seekBy(10); interactionToken++ },
+                    onStop = onStopPlayback,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xB3000000)),
+                )
+
+                if (showServers && ready != null) {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = if (landscape) {
-                            Modifier.padding(bottom = 8.dp)
-                        } else {
-                            Modifier
-                        },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 56.dp),
                     ) {
                         items(ready.servers, key = { it.name + it.url }) { server ->
                             ServerChip(
@@ -446,20 +398,24 @@ fun PlayerScreen(
                                 selected = server.url == ready.selected.url,
                                 onClick = {
                                     viewModel.select(server)
+                                    showServers = false
                                     stalled = false
+                                    interactionToken++
                                 },
                             )
                         }
                     }
                 }
 
-                if (!landscape) {
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.player_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = JkTextSecondary,
-                        modifier = Modifier.padding(horizontal = 16.dp),
+                if (stalled && ready != null) {
+                    StalledNotice(
+                        serverName = ready.selected.name,
+                        onTryNext = {
+                            viewModel.selectNext()
+                            stalled = false
+                            interactionToken++
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 92.dp),
                     )
                 }
             }

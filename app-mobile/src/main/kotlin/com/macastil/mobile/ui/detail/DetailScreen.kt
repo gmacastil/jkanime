@@ -1,7 +1,9 @@
 package com.macastil.mobile.ui.detail
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +20,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -34,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -123,6 +131,19 @@ private fun DetailContent(
         progress.filter { !it.completed && it.positionMs > 0 }.maxByOrNull { it.updatedAt }
     }
 
+    // Mismo criterio que la TV (F19): la lista arranca con los capítulos más
+    // nuevos arriba y se puede invertir; "Todo visto" marca/desmarca de una vez
+    // todos los capítulos cargados.
+    var descending by rememberSaveable(detail.slug) { mutableStateOf(true) }
+    val sortedEpisodes = remember(episodes, descending) {
+        if (descending) episodes.sortedByDescending { it.number } else episodes.sortedBy { it.number }
+    }
+    val episodeNumbers = remember(sortedEpisodes) {
+        sortedEpisodes.map { it.number.toInt() }.distinct()
+    }
+    val allWatched = episodeNumbers.isNotEmpty() &&
+        episodeNumbers.all { progressByEpisode[it]?.completed == true }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -171,33 +192,111 @@ private fun DetailContent(
             }
 
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.detail_chapters, episodes.size),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = JkTextPrimary,
-                    )
-                    Text(
-                        text = stringResource(R.string.detail_tap_to_play),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = JkTextSecondary,
-                    )
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.detail_chapters, episodes.size),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = JkTextPrimary,
+                        )
+                        Text(
+                            text = stringResource(R.string.detail_tap_to_play),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = JkTextSecondary,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Orden: mismos dos estados que la TV (nuevos/antiguos).
+                        OutlinedButton(
+                            onClick = { descending = !descending },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 6.dp,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = if (descending) {
+                                    Icons.Filled.KeyboardArrowDown
+                                } else {
+                                    Icons.Filled.KeyboardArrowUp
+                                },
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B35),
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (descending) {
+                                    stringResource(R.string.detail_sort_newest_first)
+                                } else {
+                                    stringResource(R.string.detail_sort_oldest_first)
+                                },
+                                fontSize = 12.sp,
+                            )
+                        }
+                        // "Todo visto" / "Desmarcar todo" sobre los capítulos
+                        // cargados, igual que el botón de la TV.
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    if (allWatched) {
+                                        library.unmarkAllWatched(detail.slug, episodeNumbers)
+                                    } else {
+                                        library.markAllWatched(detail.slug, episodeNumbers)
+                                    }
+                                }
+                            },
+                            enabled = episodeNumbers.isNotEmpty(),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 6.dp,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = if (allWatched) Color(0xFF3DDC84) else JkTextSecondary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (allWatched) {
+                                    stringResource(R.string.detail_unmark_all)
+                                } else {
+                                    stringResource(R.string.detail_mark_all)
+                                },
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
                 }
             }
 
-            items(episodes, key = { it.id }) { episode ->
+            items(sortedEpisodes, key = { it.id }) { episode ->
                 EpisodeRow(
                     episode = episode,
                     progress = progressByEpisode[episode.number.toInt()],
                     onClick = {
                         onPlay(detail.slug, episode.number.toInt(), episode.url, episode.title)
+                    },
+                    // Pulsación larga: marcar/desmarcar visto, como el OK
+                    // sostenido de la TV.
+                    onLongClick = {
+                        scope.launch {
+                            val number = episode.number.toInt()
+                            val watched = progressByEpisode[number]?.completed == true
+                            if (watched) {
+                                library.unmarkWatched(detail.slug, number)
+                            } else {
+                                library.markWatched(detail.slug, number)
+                            }
+                        }
                     },
                 )
             }
@@ -319,16 +418,18 @@ private fun Header(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EpisodeRow(
     episode: Episode,
     progress: ProgressEntity?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

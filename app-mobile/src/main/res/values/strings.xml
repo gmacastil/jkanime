@@ -43,6 +43,10 @@
     <string name="lang_en" translatable="false">English</string>
 
     <!-- Detalle del anime -->
+    <string name="detail_sort_newest_first">Nuevos primero</string>
+    <string name="detail_sort_oldest_first">Antiguos primero</string>
+    <string name="detail_mark_all">Todo visto</string>
+    <string name="detail_unmark_all">Desmarcar todo</string>
     <string name="detail_chapters">Capítulos (%1$d)</string>
     <string name="detail_tap_to_play">Toca para reproducir</string>
     <string name="detail_episodes_count">Episodios: %1$d</string>
@@ -55,6 +59,9 @@
     <string name="detail_episode_watched">Ep %1$s · Visto</string>
 
     <!-- Favoritos -->
+    <string name="favorites_section_pending">Pendientes</string>
+    <string name="favorites_section_up_to_date">Al día</string>
+    <string name="favorites_badge_up_to_date">Al día</string>
     <string name="favorites_title">Favoritos (%1$d)</string>
     <string name="favorites_empty_title">Todavía no tienes favoritos</string>
     <string name="favorites_empty_hint">Mantén pulsada una tarjeta en Inicio para añadirla.</string>
