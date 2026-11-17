@@ -17,6 +17,32 @@ inicial haya perdido el foco o se haya cerrado.
 Si hay una versión nueva, la app descarga la APK y abre el instalador del
 sistema Android. La instalación siempre requiere confirmación del usuario.
 
+## Errores de la comprobación (1.5.6 / 1.5.7)
+
+En 1.5.6 y 1.5.7 el menú móvil mostraba **siempre** «No se pudo comprobar si
+hay actualizaciones». La causa no era la red: el disparador era un booleano
+usado como clave de `LaunchedEffect`, y el propio efecto lo ponía a `false`
+como primera instrucción, lo que **cancelaba su propia comprobación**. El
+`CancellationException` resultante lo capturaba `runCatching(...).onFailure`,
+que lo interpretaba como error de red.
+
+Reglas que quedan en el código a partir de 1.5.8:
+
+- El disparador es un **contador** (`updateCheckRequests++`), nunca un booleano
+  que el efecto reinicie.
+- `CancellationException` **no** se trata como error: se vuelve a lanzar.
+- `UpdateManager.check` propaga los fallos de red/JSON en lugar de devolver
+  `null`, para poder distinguir «no hay versión nueva» de «no se pudo
+  consultar». La marca de caché de 6 h solo se guarda si la consulta tuvo
+  éxito.
+- El menú **Actualizar** de la TV pasa `force = true`: antes respetaba la caché
+  de la comprobación del arranque y podía responder «ya tienes la última
+  versión» sin consultar.
+
+Quien tenga instalada la 1.5.6 o la 1.5.7 **no puede actualizar desde la app**:
+hay que instalar una vez `jkanime-tv-1.5.8.apk` / `jkanime-mobile-1.5.8.apk`
+desde la página de releases.
+
 ## Crear una versión
 
 La versión se define en `gradle.properties`:

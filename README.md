@@ -44,7 +44,9 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 | 1.5.3 | Fix del vídeo negro en móvil (documento colapsado a 0 px) + vídeo 16:9 en horizontal | ✅ |
 | 1.5.4 | Sync unificado TV/móvil (clave de 6 hex en el gate) + reproductor móvil a pantalla completa con una sola barra | ✅ |
 | 1.5.5 | Detalle móvil con ordenar/Todo visto, clasificación real de favoritos y controles de player con auto-ocultado | ✅ |
-| 1.5.6 | Actualización manual TV/móvil, foco robusto del diálogo y del reproductor TV, limpieza de opciones obsoletas | En desarrollo |
+| 1.5.6 | Actualización manual TV/móvil, foco robusto del diálogo y del reproductor TV, limpieza de opciones obsoletas | ✅ |
+| 1.5.7 | Fix del foco del D-pad del reproductor TV al pausar y reanudar | ✅ |
+| 1.5.8 | Fix de «no se pudo comprobar si hay actualizaciones» en móvil (efecto que se cancelaba a sí mismo) | En desarrollo |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo

@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -36,6 +37,7 @@ import com.macastil.tv.ui.theme.JkOrange
 import com.macastil.tv.ui.theme.JkSurface
 import com.macastil.tv.ui.theme.JkSurfaceHigh
 import com.macastil.tv.ui.theme.JkTextPrimary
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -76,7 +78,7 @@ class MainActivity : ComponentActivity() {
         JkGraph.syncEngine.syncInBackground(applicationContext)
         setContent {
             MaterialTheme(colorScheme = JkMobileColors) {
-                var updateCheckRequested by remember { mutableStateOf(false) }
+                var updateCheckRequests by remember { mutableIntStateOf(0) }
                 var update by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateMessage by remember { mutableStateOf<String?>(null) }
                 var checkingUpdate by remember { mutableStateOf(false) }
@@ -84,24 +86,31 @@ class MainActivity : ComponentActivity() {
                 var updateError by remember { mutableStateOf<String?>(null) }
                 val scope = rememberCoroutineScope()
 
-                LaunchedEffect(updateCheckRequested) {
-                    if (!updateCheckRequested) return@LaunchedEffect
-                    updateCheckRequested = false
+                // El disparador es un contador, no un booleano: con un booleano
+                // el efecto se reiniciaba al ponerlo a `false` y **cancelaba su
+                // propia comprobación**, así que `runCatching` recibía un
+                // CancellationException y la pantalla mostraba siempre "no se
+                // pudo comprobar si hay actualizaciones".
+                LaunchedEffect(updateCheckRequests) {
+                    if (updateCheckRequests == 0) return@LaunchedEffect
                     checkingUpdate = true
                     update = null
                     updateMessage = null
                     updateError = null
-                    runCatching {
-                        UpdateManager.check(this@MainActivity, force = true)
-                    }.onSuccess { candidate ->
+                    try {
+                        val candidate = UpdateManager.check(this@MainActivity, force = true)
                         update = candidate
                         if (candidate == null) {
                             updateMessage = getString(R.string.update_none_available)
                         }
-                    }.onFailure {
+                    } catch (cancel: CancellationException) {
+                        // La Activity se está yendo: no es un error de red.
+                        throw cancel
+                    } catch (error: Exception) {
                         updateError = getString(R.string.update_check_error)
+                    } finally {
+                        checkingUpdate = false
                     }
-                    checkingUpdate = false
                 }
 
                 MobileApp(
@@ -112,7 +121,7 @@ class MainActivity : ComponentActivity() {
                     onCheckUpdate = {
                         // El menú dispara una comprobación forzada: no se
                         // aplica la ventana de caché de la comprobación inicial.
-                        updateCheckRequested = true
+                        updateCheckRequests++
                     },
                 )
                 if (!checkingUpdate && (update != null || updateMessage != null || updateError != null)) {

@@ -31,6 +31,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.macastil.tv.Graph
@@ -81,17 +82,22 @@ class MainActivity : ComponentActivity() {
                          updateError = null
                          updateMessage = null
                          scope.launch {
-                             runCatching {
-                                 UpdateManager.check(this@MainActivity)
-                             }.onSuccess { candidate ->
+                             try {
+                                 // `force`: el menú Actualizar debe consultar
+                                 // aunque la comprobación del arranque haya
+                                 // ocurrido hace minutos.
+                                 val candidate = UpdateManager.check(this@MainActivity, force = true)
                                  update = candidate
                                  if (candidate == null) {
                                      updateMessage = getString(R.string.update_none_available)
                                  }
-                             }.onFailure {
+                             } catch (cancel: CancellationException) {
+                                 throw cancel
+                             } catch (error: Exception) {
                                  updateMessage = getString(R.string.update_check_error)
+                             } finally {
+                                 checking = false
                              }
-                             checking = false
                          }
                      }
                  }
@@ -105,9 +111,10 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Comprobación de actualizaciones en paralelo (tras el splash).
+                // Un fallo de red no debe tumbar el arranque: se ignora.
                 LaunchedEffect(Unit) {
                     delay(3_000)
-                    update = UpdateManager.check(this@MainActivity)
+                    update = runCatching { UpdateManager.check(this@MainActivity) }.getOrNull()
                     checking = false
                 }
 

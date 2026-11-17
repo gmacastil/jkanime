@@ -24,43 +24,49 @@ object UpdateManager {
             if (!force && now - prefs.getLong("last_check", 0L) < CHECK_INTERVAL_MS) {
                 return@withContext null
             }
+
+            // Los errores de red/JSON se propagan a propósito: antes se
+            // tragaban con `getOrNull()` y la pantalla decía "ya tienes la
+            // última versión" aunque no se hubiera podido consultar. Tampoco
+            // se marca la comprobación como hecha si falla, para no dejar la
+            // caché de 6 h envenenada.
+            val connection = URL(
+                "https://api.github.com/repos/$REPOSITORY/releases?per_page=30",
+            ).openConnection() as HttpURLConnection
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 15_000
+            connection.setRequestProperty("Accept", "application/vnd.github+json")
+            connection.setRequestProperty("User-Agent", "jkanime-mobile/${BuildConfig.VERSION_NAME}")
+            val releases = try {
+                JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+            } finally {
+                connection.disconnect()
+            }
             prefs.edit().putLong("last_check", now).apply()
 
-            runCatching {
-                val connection = URL(
-                    "https://api.github.com/repos/$REPOSITORY/releases?per_page=30",
-                ).openConnection() as HttpURLConnection
-                connection.connectTimeout = 10_000
-                connection.readTimeout = 15_000
-                connection.setRequestProperty("Accept", "application/vnd.github+json")
-                connection.setRequestProperty("User-Agent", "jkanime-mobile/${BuildConfig.VERSION_NAME}")
-                val releases = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
-                connection.disconnect()
-
-                var bestVersion: String? = null
-                var bestUrl: String? = null
-                for (index in 0 until releases.length()) {
-                    val release = releases.optJSONObject(index) ?: continue
-                    val version = baseVersion(release.optString("tag_name")) ?: continue
-                    val assets = release.optJSONArray("assets") ?: continue
-                    for (assetIndex in 0 until assets.length()) {
-                        val asset = assets.optJSONObject(assetIndex) ?: continue
-                        val name = asset.optString("name")
-                        if (!name.startsWith("jkanime-mobile-") || !name.endsWith(".apk")) continue
-                        if (bestVersion == null || compareVersions(version, bestVersion!!) > 0) {
-                            bestVersion = version
-                            bestUrl = asset.optString("browser_download_url")
-                        }
+            var bestVersion: String? = null
+            var bestUrl: String? = null
+            for (index in 0 until releases.length()) {
+                val release = releases.optJSONObject(index) ?: continue
+                val version = baseVersion(release.optString("tag_name")) ?: continue
+                val assets = release.optJSONArray("assets") ?: continue
+                for (assetIndex in 0 until assets.length()) {
+                    val asset = assets.optJSONObject(assetIndex) ?: continue
+                    val name = asset.optString("name")
+                    if (!name.startsWith("jkanime-mobile-") || !name.endsWith(".apk")) continue
+                    if (bestVersion == null || compareVersions(version, bestVersion!!) > 0) {
+                        bestVersion = version
+                        bestUrl = asset.optString("browser_download_url")
                     }
                 }
-                if (bestVersion != null && bestUrl.orEmpty().isNotBlank() &&
-                    compareVersions(bestVersion!!, BuildConfig.VERSION_NAME) > 0
-                ) {
-                    AppUpdate(bestVersion!!, bestUrl!!)
-                } else {
-                    null
-                }
-            }.getOrNull()
+            }
+            if (bestVersion != null && bestUrl.orEmpty().isNotBlank() &&
+                compareVersions(bestVersion!!, BuildConfig.VERSION_NAME) > 0
+            ) {
+                AppUpdate(bestVersion!!, bestUrl!!)
+            } else {
+                null
+            }
         }
 
     suspend fun downloadAndInstall(context: Context, update: AppUpdate) =

@@ -33,54 +33,60 @@ object UpdateManager {
         if (!force && now - prefs.getLong("last_check", 0L) < CHECK_INTERVAL_MS) {
             return@withContext null
         }
-        prefs.edit().putLong("last_check", now).apply()
 
         // Se lista en vez de pedir `/releases/latest`: desde 1.4.8 el último
         // release del repositorio puede ser el de móvil. Ver ReleaseSelector.
-        runCatching {
-            val connection = URL(
-                "https://api.github.com/repos/$REPOSITORY/releases?per_page=30",
-            ).openConnection() as HttpURLConnection
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 15_000
-            connection.setRequestProperty("Accept", "application/vnd.github+json")
-            connection.setRequestProperty("User-Agent", "jkanimetv/${BuildConfig.VERSION_NAME}")
+        //
+        // Los errores de red/JSON se propagan a propósito (antes se tragaban
+        // con `getOrNull()` y se anunciaba "ya tienes la última versión" aunque
+        // la consulta hubiera fallado). La marca de caché se guarda solo si la
+        // consulta tuvo éxito.
+        val connection = URL(
+            "https://api.github.com/repos/$REPOSITORY/releases?per_page=30",
+        ).openConnection() as HttpURLConnection
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 15_000
+        connection.setRequestProperty("Accept", "application/vnd.github+json")
+        connection.setRequestProperty("User-Agent", "jkanimetv/${BuildConfig.VERSION_NAME}")
+        val releases = try {
             JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
-                .also { connection.disconnect() }
-        }.getOrNull()?.let { releases ->
-            val parsed = (0 until releases.length()).mapNotNull { index ->
-                val release = releases.optJSONObject(index) ?: return@mapNotNull null
-                val assets = release.optJSONArray("assets")
-                    ?.let { array ->
-                        (0 until array.length()).mapNotNull { assetIndex ->
-                            array.optJSONObject(assetIndex)?.let { asset ->
-                                ReleaseAsset(
-                                    name = asset.optString("name"),
-                                    downloadUrl = asset.optString("browser_download_url"),
-                                )
-                            }
+        } finally {
+            connection.disconnect()
+        }
+        prefs.edit().putLong("last_check", now).apply()
+
+        val parsed = (0 until releases.length()).mapNotNull { index ->
+            val release = releases.optJSONObject(index) ?: return@mapNotNull null
+            val assets = release.optJSONArray("assets")
+                ?.let { array ->
+                    (0 until array.length()).mapNotNull { assetIndex ->
+                        array.optJSONObject(assetIndex)?.let { asset ->
+                            ReleaseAsset(
+                                name = asset.optString("name"),
+                                downloadUrl = asset.optString("browser_download_url"),
+                            )
                         }
                     }
-                    .orEmpty()
+                }
+                .orEmpty()
 
-                ReleaseInfo(
-                    tag = release.optString("tag_name"),
-                    htmlUrl = release.optString("html_url"),
-                    assets = assets,
-                )
-            }
+            ReleaseInfo(
+                tag = release.optString("tag_name"),
+                htmlUrl = release.optString("html_url"),
+                assets = assets,
+            )
+        }
 
-            ReleaseSelector.select(
-                releases = parsed,
-                assetPrefixes = ASSET_PREFIXES,
-                currentVersion = BuildConfig.VERSION_NAME,
-            )?.let { selected ->
-                AppUpdate(
-                    versionName = selected.versionName,
-                    downloadUrl = selected.downloadUrl,
-                    releaseUrl = selected.releaseUrl,
-                )
-            }
+        ReleaseSelector.select(
+            releases = parsed,
+            assetPrefixes = ASSET_PREFIXES,
+            currentVersion = BuildConfig.VERSION_NAME,
+        )?.let { selected ->
+            AppUpdate(
+                versionName = selected.versionName,
+                downloadUrl = selected.downloadUrl,
+                releaseUrl = selected.releaseUrl,
+            )
         }
     }
 
