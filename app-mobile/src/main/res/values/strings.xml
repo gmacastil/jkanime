@@ -29,6 +29,7 @@
     <string name="profile_rename_title">Nombre del perfil</string>
     <string name="profile_rename_hint">Nombre</string>
     <string name="home_drawer_group_library">BIBLIOTECA</string>
+    <string name="home_drawer_directorio">Directorio</string>
     <string name="home_drawer_favorites">Favoritos</string>
     <string name="home_drawer_refresh">Refrescar catálogo</string>
     <string name="home_drawer_sync_linked">Espacio %1$s</string>
@@ -65,6 +66,27 @@
     <string name="favorites_title">Favoritos (%1$d)</string>
     <string name="favorites_empty_title">Todavía no tienes favoritos</string>
     <string name="favorites_empty_hint">Mantén pulsada una tarjeta en Inicio para añadirla.</string>
+
+    <!-- Buscador (Inicio) -->
+    <string name="home_search_placeholder">Buscar anime…</string>
+    <string name="home_search_clear_cd">Borrar búsqueda</string>
+    <string name="home_search_min_query">Escribe al menos %1$d letras</string>
+    <string name="home_search_loading">Buscando…</string>
+    <string name="home_search_count">%1$d resultados</string>
+    <string name="home_search_none">Sin resultados para «%1$s»</string>
+
+    <!-- Directorio -->
+    <string name="directorio_title">Directorio</string>
+    <string name="directorio_filters">FILTROS</string>
+    <string name="directorio_all">Todos</string>
+    <string name="directorio_clear">Limpiar filtros</string>
+    <string name="directorio_total">%1$d animes</string>
+    <string name="directorio_prev">Anterior</string>
+    <string name="directorio_next">Siguiente</string>
+    <string name="directorio_page_of">Página %1$d de %2$d</string>
+    <string name="directorio_loading">Cargando directorio…</string>
+    <string name="directorio_none">Sin resultados para los filtros actuales</string>
+
     <string name="update_check_manual">Actualizar</string>
     <string name="update_new_version">Nueva versión disponible</string>
     <string name="update_version_label">jkanime %1$s</string>

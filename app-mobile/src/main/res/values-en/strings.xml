@@ -24,6 +24,7 @@
     <string name="profile_rename_title">Profile name</string>
     <string name="profile_rename_hint">Name</string>
     <string name="home_drawer_group_library">LIBRARY</string>
+    <string name="home_drawer_directorio">Directory</string>
     <string name="home_drawer_favorites">Favorites</string>
     <string name="home_drawer_refresh">Refresh catalog</string>
     <string name="home_drawer_sync_linked">Space %1$s</string>
@@ -60,6 +61,27 @@
     <string name="favorites_title">Favorites (%1$d)</string>
     <string name="favorites_empty_title">No favorites yet</string>
     <string name="favorites_empty_hint">Long-press a card on Home to add it.</string>
+
+    <!-- Search (Home) -->
+    <string name="home_search_placeholder">Search anime…</string>
+    <string name="home_search_clear_cd">Clear search</string>
+    <string name="home_search_min_query">Type at least %1$d letters</string>
+    <string name="home_search_loading">Searching…</string>
+    <string name="home_search_count">%1$d results</string>
+    <string name="home_search_none">No results for “%1$s”</string>
+
+    <!-- Directory -->
+    <string name="directorio_title">Directory</string>
+    <string name="directorio_filters">FILTERS</string>
+    <string name="directorio_all">All</string>
+    <string name="directorio_clear">Clear filters</string>
+    <string name="directorio_total">%1$d anime</string>
+    <string name="directorio_prev">Previous</string>
+    <string name="directorio_next">Next</string>
+    <string name="directorio_page_of">Page %1$d of %2$d</string>
+    <string name="directorio_loading">Loading directory…</string>
+    <string name="directorio_none">No results for the current filters</string>
+
     <string name="update_check_manual">Update</string>
     <string name="update_new_version">New version available</string>
     <string name="update_version_label">jkanime %1$s</string>

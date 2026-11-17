@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -63,6 +64,7 @@ fun AppDrawerContent(
     onRenameProfile: () -> Unit,
     onChangeLanguage: () -> Unit,
     onOpenSync: () -> Unit,
+    onOpenDirectorio: () -> Unit,
     onOpenFavorites: () -> Unit,
     onRefresh: () -> Unit,
     onCheckUpdate: () -> Unit,
@@ -138,6 +140,11 @@ fun AppDrawerContent(
 
             HorizontalDivider(color = JkTextSecondary.copy(alpha = 0.2f))
             DrawerSection(stringResource(R.string.home_drawer_group_library))
+            DrawerItem(
+                icon = { Icon(Icons.Filled.List, contentDescription = null) },
+                label = stringResource(R.string.home_drawer_directorio),
+                onClick = onOpenDirectorio,
+            )
             DrawerItem(
                 icon = { Icon(Icons.Filled.Favorite, contentDescription = null) },
                 label = stringResource(R.string.home_drawer_favorites),

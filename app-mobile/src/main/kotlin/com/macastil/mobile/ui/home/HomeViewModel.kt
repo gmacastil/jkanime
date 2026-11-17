@@ -6,7 +6,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.macastil.tv.catalog.JkanimeRepository
 import com.macastil.tv.model.AnimeCard
+import com.macastil.tv.model.AnimeSearchHit
 import com.macastil.tv.model.ProgramacionSection
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,12 +23,39 @@ sealed interface HomeUiState {
     data class Success(val cards: List<AnimeCard>) : HomeUiState
 }
 
+/**
+ * Estado del buscador de la cabecera.
+ *
+ * `query` es lo que hay escrito (se actualiza en cada pulsación, sin red);
+ * `hits` la última respuesta del sitio. Cuando `query` tiene menos de
+ * [MIN_QUERY] caracteres el buscador está inactivo y la pantalla muestra la
+ * Programación normal.
+ */
+data class SearchUiState(
+    val query: String = "",
+    val loading: Boolean = false,
+    val hits: List<AnimeSearchHit> = emptyList(),
+    val failed: Boolean = false,
+) {
+    val active: Boolean get() = query.trim().length >= MIN_QUERY
+
+    companion object {
+        /** El sitio devuelve resultados muy ruidosos con una sola letra. */
+        const val MIN_QUERY = 2
+    }
+}
+
 class HomeViewModel(
     private val repository: JkanimeRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeUiState>(HomeUiState.Loading)
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
+
+    private val _search = MutableStateFlow(SearchUiState())
+    val search: StateFlow<SearchUiState> = _search.asStateFlow()
+
+    private var searchJob: Job? = null
 
     init {
         refresh()
@@ -42,6 +73,57 @@ class HomeViewModel(
                 onFailure = { HomeUiState.Error(it.message) },
             )
         }
+    }
+
+    /**
+     * Búsqueda contra el buscador del sitio (misma llamada que la TV).
+     *
+     * Debounce de 450 ms y cancelación del trabajo anterior: sin esto, una
+     * respuesta vieja podía llegar después de la nueva y pisarla. El
+     * `CancellationException` del trabajo cancelado se relanza para que no se
+     * muestre como error de red.
+     */
+    fun onQueryChange(value: String) {
+        val query = value.take(MAX_QUERY_LENGTH)
+        _search.value = _search.value.copy(query = query)
+        searchJob?.cancel()
+
+        if (query.trim().length < SearchUiState.MIN_QUERY) {
+            _search.value = SearchUiState(query = query)
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            _search.value = _search.value.copy(loading = true, failed = false)
+            try {
+                val hits = repository.search(query)
+                _search.value = _search.value.copy(
+                    loading = false,
+                    hits = hits,
+                    failed = false,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _search.value = _search.value.copy(
+                    loading = false,
+                    hits = emptyList(),
+                    failed = true,
+                )
+            }
+        }
+    }
+
+    /** Botón de la x del campo: vuelve a la Programación ya cargada. */
+    fun clearQuery() {
+        searchJob?.cancel()
+        _search.value = SearchUiState()
+    }
+
+    private companion object {
+        const val SEARCH_DEBOUNCE_MS = 450L
+        const val MAX_QUERY_LENGTH = 60
     }
 }
 

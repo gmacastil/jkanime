@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import com.macastil.mobile.data.local.AppLocale
 import com.macastil.tv.ui.theme.JkTextSecondary
 import com.macastil.mobile.ui.detail.DetailScreen
+import com.macastil.mobile.ui.directorio.DirectorioScreen
 import com.macastil.mobile.ui.favorites.FavoritesScreen
 import com.macastil.mobile.ui.home.HomeScreen
 import com.macastil.mobile.ui.player.PlayerScreen
@@ -48,6 +49,7 @@ import kotlinx.coroutines.launch
  */
 sealed interface Screen {
     data object Home : Screen
+    data object Directorio : Screen
     data object Favorites : Screen
     data object Sync : Screen
     data class Detail(val slug: String) : Screen
@@ -253,9 +255,15 @@ fun MobileApp(
             Screen.Home -> HomeScreen(
                 onOpenDetail = { slug -> screen = Screen.Detail(slug) },
                 onOpenFavorites = { screen = Screen.Favorites },
+                onOpenDirectorio = { screen = Screen.Directorio },
                 onOpenSync = { screen = Screen.Sync },
                 onLanguageChanged = onLanguageChanged,
                 onCheckUpdate = onCheckUpdate,
+            )
+
+            Screen.Directorio -> DirectorioScreen(
+                onOpenDetail = { slug -> screen = Screen.Detail(slug) },
+                onBack = { screen = Screen.Home },
             )
 
             Screen.Favorites -> FavoritesScreen(
