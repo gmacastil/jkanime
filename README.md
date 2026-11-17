@@ -16,18 +16,204 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 > este proyecto no se publica en Play Store (violaría la política de Google) y no
 > debe monetizarse. Se distribuye como APK por sideload.
 
-## Estado
+## Estado actual — 1.5.9 (2026-11-17)
 
-| Fase | Alcance | Estado |
+### Auditoría funcional TV y móvil
+
+- **TV**: Home/Programación, búsqueda real, Directorio, detalle con paginado,
+  orden y Todo visto, favoritos/progreso por perfil, sync Supabase, idiomas,
+  reproductor nativo HLS con fallback WebView, perfiles y actualización.
+- **Móvil**: Home con buscador real, búsqueda del catálogo cargado, detalle con
+  orden/Todo visto, favoritos/progreso JSON, clasificación real de Pendientes/Al
+  día, sync Supabase, idiomas y reproductor táctil fullscreen.
+- **Actualizaciones**: ambas aplicaciones filtran el asset de su dispositivo
+  (`jkanime-tv-*.apk` o `jkanime-mobile-*.apk`). El menú **Actualizar** fuerza
+  la consulta aunque ya se haya comprobado recientemente.
+- **Favoritos móviles**: los contadores se consultan al entrar en Favoritos.
+  Se compara cada episodio publicado contra los episodios completados; un
+  capítulo faltante impide clasificar el anime como Al día.
+
+### F21 — foco del D-pad en el reproductor de TV (2026-11-17)
+
+**Síntoma.** Con el vídeo reproduciendo y los controles ya ocultos, OK abría
+el overlay; al pausar y volver a dar play los controles seguían en pantalla
+pero el siguiente OK ya **no pausaba**: solo alternaba visibilidad. Había que
+pulsar Arriba para "recuperar" el botón. En el mando era indistinguible de
+"se perdió el foco", porque el botón central se veía igual con y sin foco.
+
+**Causa raíz** (confirmada con `logcat`, tag `JkFocus`):
+
+```text
+ROOT key=DPAD_CENTER type=KeyDown overlay=false focused=false playing=true
+ROOT key=DPAD_CENTER type=KeyUp   overlay=true  focused=false playing=true
+PLAY_BTN focus=false
+VISIBILITY_CHANGED overlay=true
+...
+TOGGLE_PLAY overlay=true focused=true playing=true   <- play
+PLAY_BTN focus=false
+VISIBILITY_CHANGED overlay=false                     <- overlay destruido
+```
+
+El callback del botón hacía `overlayVisible = !playing`. Al reanudar, el
+overlay se **destruía** y con él su nodo enfocable, pero `overlayHasFocus`
+seguía en `true` (nadie lo reseteaba) y el `Box` raíz ignoraba el OK. Al volver
+a mostrar los controles nadie pedía el foco, así que el siguiente OK caía en
+el `Box` raíz sin foco y solo alternaba visibilidad.
+
+**Solución** (`app/.../feature/player/PlayerScreen.kt`):
+
+1. `showControls(focus)` centraliza mostrar + reiniciar temporizador + (opcional)
+   llevar el foco al play/pausa solo cuando el usuario lo pide.
+2. `overlayFocusRequest` + `LaunchedEffect` con reintento multi-frame (12 frames).
+   Solo se dispara cuando el usuario lo pide (`showControls(true)`), no cuando
+   los controles aparecen solos (seek o aviso de servidor caído).
+3. **OK con el overlay sin foco muestra y enfoca**; con foco en un control
+   devuelve `false` para que el botón reciba su click.
+4. Se eliminó `overlayVisible = !playing`: al reanudar los controles se quedan
+   y se auto-ocultan a los 6 s, así el foco nunca queda en el aire.
+5. El auto-ocultado ya **no** exige `!overlayHasFocus` (antes, con el botón
+   enfocado, los controles no se iban nunca).
+6. Arriba desde los controles y desde la barra oculta el overlay y devuelve el
+   foco al vídeo.
+7. **Indicador de foco visible**: el play/pausa pasa a naranja con anillo blanco
+   de 3 dp y escala 1.06; el `SeekBar` engorda a 7 dp y el punto crece a 18 dp
+   con borde blanco al enfocarse.
+8. Con el aviso de servidor caído el foco va a **cambiar servidor**;
+   al elegir o cerrar la lista el botón desaparece: el foco se devuelve al
+   play/pausa (antes quedaba huérfano y el D-pad muerto).
+9. El foco inicial del reproductor también reintenta multi-frame: el
+   `PlayerView` nativo tarda un frame en colocarse.
+
+**Flujo verificado en `jktv`** (VERSION_CODE 200-202):
+
+| Paso | Tecla | Resultado |
 |---|---|---|
-| F0 | Esqueleto multi-módulo, tema TV, navegación D-pad, manifest Leanback | ✅ |
-| F1 | Parser de Programación + grilla de tarjetas + caché 10 min | ✅ |
-| F2 | Parser de detalle + `ajax/episodes` (CSRF) + grilla de capítulos | ✅ |
-| F3 | Player Media3/ExoPlayer + fallback de fuentes + controles D-pad | ✅ |
-| — | Bloqueo de anuncios/overlays en el reproductor (hit-test sweep) | ✅ |
-| F4 | Favoritos + progreso persistente (Room) + "Continuar viendo" | ✅ |
-| F5 | Worker de 6h (WorkManager) + badge de capítulos pendientes | ✅ |
-| F6 | Sync multi-dispositivo (Supabase) + emparejamiento por código temporal | ✅ |
+| 1 | OK (overlay oculto) | aparecen los controles y el play/pausa queda enfocado (naranja + anillo) |
+| 2 | OK | pausa; los controles siguen y el foco no se mueve |
+| 3 | OK | play; los controles siguen y se auto-ocultan a los 6 s |
+| 4 | OK | aparecen de nuevo enfocados |
+| 5 | OK | **pausa** (antes fallaba) |
+| 6 | DOWN | el foco baja al `SeekBar` (barra de 7 dp + punto blanco) |
+| 7 | LEFT / RIGHT | seek de ±10 s **una sola vez** (el `Box` raíz no lo repite) |
+| 8 | UP | oculta los controles y devuelve el foco al vídeo |
+
+**Trampas aprendidas**
+
+- Un overlay compuesto condicionalmente (`if (overlayVisible) { Overlay(...) }`)
+  se lleva el foco del sistema al destruirse, y volver a componerlo **no**
+  devuelve el foco: hay que pedirlo explícitamente.
+- Cualquier bandera tipo `overlayHasFocus` que dependa de la existencia del
+  nodo hay que resetearla cuando ese nodo desaparece.
+- El foco no se puede pedir durante la misma composición: `requestFocus()`
+  devuelve `false` en silencio (o lanza) hasta que el nodo está colocado.
+- Reintentar con `withFrameNanos { }` es el patrón que funciona en TV.
+- Un botón sin estado de foco visual hace que el bug sea invisible en
+  capturas: conviene marcar el foco con color + borde + escala.
+- **Lección del bug:** un overlay compuesto condicionalmente (`if (overlayVisible) { Overlay(...) }`)
+  se lleva el foco del sistema al destruirse; hay que reponerlo explícitamente
+  al mostrarlo.
+
+### Limpieza aplicada
+
+- Eliminados recursos Android sin referencias detectados por Lint, incluidos
+  textos de controles retirados del reproductor.
+- Eliminado `adb.sh`, que quedó obsoleto al existir `adb-tv.sh` y
+  `adb-mobile.sh`; ambos scripts arrancan el AVD, esperan el boot e instalan
+  la aplicación correspondiente.
+- El menú móvil distingue ahora **Refrescar catálogo** de **Actualizar**.
+- Los valores secundarios de idioma/sync usan una fuente menor y una sola línea.
+- Validación técnica actual: `./gradlew test` y `:app:lintDebug` /
+  `:app-mobile:lintDebug` pasan; Lint conserva únicamente advertencias
+  informativas de dependencias, orientación, recursos de iconos y APIs
+  recomendadas.
+
+## Funciones desarrolladas
+
+### Catálogo y navegación
+- **Directorio móvil**: filtros tipo `<select>` presentados como chips, grilla de
+  30 fichas por página y paginado inferior. Desde el menú lateral (`icono List`
+  junto a Favoritos).
+- **Búsqueda en Home**: campo de búsqueda en la TopAppBar con debounce 450 ms,
+  limpiar (x) y mostrar "N resultados". Al escribir, la grilla pasa de Programación
+  a resultados del buscador real del sitio (hasta 30 fichas, sin paginación).
+- **HomeScreen**: `SearchField` reutilizable, `SearchStatus` / `SearchResults`
+  / `SearchCard` con `titleMaxLines = 1`.
+- **AppDrawer**: nuevo ítem "Directorio" (icono List) junto a Favoritos.
+
+### Actualizaciones
+
+- `showControls(focus)` centraliza mostrar + reiniciar temporizador + pedir foco.
+- Se elimina `overlayVisible = !playing`: al reanudar el overlay ya no se
+  destruye y el foco no queda huerfano.
+- OK con el overlay sin foco lo enfoca; Arriba vuelve al video y Abajo baja
+  a la barra de progreso.
+- Indicador de foco visible en play/pausa y en la barra de progreso.
+- Al cambiar de servidor el foco vuelve al play/pausa o al boton de cambiar
+  servidor cuando la fuente no arrancó.
+- `CancellationException` relanzada; solo los fallos reales se muestran como
+  error.
+- `UpdateManager` (TV y móvil) propaga los fallos de red/JSON en vez de
+  devolver `null`, para distinguir 'no hay versión nueva' de 'no se pudo
+  consultar'; la cache de 6 h solo se marca si la consulta tuvo éxito.
+- El menú **Actualizar** de la TV fuerza la consulta (`force = true`).
+
+### Sincronización Supabase
+
+- Space `51514708` con 53 favoritos y 394 progress, compartido entre 2 TVs y
+  Pixel 7.
+- Sync via RPC `SECURITY DEFINER` con códigos de emparejamiento de 8 dígitos.
+- No es necesario crear spaces nuevos; el espacio existente con tus datos ya
+  está configurado y tus dispositivos están sincronizados.
+
+## Versiones
+
+| Version | Contenido | Fecha |
+|---|---|---|
+| **1.5.9** | Directorio y búsqueda móvil, foco robusto TV, limpieza de opciones | 2026-11-17 |
+| 1.5.8 | Fix de 'no se pudo comprobar si hay actualizaciones' | 2026-11-17 |
+| 1.5.7 | Fix del foco del D-pad del reproductor TV al pausar y reanudar | 2026-11-17 |
+| 1.5.6 | Actualización manual TV/móvil, foco robusto del diálogo y limpieza | 2026-11-16 |
+
+## Descargas
+
+| Release | APK | Tamaño |
+|---|---|---|
+| `v1.5.9-tv` | `jkanime-tv-1.5.9.apk` | 11,7 MB |
+| `v1.5.9-mobile` | `jkanime-mobile-1.5.9.apk` | 12,1 MB |
+
+CI: `./gradlew test`, `:app:lintDebug` y `:app-mobile:lintDebug` en verde.
+
+## Funcionamiento de sincronización
+
+- Space `51514708` en Supabase con 53 favoritos y 394 progress
+- Todos los dispositivos (2 TVs + Pixel 7) usan ese space
+- Sync via RPC `SECURITY DEFINER` con códigos de emparejamiento
+- No es necesario crear spaces nuevos; el espacio existente con tus datos ya
+  está configurado y tus dispositivos están sincronizados
+
+## Limitaciones conocidas
+
+- `jkplayer` (player propio del sitio) puede responder **500** en algunos
+  episodios (fallo del sitio, no de la app); por eso el player arranca con
+  Desu y cae a Magi como fallback automático cuando no obtiene una fuente HLS
+  reproducible.
+- Sin descargas offline: las fuentes son embeds de terceros.
+- El anti-bot puede devolver 403 si se hacen muchas peticiones seguidas: hay caché
+  y backoff, pero no hay proxy.
+- Perfiles con PIN: el modelo (`pin_hash` en `ProfileEntity`) está listo pero sin
+  UI — cualquier perfil es accesible sin contraseña en la misma TV.
+- Login por email/OTP (portabilidad fuera de la TV) quedó descartado por ahora;
+  los perfiles son solo locales a cada TV + su espacio de sync.
+
+## Enlaces útiles
+
+- [GitHub Releases](https://github.com/gmacastil/jkanime/releases)
+- [docs/emulator-testing.md](docs/emulator-testing.md) - Bitácora de fases y verificación
+- [docs/updates.md](docs/updates.md) - Registro de actualizaciones y errores
+
+---
+
+Versión 1.5.9 — Sincronización activa entre 2 TVs y Pixel 7 con space `51514708`.
 | F7 | Búsqueda en Home, detalle de dos columnas, player con fallback (Desu/Magi) | ✅ |
 | F8 | Buscador fijo en la cabecera + menú lateral colapsable | ✅ |
 | F9 | Búsqueda contra el buscador real del sitio + iconos Material | ✅ |

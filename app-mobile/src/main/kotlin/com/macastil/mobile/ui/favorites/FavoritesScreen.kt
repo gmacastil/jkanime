@@ -54,16 +54,28 @@ fun FavoritesScreen(
     // vistos 1 y 3, pero falta el 2). Se comprueba cada capítulo publicado.
     val statuses = remember(visible, progress) {
         visible.map { favorite ->
-            val released = (favorite.lastAiredEpisode ?: favorite.totalEpisodes)
-                ?.takeIf { it > 0 }
-            val watched = progress.asSequence()
+            // Primero obtenemos el total: el mayor de totalEpisodes y lastAiredEpisode
+            val totalByAired = favorite.lastAiredEpisode ?: 0
+            val totalByDB = favorite.totalEpisodes
+            val total = totalByDB.coerceAtLeast(totalByAired)  // Si DB tiene más, usamos DB; si aired tiene más, usamos aired
+            val released = total.coerceAtLeast(0) // Asegurar que no sea negativo
+            // Contar watched (episodios completados)
+            val watchedSet = progress.asSequence()
                 .filter { it.slug == favorite.slug && it.completed && it.episode > 0 }
                 .map { it.episode }
                 .toSet()
-            val pending = released?.let { total ->
-                (1..total).count { it !in watched }
+            // Calcular pending: cuántos del 1..total NO están en watched
+            val pendingInt: Int = if (released != null && released > 0) {
+                (1..released).count { it !in watchedSet }
+            } else {
+                -1  // Indicador de "desconocido"
             }
-            FavoriteStatus(favorite, pending, released != null && pending == 0)
+            // FavoriteStatus espera pending como Int?, así que lo convertimos
+            val pending: Int? = if (pendingInt >= 0) pendingInt else null
+            // Lógica de "Al día": si released fue forzado y pending es 0, es "Al día"
+            // Si released es null o 0, es "Pendientes" por seguridad
+            val isSafePending = released == null || released == 0 || (released > 0 && pending == null)
+            FavoriteStatus(favorite, pending, released != null && pending == 0 && !isSafePending)
         }
     }
     val pending = statuses.filterNot { it.upToDate }
