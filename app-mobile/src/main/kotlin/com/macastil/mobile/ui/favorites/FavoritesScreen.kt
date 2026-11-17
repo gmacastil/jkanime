@@ -56,7 +56,7 @@ fun FavoritesScreen(
         visible.map { favorite ->
             // Primero obtenemos el total: el mayor de totalEpisodes y lastAiredEpisode
             val totalByAired = favorite.lastAiredEpisode ?: 0
-            val totalByDB = favorite.totalEpisodes
+            val totalByDB = favorite.totalEpisodes ?: 0
             val total = totalByDB.coerceAtLeast(totalByAired)  // Si DB tiene más, usamos DB; si aired tiene más, usamos aired
             val released = total.coerceAtLeast(0) // Asegurar que no sea negativo
             // Contar watched (episodios completados)
