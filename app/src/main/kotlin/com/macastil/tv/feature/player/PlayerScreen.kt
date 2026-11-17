@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -399,9 +400,16 @@ fun PlayerScreen(
                              overlayInteraction++
                          },
                          onTogglePlay = {
-                              val playing = togglePlay()
-                              // Pausar mantiene visibles el botón y el seekbar;
-                              // al reanudar se ocultan ambos automáticamente.
+                               // Un clic táctil sobre el botón debe dejar el
+                               // foco lógico en el mismo control. Si no, el
+                               // siguiente D-pad cae en el Box raíz y el
+                               // usuario tiene que pulsar Arriba para volver
+                               // a encontrar play/pausa.
+                               overlayHasFocus = true
+                               runCatching { overlayFocus.requestFocus() }
+                               val playing = togglePlay()
+                               // Pausar mantiene visibles el botón y el seekbar;
+                               // al reanudar se ocultan ambos automáticamente.
                               overlayVisible = !playing
                               overlayInteraction++
                           },
@@ -409,11 +417,12 @@ fun PlayerScreen(
                             showServers = !showServers
                             overlayInteraction++
                         },
-                        onBackToPlayer = {
-                            overlayHasFocus = false
-                            runCatching { rootFocus.requestFocus() }
-                        },
-                        onSelect = { server ->
+                         onBackToPlayer = {
+                             overlayHasFocus = false
+                             runCatching { rootFocus.requestFocus() }
+                         },
+                         onOverlayFocused = { overlayHasFocus = true },
+                         onSelect = { server ->
                             viewModel.select(server)
                             showServers = false
                             fallbackSuggested = false
@@ -442,6 +451,7 @@ private fun Overlay(
     onTogglePlay: () -> Unit,
     onToggleServers: () -> Unit,
     onBackToPlayer: () -> Unit,
+    onOverlayFocused: () -> Unit,
     onSelect: (com.macastil.tv.model.VideoServer) -> Unit,
 ) {
     // La lista se acaba de abrir: el foco entra en ella.
@@ -493,9 +503,15 @@ private fun Overlay(
                     .align(Alignment.Center)
                     .size(96.dp)
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .focusRequester(focusRequester)
-                    .clickable(
+                     .background(Color.Black.copy(alpha = 0.45f))
+                     .focusRequester(focusRequester)
+                     .onFocusChanged { overlayFocused ->
+                         // Mantener la bandera sincronizada también cuando el
+                         // foco llega por D-pad, no solo por el clic.
+                         // `onKeyEvent` del Box raíz depende de este estado.
+                         if (overlayFocused.isFocused) onOverlayFocused()
+                     }
+                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = onTogglePlay,

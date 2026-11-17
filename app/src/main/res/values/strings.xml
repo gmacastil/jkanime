@@ -173,6 +173,9 @@
     <string name="update_action">Actualizar</string>
     <string name="update_downloading">Descargando…</string>
     <string name="update_start_error">No se pudo iniciar la actualización</string>
+    <string name="update_check_manual">Actualizar</string>
+    <string name="update_none_available">Ya tienes la última versión</string>
+    <string name="update_check_error">No se pudo comprobar si hay actualizaciones</string>
 
     <!-- Selector de idioma (menú del avatar + puerta de perfiles) -->
     <string name="lang_title">Idioma</string>

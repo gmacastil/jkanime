@@ -27,10 +27,12 @@ object UpdateManager {
      */
     private val ASSET_PREFIXES = listOf("jkanime-tv-")
 
-    suspend fun check(context: Context): AppUpdate? = withContext(Dispatchers.IO) {
+    suspend fun check(context: Context, force: Boolean = false): AppUpdate? = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences("jk-updates", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        if (now - prefs.getLong("last_check", 0L) < CHECK_INTERVAL_MS) return@withContext null
+        if (!force && now - prefs.getLong("last_check", 0L) < CHECK_INTERVAL_MS) {
+            return@withContext null
+        }
         prefs.edit().putLong("last_check", now).apply()
 
         // Se lista en vez de pedir `/releases/latest`: desde 1.4.8 el último

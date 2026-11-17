@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.macastil.tv.Graph
@@ -67,9 +69,32 @@ class MainActivity : ComponentActivity() {
                 var showSplash by remember { mutableStateOf(true) }
                 var update by remember { mutableStateOf<AppUpdate?>(null) }
                 var checking by remember { mutableStateOf(true) }
-                var installing by remember { mutableStateOf(false) }
-                var updateError by remember { mutableStateOf<String?>(null) }
-                val scope = rememberCoroutineScope()
+                 var installing by remember { mutableStateOf(false) }
+                 var updateError by remember { mutableStateOf<String?>(null) }
+                 var updateMessage by remember { mutableStateOf<String?>(null) }
+                 val scope = rememberCoroutineScope()
+
+                 val checkForUpdate: () -> Unit = {
+                     if (!checking) {
+                         checking = true
+                         update = null
+                         updateError = null
+                         updateMessage = null
+                         scope.launch {
+                             runCatching {
+                                 UpdateManager.check(this@MainActivity)
+                             }.onSuccess { candidate ->
+                                 update = candidate
+                                 if (candidate == null) {
+                                     updateMessage = getString(R.string.update_none_available)
+                                 }
+                             }.onFailure {
+                                 updateMessage = getString(R.string.update_check_error)
+                             }
+                             checking = false
+                         }
+                     }
+                 }
 
                 // Splash: 2 segundos con la imagen de la app; luego pasa a la UI
                 // normal (JkNavHost). El delay es mínimo y permite que Room
@@ -105,7 +130,7 @@ class MainActivity : ComponentActivity() {
                     if (showSplash) {
                         SplashScreen()
                     } else {
-                        JkNavHost()
+                         JkNavHost(onCheckUpdate = checkForUpdate)
 
                         if (!checking && update != null) {
                             UpdatePrompt(
@@ -126,9 +151,15 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 },
-                                onDismiss = { update = null },
-                            )
-                        }
+                                 onDismiss = { update = null },
+                             )
+                         }
+                         if (!checking && updateMessage != null) {
+                             UpdateStatusPrompt(
+                                 message = updateMessage!!,
+                                 onDismiss = { updateMessage = null },
+                             )
+                         }
 
                     }
                 }
@@ -171,14 +202,14 @@ private fun UpdatePrompt(
     onDismiss: () -> Unit,
 ) {
     val installFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { installFocus.requestFocus() }
+    LaunchedEffect(Unit) {
+        repeat(10) {
+            withFrameNanos { }
+            if (installFocus.requestFocus()) return@LaunchedEffect
+        }
+    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.72f)),
-        contentAlignment = Alignment.Center,
-    ) {
+    Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.width(560.dp),
             colors = SurfaceDefaults.colors(
@@ -234,6 +265,53 @@ private fun UpdatePrompt(
                         text = stringResource(R.string.common_now),
                         primary = false,
                         enabled = !installing,
+                        onClick = onDismiss,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateStatusPrompt(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    val dismissFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        repeat(10) {
+            withFrameNanos { }
+            if (dismissFocus.requestFocus()) return@LaunchedEffect
+        }
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.width(560.dp),
+            colors = SurfaceDefaults.colors(
+                containerColor = JkSurface,
+                contentColor = JkTextPrimary,
+            ),
+        ) {
+            Column(modifier = Modifier.padding(30.dp)) {
+                Text(
+                    stringResource(R.string.update_check_manual),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    message,
+                    color = JkTextSecondary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Row(
+                    modifier = Modifier.padding(top = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    TvActionButton(
+                        text = stringResource(R.string.common_now),
+                        primary = true,
+                        modifier = Modifier.focusRequester(dismissFocus),
                         onClick = onDismiss,
                     )
                 }

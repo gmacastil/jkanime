@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,6 +69,25 @@ fun FavoritesScreen(
     val pending = statuses.filterNot { it.upToDate }
     val upToDate = statuses.filter { it.upToDate }
     val scope = rememberCoroutineScope()
+
+    // La única actualización de contadores ocurre al entrar a esta pantalla.
+    // No se ejecuta desde Home ni desde cada tarjeta: así evitamos peticiones
+    // repetidas y los grupos se recalculan con los datos actuales del sitio.
+    LaunchedEffect(Unit) {
+        JkGraph.library.getAllFavorites()
+            .filter { it.deletedAt == null }
+            .forEach { favorite ->
+                runCatching { JkGraph.repository.detail(favorite.slug) }
+                    .onSuccess { detail ->
+                        JkGraph.library.updateFavoriteCounters(
+                            slug = favorite.slug,
+                            lastAiredEpisode = detail.lastEpisodeNumber,
+                            totalEpisodes = detail.totalEpisodes,
+                            statusLabel = detail.statusLabel,
+                        )
+                    }
+            }
+    }
 
     Scaffold(
         topBar = {

@@ -436,6 +436,7 @@ private fun TransportBar(
     onRewind: () -> Unit,
     onForward: () -> Unit,
     onStop: () -> Unit,
+    showPlaybackControls: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val max = durationMs.coerceAtLeast(1L).toFloat()
@@ -457,23 +458,25 @@ private fun TransportBar(
                 modifier = Modifier.padding(start = 8.dp),
             )
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onRewind) { Text("−10 s") }
-            FilledIconButton(
-                onClick = onPlayPause,
-                modifier = Modifier.size(52.dp),
-                shape = CircleShape,
-            ) {
-                if (isPlaying) {
-                    PauseGlyph(tint = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(R.string.player_play_cd),
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                    )
+            if (showPlaybackControls) {
+                TextButton(onClick = onRewind) { Text("−10 s") }
+                FilledIconButton(
+                    onClick = onPlayPause,
+                    modifier = Modifier.size(52.dp),
+                    shape = CircleShape,
+                ) {
+                    if (isPlaying) {
+                        PauseGlyph(tint = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = stringResource(R.string.player_play_cd),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
                 }
+                TextButton(onClick = onForward) { Text("+10 s") }
             }
-            TextButton(onClick = onForward) { Text("+10 s") }
             IconButton(onClick = onStop) {
                 Icon(
                     Icons.Filled.Close,

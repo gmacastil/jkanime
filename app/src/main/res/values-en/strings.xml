@@ -168,6 +168,9 @@
     <string name="update_action">Update</string>
     <string name="update_downloading">Downloading…</string>
     <string name="update_start_error">Couldn\'t start the update</string>
+    <string name="update_check_manual">Update</string>
+    <string name="update_none_available">You already have the latest version</string>
+    <string name="update_check_error">Couldn\'t check for updates</string>
 
     <!-- Selector de idioma (menú del avatar + puerta de perfiles) -->
     <string name="lang_title">Language</string>

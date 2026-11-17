@@ -204,6 +204,27 @@ class LibraryRepository(
     suspend fun getAllFavorites(): List<FavoriteEntity> = _favorites.value.toList()
     suspend fun getAllProgress(): List<ProgressEntity> = _progress.value.toList()
 
+    /** Actualiza únicamente los contadores obtenidos al entrar a Favoritos. */
+    suspend fun updateFavoriteCounters(
+        slug: String,
+        lastAiredEpisode: Int?,
+        totalEpisodes: Int?,
+        statusLabel: String?,
+    ) {
+        val now = System.currentTimeMillis()
+        _favorites.value = _favorites.value.map { favorite ->
+            if (favorite.slug != slug || favorite.deletedAt != null) favorite
+            else favorite.copy(
+                lastAiredEpisode = lastAiredEpisode,
+                totalEpisodes = totalEpisodes,
+                statusLabel = statusLabel ?: favorite.statusLabel,
+                syncedAt = now,
+                updatedAt = now,
+            )
+        }
+        persistFavorites()
+    }
+
     /** Sustituye la biblioteca local con lo que venga de la nube (merge ya hecho). */
     suspend fun replaceFromRemote(favorites: List<FavoriteEntity>, progress: List<ProgressEntity>) {
         _favorites.value = favorites

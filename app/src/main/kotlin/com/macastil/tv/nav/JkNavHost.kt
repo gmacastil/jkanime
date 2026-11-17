@@ -25,7 +25,9 @@ object Routes {
 }
 
 @Composable
-fun JkNavHost() {
+fun JkNavHost(
+    onCheckUpdate: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
 
@@ -55,6 +57,7 @@ fun JkNavHost() {
                 onOpenAnime = { slug -> navController.navigate(Routes.detail(slug)) },
                 onOpenDirectorio = { navController.navigate(Routes.DIRECTORIO) },
                 onOpenProfileSwitch = { navController.navigate(Routes.PROFILE_SWITCH) },
+                onCheckUpdate = onCheckUpdate,
             )
         }
 

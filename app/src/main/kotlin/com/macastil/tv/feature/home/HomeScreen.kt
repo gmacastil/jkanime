@@ -141,6 +141,7 @@ fun HomeScreen(
     onOpenAnime: (String) -> Unit,
     onOpenDirectorio: () -> Unit = {},
     onOpenProfileSwitch: () -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val library = remember(context) { Graph.library(context) }
@@ -419,10 +420,14 @@ fun HomeScreen(
                     focusNonce++
                 },
                 onDirectorio = {
-                    viewModel.closeDrawer()
-                    onOpenDirectorio()
-                },
-            )
+                     viewModel.closeDrawer()
+                     onOpenDirectorio()
+                 },
+                 onCheckUpdate = {
+                     viewModel.closeDrawer()
+                     onCheckUpdate()
+                 },
+             )
         }
 
         // Menú del avatar: overlay a nivel raíz para que cubra toda la
@@ -829,6 +834,7 @@ private fun SideDrawer(
     onSelectSection: (ProgramacionSection) -> Unit,
     onFavorites: () -> Unit,
     onDirectorio: () -> Unit,
+    onCheckUpdate: () -> Unit,
 ) {
     var configExpanded by remember { mutableStateOf(false) }
     Column(
@@ -918,6 +924,12 @@ private fun SideDrawer(
                 )
             }
         }
+        DrawerItem(
+            label = stringResource(R.string.update_check_manual),
+            icon = Icons.Filled.Refresh,
+            selected = false,
+            onClick = onCheckUpdate,
+        )
     }
 }
 

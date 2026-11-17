@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.macastil.mobile.R
 import com.macastil.mobile.data.local.AppLocale
@@ -63,6 +65,7 @@ fun AppDrawerContent(
     onOpenSync: () -> Unit,
     onOpenFavorites: () -> Unit,
     onRefresh: () -> Unit,
+    onCheckUpdate: () -> Unit,
 ) {
     val defaultName = stringResource(R.string.home_drawer_profile_default)
     val name = profileName.ifBlank { defaultName }
@@ -145,6 +148,11 @@ fun AppDrawerContent(
                 label = stringResource(R.string.home_drawer_refresh),
                 onClick = onRefresh,
             )
+            DrawerItem(
+                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                label = stringResource(R.string.update_check_manual),
+                onClick = onCheckUpdate,
+            )
 
             Spacer(Modifier.height(16.dp))
             Text(
@@ -176,11 +184,29 @@ private fun DrawerItem(
     trailing: String? = null,
 ) {
     NavigationDrawerItem(
-        label = { Text(label) },
+        label = {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
         icon = icon,
         selected = false,
         onClick = onClick,
-        badge = trailing?.let { { Text(it) } },
+        badge = trailing?.let {
+            {
+                Text(
+                    text = it,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
         modifier = Modifier.padding(horizontal = 12.dp),
     )
 }

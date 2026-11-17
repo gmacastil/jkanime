@@ -30,7 +30,7 @@
     <string name="profile_rename_hint">Nombre</string>
     <string name="home_drawer_group_library">BIBLIOTECA</string>
     <string name="home_drawer_favorites">Favoritos</string>
-    <string name="home_drawer_refresh">Actualizar</string>
+    <string name="home_drawer_refresh">Refrescar catálogo</string>
     <string name="home_drawer_sync_linked">Espacio %1$s</string>
     <string name="home_drawer_sync_unlinked">Sin vincular</string>
     <string name="home_drawer_version">Versión %1$s</string>
@@ -65,6 +65,15 @@
     <string name="favorites_title">Favoritos (%1$d)</string>
     <string name="favorites_empty_title">Todavía no tienes favoritos</string>
     <string name="favorites_empty_hint">Mantén pulsada una tarjeta en Inicio para añadirla.</string>
+    <string name="update_check_manual">Actualizar</string>
+    <string name="update_new_version">Nueva versión disponible</string>
+    <string name="update_version_label">jkanime %1$s</string>
+    <string name="update_body">Puedes instalarla ahora o continuar con la versión actual.</string>
+    <string name="update_action">Actualizar</string>
+    <string name="update_downloading">Descargando…</string>
+    <string name="update_none_available">Ya tienes la última versión</string>
+    <string name="update_check_error">No se pudo comprobar si hay actualizaciones</string>
+    <string name="update_start_error">No se pudo iniciar la actualización</string>
 
     <!-- Reproductor -->
     <string name="player_episode_title">Ep %1$d · %2$s</string>

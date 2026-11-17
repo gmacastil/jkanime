@@ -53,6 +53,7 @@ fun HomeScreen(
     onOpenFavorites: () -> Unit = {},
     onOpenSync: () -> Unit = {},
     onLanguageChanged: (String) -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel = viewModel(
         factory = HomeViewModelFactory(JkGraph.repository),
@@ -97,6 +98,10 @@ fun HomeScreen(
                 onRefresh = {
                     scope.launch { drawerState.close() }
                     viewModel.refresh()
+                },
+                onCheckUpdate = {
+                    scope.launch { drawerState.close() }
+                    onCheckUpdate()
                 },
             )
         },
