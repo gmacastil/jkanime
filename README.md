@@ -43,6 +43,8 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 | 1.5.2 | App móvil: todos los modos de sincronización de la TV + auto-sync al arrancar | ✅ |
 | 1.5.3 | Fix del vídeo negro en móvil (documento colapsado a 0 px) + vídeo 16:9 en horizontal | ✅ |
 | 1.5.4 | Sync unificado TV/móvil (clave de 6 hex en el gate) + reproductor móvil a pantalla completa con una sola barra | ✅ |
+| 1.5.5 | Detalle móvil con ordenar/Todo visto, clasificación real de favoritos y controles de player con auto-ocultado | ✅ |
+| 1.5.6 | Actualización manual TV/móvil, foco robusto del diálogo y limpieza de opciones obsoletas | En desarrollo |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo
@@ -71,9 +73,11 @@ físico).
 - Progreso persistente por episodio con posición, estado iniciado/completado y
   reanudación.
 - Botón de continuar viendo.
-- Badges de favoritos con capítulos pendientes (`+N`), estado **Al día** y
-  episodio visto como respaldo.
-- WorkManager actualiza cada seis horas los datos de emisión de favoritos.
+- Badges de favoritos con capítulos pendientes (`+N`) y estado **Al día** solo
+  cuando todos los capítulos publicados están vistos.
+- TV: WorkManager actualiza cada seis horas los datos de emisión.
+- Móvil: los contadores se refrescan al entrar en Favoritos, no desde Home ni
+  mediante un evento global.
 
 ### Perfiles y sincronización
 
@@ -118,9 +122,9 @@ físico).
   pantalla negra observada en algunos televisores con WebView.
 - Fallback entre servidores Desu y Magi cuando una fuente falla o no inicia.
 - Controles TV de reproducción, pausa, avance/retroceso y cambio de servidor.
-- En el móvil la barra de transporte va **debajo** del vídeo (apaisado con el
-  vídeo a pantalla completa): pausa, ±10 s, `✕` para detener y volver, y slider
-  arrastrable para buscar.
+- En el móvil el vídeo ocupa la pantalla en apaisado; play/pausa y ±10 s están
+  sobre el vídeo, con doble toque a izquierda/derecha para buscar. La barra
+  inferior conserva únicamente slider, tiempo y salir.
 - El `WebPlayer` móvil usa el User-Agent del Chrome del sistema (con UA de TV
   los hosts servían un player sin zonas táctiles).
 - Guardado periódico del progreso y reanudación en la posición anterior.
@@ -220,16 +224,20 @@ otra.
 
 ### Actualizaciones en línea
 
-Al iniciar la app, `UpdateManager` consulta cada seis horas el release más
-reciente de:
+TV y móvil consultan la lista de releases de GitHub, filtrando el APK correcto
+por dispositivo:
 
 ```text
-https://api.github.com/repos/gmacastil/jkanime/releases/latest
+https://api.github.com/repos/gmacastil/jkanime/releases?per_page=30
 ```
 
-Si encuentra un tag semver superior al instalado y un APK adjunto, muestra el
-diálogo de actualización. Al aceptarlo, descarga el APK y abre el instalador
-del sistema Android; la instalación requiere confirmación del usuario.
+La TV busca `jkanime-tv-*.apk` y el móvil `jkanime-mobile-*.apk`. La TV hace una
+comprobación automática con caché de seis horas. Ambas apps exponen
+**Actualizar** en su menú; en móvil la comprobación se ejecuta bajo demanda y en
+TV la acción fuerza una consulta inmediata. Esto permite recuperar el diálogo si
+se perdió el foco o se cerró anteriormente.
+Al aceptar, se descarga la APK y se abre el instalador del sistema Android; la
+instalación requiere confirmación del usuario.
 
 Un APK de debug ya compilado (listo para sideload) vive en `dist/` — no se
 versiona en git (`*.apk` está en `.gitignore`). Para generarlo por demanda,
@@ -285,6 +293,14 @@ Y luego, cada vez:
 ./tools/run-emulator.sh --headless
 ```
 
+También se puede compilar, arrancar el AVD e instalar directamente:
+
+```bash
+./adb-tv.sh                      # AVD jktv / emulator-5554
+./adb-mobile.sh                  # AVD jkphone / emulator-5556
+./adb-tv.sh --clean              # desinstala TV antes de instalar debug
+```
+
 Requisitos: `/dev/kvm` accesible (`sudo usermod -aG kvm $USER`, y volver a entrar).
 Sin KVM el emulador x86_64 va a velocidad inusable.
 
@@ -304,20 +320,15 @@ adb logcat -s JkBridge chromium AndroidRuntime
 Y para la app **móvil**, un AVD de teléfono:
 
 ```bash
-emulator -avd jkphone -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect -no-audio &
-adb install -r app-mobile/build/outputs/apk/debug/app-mobile-debug.apk
-adb shell am start -n com.macastil.mobile/.MainActivity
+./adb-mobile.sh
 adb shell input tap 66 130          # ☰ del menú lateral
 ```
 
-Todas las fases (F0–F14) están verificadas end-to-end en emulador: Home,
-tabs, búsqueda real del sitio, Directorio, Detail, selector/fallback de
-servidor del Player, bloqueo de anuncios, favoritos/progreso con Room, sync
-multi-dispositivo con Supabase (incluido emparejamiento por código), idiomas
-español/inglés y el gate de perfiles con tarjetas Material Design 3. La app
-móvil tiene su propia verificación (1.5.1): menú con perfil/idioma/sync,
-reproductor con barra de transporte y grilla completa. Detalle completo, bugs
-encontrados/corregidos y trampas de cada fase en
+Las pruebas unitarias y de compilación cubren ambos módulos. La verificación
+end-to-end en emulador cubre Home, búsqueda, Directorio, detalle, fallback de
+servidor, bloqueo de anuncios, favoritos/progreso, sync Supabase, idiomas y
+gate de perfiles TV; móvil cubre además menú, reproducción táctil, pantalla
+completa y actualización de contadores de favoritos. Detalle y trampas en
 [docs/emulator-testing.md](docs/emulator-testing.md).
 
 `local.properties` debe apuntar al SDK:

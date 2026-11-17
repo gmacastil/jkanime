@@ -1978,3 +1978,34 @@ ffmpeg -v error -f x11grab -video_size ${WIDTH}x${HEIGHT} -i :0.0+${X},${Y} -fra
 
 Para leerla hay que girarla 90° (`PIL rotate(90, expand=True)`): la ventana del
 emulador es vertical aunque el contenido esté en apaisado.
+
+## Estado actual — 1.5.6 en desarrollo (2026-11-16)
+
+### Auditoría funcional TV y móvil
+
+- **TV**: Home/Programación, búsqueda real, Directorio, detalle con paginado,
+  orden y Todo visto, favoritos/progreso por perfil, sync Supabase, idiomas,
+  reproductor nativo HLS con fallback WebView, perfiles y actualización.
+- **Móvil**: Home, búsqueda del catálogo cargado, detalle con orden/Todo visto,
+  favoritos/progreso JSON, clasificación real de Pendientes/Al día, sync
+  Supabase, idiomas y reproductor táctil fullscreen.
+- **Actualizaciones**: ambas aplicaciones filtran el asset de su dispositivo
+  (`jkanime-tv-*.apk` o `jkanime-mobile-*.apk`). El menú **Actualizar** fuerza
+  la consulta aunque ya se haya comprobado recientemente.
+- **Favoritos móviles**: los contadores se consultan al entrar en Favoritos.
+  Se compara cada episodio publicado contra los episodios completados; un
+  capítulo faltante impide clasificar el anime como Al día.
+
+### Limpieza aplicada
+
+- Eliminados recursos Android sin referencias detectados por Lint, incluidos
+  textos de controles retirados del reproductor.
+- Eliminado `adb.sh`, que quedó obsoleto al existir `adb-tv.sh` y
+  `adb-mobile.sh`; ambos scripts arrancan el AVD, esperan el boot e instalan la
+  aplicación correspondiente.
+- El menú móvil distingue ahora **Refrescar catálogo** de **Actualizar**.
+- Los valores secundarios de idioma/sync usan una fuente menor y una sola línea.
+- Validación técnica actual: `./gradlew test` y `:app:lintDebug` /
+  `:app-mobile:lintDebug` pasan; Lint conserva únicamente advertencias
+  informativas de dependencias, orientación, recursos de iconos y APIs
+  recomendadas.

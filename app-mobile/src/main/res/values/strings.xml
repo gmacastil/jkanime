@@ -79,13 +79,8 @@
     <string name="player_episode_title">Ep %1$d · %2$s</string>
     <string name="player_reload_cd">Recargar servidores</string>
     <string name="player_servers">Servidor</string>
-    <string name="player_hint">Si el reproductor no carga, prueba otro servidor. Desu es el del propio sitio y el más estable.</string>
     <string name="player_play_cd">Reproducir</string>
-    <string name="player_pause_cd">Pausar</string>
-    <string name="player_rewind_cd">Retroceder 10 segundos</string>
-    <string name="player_forward_cd">Avanzar 10 segundos</string>
     <string name="player_stop_cd">Detener y salir</string>
-    <string name="player_seek_cd">Posición del video</string>
     <string name="player_loading">Preparando reproductor…</string>
     <string name="player_no_servers">Este episodio no tiene servidores disponibles</string>
     <string name="player_servers_error">No se pudieron cargar los servidores</string>

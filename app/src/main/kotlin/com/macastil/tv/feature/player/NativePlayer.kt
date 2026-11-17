@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -110,6 +111,7 @@ fun NativePlayer(
     )
 }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 private fun buildPlayer(context: Context, url: String, referer: String?): ExoPlayer {
     val httpFactory = DefaultHttpDataSource.Factory()
         .setUserAgent(Jk.USER_AGENT)

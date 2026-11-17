@@ -1,12 +1,21 @@
-# Actualizaciones en línea de jkanimetv
+# Actualizaciones en línea de JK TV y JK Mobile
 
-La app consulta cada seis horas el release más reciente de:
+Cada aplicación consulta la lista de releases de:
 
-`https://github.com/gmacastil/jkanime/releases/latest`
+`https://api.github.com/repos/gmacastil/jkanime/releases?per_page=30`
 
-Si el tag es mayor que la versión instalada y el release contiene un APK,
-muestra un aviso en Android TV, descarga el archivo y abre el instalador del
-sistema.
+La TV acepta únicamente assets `jkanime-tv-*.apk`; el móvil acepta
+`jkanime-mobile-*.apk`. El tag se compara por versión semántica, ignorando el
+sufijo `-tv` o `-mobile`.
+
+En TV existe una comprobación automática con caché de seis horas. El menú de
+ambas aplicaciones contiene **Actualizar**: en móvil ejecuta la comprobación
+bajo demanda y en TV fuerza una nueva consulta aunque la comprobación automática
+ya haya ocurrido. Esto permite recuperar una actualización aunque el diálogo
+inicial haya perdido el foco o se haya cerrado.
+
+Si hay una versión nueva, la app descarga la APK y abre el instalador del
+sistema Android. La instalación siempre requiere confirmación del usuario.
 
 ## Crear una versión
 

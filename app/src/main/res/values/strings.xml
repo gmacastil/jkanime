@@ -17,7 +17,6 @@
     <string name="common_go">Ir</string>
     <string name="common_delete">Eliminar</string>
     <string name="common_loading">Cargando…</string>
-    <string name="common_retry">Reintentar</string>
     <string name="common_error">Error: %1$s</string>
 
     <!-- Errores de red (util/Errors.kt → ErrorState) -->
@@ -35,7 +34,6 @@
 
     <!-- Episodios y secciones (badges de tarjeta, títulos de capítulo) -->
     <string name="episode_badge">Ep %1$d</string>
-    <string name="episode_badge_text">Ep %1$s</string>
     <string name="chapter_episode">Episodio %1$s</string>
     <string name="section_animes">Animes</string>
     <string name="section_donghuas">Donghuas</string>
@@ -47,7 +45,6 @@
     <string name="sync_have_recovery_key">Tengo una clave de recuperación</string>
     <string name="sync_link_device">Vincular dispositivo</string>
     <string name="sync_pairing_title">CÓDIGO TEMPORAL DE VINCULACIÓN</string>
-    <string name="sync_code_title">CÓDIGO DE SINCRONIZACIÓN</string>
     <string name="sync_not_linked_cloud">Este perfil no está vinculado a la nube.</string>
     <string name="sync_status_synced">Sincronizado</string>
     <string name="sync_status_local">Solo local</string>
@@ -55,7 +52,6 @@
     <string name="sync_device_linked">Dispositivo vinculado</string>
     <string name="sync_link_failed">No se pudo vincular: %1$s</string>
     <string name="sync_space_created">Espacio creado: %1$s</string>
-    <string name="sync_space_created_with_recovery">Espacio creado: %1$s. Guarda la clave de recuperación: %2$s</string>
     <string name="sync_pairing_created">Código para vincular (15 min): %1$s</string>
     <string name="sync_recovery_title">INTRODUCE CLAVE (6 CARACTERES)</string>
     <string name="sync_recovery_set_title">DEFINE CLAVE DE VINCULACIÓN (6 CARACTERES)</string>
@@ -73,20 +69,16 @@
     <!-- Home -->
     <string name="home_menu_cd">Menú</string>
     <string name="home_brand_cd">JK TV</string>
-    <string name="home_menu_title">MENÚ</string>
     <string name="home_search_placeholder">Buscar anime en jkanime…</string>
     <string name="home_searching">buscando…</string>
     <string name="home_search_no_results">sin resultados</string>
     <string name="home_drawer_recientes">Recientes</string>
     <string name="home_drawer_directorio">Directorio</string>
     <string name="home_drawer_favoritos">Favoritos</string>
-    <string name="home_drawer_group_sync">SINCRONIZACIÓN</string>
-    <string name="home_drawer_group_profile">PERFIL</string>
     <string name="home_drawer_anime_group">ANIME</string>
     <string name="home_drawer_config">Config</string>
     <string name="home_drawer_sync_now">Sincronizar ahora</string>
     <string name="home_drawer_generate_pairing">Generar código de vinculación</string>
-    <string name="home_drawer_generate_recovery">Generar clave de recuperación</string>
     <string name="home_drawer_set_recovery">Configurar clave de vinculación</string>
     <string name="home_drawer_unlink">Desvincular</string>
     <string name="home_drawer_change_profile">Cambiar perfil</string>
@@ -135,11 +127,8 @@
     <string name="player_servers">Servidores</string>
     <string name="player_server_failed">%1$s no cargó</string>
     <string name="player_change_server_cd">Cambiar servidor</string>
-    <string name="player_rewind_cd">Retroceder 10 segundos</string>
-    <string name="player_forward_cd">Avanzar 10 segundos</string>
     <string name="player_pause_cd">Pausar</string>
     <string name="player_play_cd">Reproducir</string>
-    <string name="player_exit_cd">Salir del reproductor</string>
     <string name="player_seek_position">%1$s / %2$s   ◀ ▶ 10 s</string>
     <string name="player_seek_hint">◀ ▶ avanzar o retroceder 10 s · BACK salir</string>
 
@@ -159,7 +148,6 @@
     <string name="profiles_sync_note">Tus favoritos y progreso se compartirán con otros dispositivos.</string>
     <string name="profiles_sync_creating">Creando…</string>
     <string name="profiles_sync_save_code">Guarda este código: %1$s</string>
-    <string name="profiles_sync_save_code_with_recovery">Código de espacio: %1$s. Guarda también la clave de recuperación: %2$s</string>
     <string name="profiles_sync_linked_ok">Dispositivo vinculado al espacio</string>
     <string name="profiles_delete">Eliminar perfil</string>
     <string name="profiles_delete_message">Se borrarán los favoritos y el progreso de \"%1$s\" en este dispositivo. El espacio de sincronización no se toca.</string>
@@ -179,7 +167,6 @@
 
     <!-- Selector de idioma (menú del avatar + puerta de perfiles) -->
     <string name="lang_title">Idioma</string>
-    <string name="lang_section">IDIOMA</string>
     <string name="lang_hint">Se aplica a toda la app al instante.</string>
     <string name="lang_system">Sistema</string>
     <string name="lang_es" translatable="false">Español</string>

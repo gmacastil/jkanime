@@ -137,6 +137,7 @@ import kotlinx.coroutines.launch
  * de perfil.
  */
 @Composable
+@Suppress("LocalContextGetResourceValueCall")
 fun HomeScreen(
     onOpenAnime: (String) -> Unit,
     onOpenDirectorio: () -> Unit = {},

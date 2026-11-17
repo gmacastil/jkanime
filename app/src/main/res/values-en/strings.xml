@@ -15,7 +15,6 @@
     <string name="detail_unmark_all">Unmark all</string>
     <string name="common_delete">Delete</string>
     <string name="common_loading">Loading…</string>
-    <string name="common_retry">Retry</string>
     <string name="common_error">Error: %1$s</string>
 
     <!-- Network errors (util/Errors.kt → ErrorState) -->
@@ -33,7 +32,6 @@
 
     <!-- Episodes and sections (card badges, chapter titles) -->
     <string name="episode_badge">Ep %1$d</string>
-    <string name="episode_badge_text">Ep %1$s</string>
     <string name="chapter_episode">Episode %1$s</string>
     <string name="section_animes">Animes</string>
     <string name="section_donghuas">Donghuas</string>
@@ -45,7 +43,6 @@
     <string name="sync_have_recovery_key">I have a recovery key</string>
     <string name="sync_link_device">Link device</string>
     <string name="sync_pairing_title">TEMPORARY PAIRING CODE</string>
-    <string name="sync_code_title">SYNC CODE</string>
     <string name="sync_not_linked_cloud">This profile isn\'t linked to the cloud.</string>
     <string name="sync_status_synced">Synced</string>
     <string name="sync_status_local">Local only</string>
@@ -53,7 +50,6 @@
     <string name="sync_device_linked">Device linked</string>
     <string name="sync_link_failed">Couldn\'t link: %1$s</string>
     <string name="sync_space_created">Space created: %1$s</string>
-    <string name="sync_space_created_with_recovery">Space created: %1$s. Save the recovery key: %2$s</string>
     <string name="sync_pairing_created">Pairing code (15 min): %1$s</string>
     <string name="sync_recovery_title">ENTER LINKING KEY (6 CHARACTERS)</string>
     <string name="sync_recovery_set_title">SET LINKING KEY (6 CHARACTERS)</string>
@@ -71,20 +67,16 @@
     <!-- Home -->
     <string name="home_menu_cd">Menu</string>
     <string name="home_brand_cd">JK TV</string>
-    <string name="home_menu_title">MENU</string>
     <string name="home_search_placeholder">Search anime on jkanime…</string>
     <string name="home_searching">searching…</string>
     <string name="home_search_no_results">no results</string>
     <string name="home_drawer_recientes">Recent</string>
     <string name="home_drawer_directorio">Browse</string>
     <string name="home_drawer_favoritos">Favorites</string>
-    <string name="home_drawer_group_sync">SYNC</string>
-    <string name="home_drawer_group_profile">PROFILE</string>
     <string name="home_drawer_anime_group">ANIME</string>
     <string name="home_drawer_config">Config</string>
     <string name="home_drawer_sync_now">Sync now</string>
     <string name="home_drawer_generate_pairing">Generate pairing code</string>
-    <string name="home_drawer_generate_recovery">Generate recovery key</string>
     <string name="home_drawer_set_recovery">Set linking key</string>
     <string name="home_drawer_unlink">Unlink</string>
     <string name="home_drawer_change_profile">Switch profile</string>
@@ -131,12 +123,10 @@
     <string name="player_servers">Servers</string>
     <string name="player_server_failed">%1$s didn\'t load</string>
     <string name="player_change_server_cd">Change server</string>
-    <string name="player_rewind_cd">Rewind 10 seconds</string>
-    <string name="player_forward_cd">Forward 10 seconds</string>
     <string name="player_pause_cd">Pause</string>
     <string name="player_play_cd">Play</string>
-    <string name="player_exit_cd">Exit player</string>
     <string name="player_seek_position">%1$s / %2$s   ◀ ▶ 10 s</string>
+    <string name="player_seek_hint">◀ ▶ seek 10 s · BACK to exit</string>
 
     <!-- Profile gate / profile management -->
     <string name="profiles_who_watching">Who\'s watching?</string>
@@ -154,7 +144,6 @@
     <string name="profiles_sync_note">Your favorites and progress will be shared with other devices.</string>
     <string name="profiles_sync_creating">Creating…</string>
     <string name="profiles_sync_save_code">Save this code: %1$s</string>
-    <string name="profiles_sync_save_code_with_recovery">Space code: %1$s. Also save the recovery key: %2$s</string>
     <string name="profiles_sync_linked_ok">Device linked to the space</string>
     <string name="profiles_delete">Delete profile</string>
     <string name="profiles_delete_message">Favorites and progress of \"%1$s\" will be deleted on this device. The sync space will not be touched.</string>
@@ -174,7 +163,6 @@
 
     <!-- Selector de idioma (menú del avatar + puerta de perfiles) -->
     <string name="lang_title">Language</string>
-    <string name="lang_section">LANGUAGE</string>
     <string name="lang_hint">Applies to the whole app instantly.</string>
     <string name="lang_system">System (default)</string>
     <string name="lang_es" translatable="false">Español</string>

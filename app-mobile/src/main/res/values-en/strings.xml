@@ -74,13 +74,8 @@
     <string name="player_episode_title">Ep %1$d · %2$s</string>
     <string name="player_reload_cd">Reload servers</string>
     <string name="player_servers">Server</string>
-    <string name="player_hint">If the player does not load, try another server. Desu is the site own player and the most stable one.</string>
     <string name="player_play_cd">Play</string>
-    <string name="player_pause_cd">Pause</string>
-    <string name="player_rewind_cd">Rewind 10 seconds</string>
-    <string name="player_forward_cd">Forward 10 seconds</string>
     <string name="player_stop_cd">Stop and leave</string>
-    <string name="player_seek_cd">Video position</string>
     <string name="player_loading">Preparing player…</string>
     <string name="player_no_servers">This episode has no available servers</string>
     <string name="player_servers_error">Could not load the servers</string>

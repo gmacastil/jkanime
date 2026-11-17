@@ -108,6 +108,7 @@ import com.macastil.tv.ui.theme.JkTextSecondary
  * sin tocar el perfil activo.
  */
 @Composable
+@Suppress("LocalContextGetResourceValueCall")
 fun ProfileGateScreen(
     onReady: () -> Unit,
     startInChooser: Boolean = false,
