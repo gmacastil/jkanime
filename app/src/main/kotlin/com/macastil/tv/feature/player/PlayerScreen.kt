@@ -1,13 +1,16 @@
 package com.macastil.tv.feature.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +31,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
@@ -45,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.tv.material3.Icon
@@ -106,6 +111,9 @@ fun PlayerScreen(
     // geométrica de Compose no sube desde el botón "Usar otro servidor" a la
     // fila de arriba (se queda atascada en el propio botón).
     val firstServerFocus = remember { FocusRequester() }
+    // Con el aviso de "servidor caído" el foco inicial no puede ir a
+    // play/pausa: lo que el usuario necesita es cambiar de fuente.
+    val changeServerFocus = remember { FocusRequester() }
     var overlayVisible by remember { mutableStateOf(true) }
     // Cada interacción (buscar, pausar, elegir servidor) reinicia el
     // temporizador de auto-ocultar: antes el contador arrancaba al abrirse el
@@ -120,6 +128,12 @@ fun PlayerScreen(
     // Box raíz también vería el OK (fase KeyDown) y ocultaría los controles
     // justo antes de que el botón reciba su click (fase KeyUp).
     var overlayHasFocus by remember { mutableStateOf(false) }
+    // Incrementa cada vez que se quiere llevar el foco al play/pausa. El
+    // overlay se compone y se destruye con `overlayVisible`, así que pedir el
+    // foco dentro de su `LaunchedEffect(Unit)` lo robaría también cuando los
+    // controles aparecen solos (seek con ◀ ▶, aviso de servidor caído). Con un
+    // contador explícito solo se enfoca cuando el usuario lo pide.
+    var overlayFocusRequest by remember { mutableIntStateOf(0) }
 
     // F4: progreso persistente. Se guarda cada ~5 s de avance real (no en cada
     // `timeupdate`, que dispara ~4 veces por segundo y machacaría Room).
@@ -131,6 +145,32 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(true) }
     var resumeFromMs by remember { mutableStateOf<Long?>(null) }
     var playerReady by remember { mutableStateOf(false) }
+
+    // Muestra los controles. `focusControls` decide si además se lleva el foco
+    // al play/pausa (OK, Arriba/Abajo) o no (seek con ◀ ▶, aviso de caída).
+    val showControls: (Boolean) -> Unit = { focusControls ->
+        overlayVisible = true
+        overlayInteraction++
+        if (focusControls) overlayFocusRequest++
+    }
+
+    // Lleva el foco al play/pausa cuando se ha pedido. Se reintenta unos
+    // frames porque el nodo del overlay acaba de entrar en la composición y
+    // hasta que no se coloca `requestFocus()` devuelve false en silencio (o
+    // lanza si el FocusRequester aún no está enlazado).
+    LaunchedEffect(overlayFocusRequest) {
+        if (overlayFocusRequest == 0) return@LaunchedEffect
+        // Si el servidor no arrancó, lo útil es el botón "cambiar servidor".
+        val target = if (fallbackSuggested && !showServers) changeServerFocus else overlayFocus
+        repeat(12) {
+            withFrameNanos { }
+            val focused = runCatching { target.requestFocus() }.getOrDefault(false)
+            if (focused) {
+                overlayHasFocus = true
+                return@LaunchedEffect
+            }
+        }
+    }
 
     // Pausa/play desde el overlay o con la tecla del mando.
     //
@@ -167,12 +207,25 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(Unit) {
-        runCatching { rootFocus.requestFocus() }
+        // El WebView nativo puede tardar un frame en colocarse: si el foco no
+        // se puede pedir al primer intento se reintenta.
+        repeat(6) {
+            withFrameNanos { }
+            if (runCatching { rootFocus.requestFocus() }.getOrDefault(false)) {
+                return@LaunchedEffect
+            }
+        }
     }
 
     // El overlay se oculta solo mientras se reproduce: en pausa los controles
     // se quedan (es cuando el usuario los necesita). Si estamos avisando de que
-    // el servidor falló, también se queda visible.
+    // el servidor falló o hay una lista de fuentes abierta, también se queda
+    // visible. Ya NO se exige que el foco esté fuera de los controles: al
+    // pulsar Play el overlay se ocultaba de golpe y el foco se quedaba en el
+    // aire (el siguiente OK solo volvía a abrirlo sin enfocar play/pausa). Ahora
+    // se desvanece a los 6 s de la última interacción, como un reproductor de
+    // TV normal. `overlayHasFocus` se mantiene como clave para que entrar o
+    // salir de los controles reinicie el temporizador.
     LaunchedEffect(
         overlayVisible,
         isPlaying,
@@ -182,7 +235,7 @@ fun PlayerScreen(
         overlayHasFocus,
         overlayInteraction,
     ) {
-        if (overlayVisible && isPlaying && !fallbackSuggested && !showServers && !overlayHasFocus) {
+        if (overlayVisible && isPlaying && !fallbackSuggested && !showServers) {
             delay(6_000)
             overlayVisible = false
         }
@@ -199,7 +252,14 @@ fun PlayerScreen(
     LaunchedEffect(overlayVisible) {
         if (!overlayVisible) {
             overlayHasFocus = false
-            runCatching { rootFocus.requestFocus() }
+            // Reintento multi-frame: el foco no se puede pedir mientras el
+            // árbol se está recomponiendo (falla en silencio).
+            repeat(6) {
+                withFrameNanos { }
+                if (runCatching { rootFocus.requestFocus() }.getOrDefault(false)) {
+                    return@LaunchedEffect
+                }
+            }
         }
     }
 
@@ -216,8 +276,10 @@ fun PlayerScreen(
             fallbackSuggested = true
             // No tapamos el vídeo ni abrimos el panel automáticamente: el
             // usuario decide cuándo cambiar de fuente desde el botón flotante.
+            // Los controles aparecen sin robar el foco (el vídeo puede estar
+            // reproduciendo igual y el aviso no requiere interacción).
             showServers = false
-            overlayVisible = true
+            showControls(false)
         }
     }
 
@@ -236,30 +298,33 @@ fun PlayerScreen(
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
+                    // OK sin foco en los controles: los muestra y entra en
+                    // play/pausa. Antes solo alternaba la visibilidad, así que
+                    // tras reanudar el vídeo el overlay reaparecía sin foco y
+                    // el siguiente OK lo ocultaba en vez de pausar.
                     Key.DirectionCenter, Key.Enter -> {
                         if (overlayHasFocus) {
                             false
                         } else {
-                            overlayVisible = !overlayVisible
+                            showControls(true)
                             true
                         }
                     }
                     Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
                         togglePlay()
-                        overlayVisible = true
-                        overlayInteraction++
+                        showControls(false)
                         true
                     }
                     // Buscar con ◀ ▶ muestra los controles (para ver dónde
                     // quedó la reproducción) y reinicia el temporizador, así
                     // se ocultan solos unos segundos después del último seek.
+                    // No se roba el foco: se sigue buscando con las flechas.
                     Key.DirectionLeft -> {
                         if (overlayHasFocus) {
                             false
                         } else {
                             controller.seekBy(-10)
-                            overlayVisible = true
-                            overlayInteraction++
+                            showControls(false)
                             true
                         }
                     }
@@ -268,22 +333,17 @@ fun PlayerScreen(
                             false
                         } else {
                             controller.seekBy(10)
-                            overlayVisible = true
-                            overlayInteraction++
+                            showControls(false)
                             true
                         }
                     }
                     Key.DirectionUp, Key.DirectionDown -> {
-                        if (overlayVisible) {
-                            // Entrar en los botones del overlay.
-                            overlayHasFocus = true
-                            overlayInteraction++
-                            runCatching { overlayFocus.requestFocus() }
-                            true
-                        } else {
-                            overlayVisible = true
-                            overlayInteraction++
+                        if (overlayHasFocus) {
+                            // Ya hay un control enfocado: navegar entre ellos.
                             false
+                        } else {
+                            showControls(true)
+                            true
                         }
                     }
                     else -> false
@@ -383,50 +443,60 @@ fun PlayerScreen(
                 }
 
                 if (overlayVisible) {
-                        Overlay(
-                         servers = current.servers,
+                    Overlay(
+                        servers = current.servers,
                         selectedUrl = current.selected.url,
                         selectedName = current.selected.displayName,
                         showServers = showServers,
                         fallbackSuggested = fallbackSuggested,
                         focusRequester = overlayFocus,
-                         firstServerFocus = firstServerFocus,
-                         positionMs = positionMs,
-                         durationMs = durationMs,
-                         isPlaying = isPlaying,
-                         onSeek = { target ->
-                             positionMs = target
-                             controller.seekTo(target)
-                             overlayInteraction++
-                         },
-                         onTogglePlay = {
-                               // Un clic táctil sobre el botón debe dejar el
-                               // foco lógico en el mismo control. Si no, el
-                               // siguiente D-pad cae en el Box raíz y el
-                               // usuario tiene que pulsar Arriba para volver
-                               // a encontrar play/pausa.
-                               overlayHasFocus = true
-                               runCatching { overlayFocus.requestFocus() }
-                               val playing = togglePlay()
-                               // Pausar mantiene visibles el botón y el seekbar;
-                               // al reanudar se ocultan ambos automáticamente.
-                              overlayVisible = !playing
-                              overlayInteraction++
-                          },
-                        onToggleServers = {
-                            showServers = !showServers
+                        firstServerFocus = firstServerFocus,
+                        changeServerFocus = changeServerFocus,
+                        positionMs = positionMs,
+                        durationMs = durationMs,
+                        isPlaying = isPlaying,
+                        onSeek = { target ->
+                            positionMs = target
+                            controller.seekTo(target)
                             overlayInteraction++
                         },
-                         onBackToPlayer = {
-                             overlayHasFocus = false
-                             runCatching { rootFocus.requestFocus() }
-                         },
-                         onOverlayFocused = { overlayHasFocus = true },
-                         onSelect = { server ->
+                        onTogglePlay = {
+                            // Un clic táctil sobre el botón debe dejar el foco
+                            // lógico en el mismo control: sin esto el siguiente
+                            // D-pad caía en el Box raíz.
+                            overlayHasFocus = true
+                            runCatching { overlayFocus.requestFocus() }
+                            togglePlay()
+                            // Al reanudar NO se oculta el overlay de golpe: se
+                            // deja que lo haga el auto-ocultado a los 6 s, así
+                            // el foco nunca se pierde entre pausa y play.
+                            overlayInteraction++
+                        },
+                        onToggleServers = {
+                            val closing = showServers
+                            showServers = !showServers
+                            overlayInteraction++
+                            // Al cerrar la lista el botón de cierre desaparece:
+                            // el foco vuelve al play/pausa para no dejarlo
+                            // huérfano.
+                            if (closing) overlayFocusRequest++
+                        },
+                        onBackToPlayer = {
+                            // Arriba desde los controles = volver al vídeo.
+                            overlayVisible = false
+                        },
+                        onOverlayFocused = { overlayHasFocus = true },
+                        onSelect = { server ->
                             viewModel.select(server)
                             showServers = false
                             fallbackSuggested = false
                             playerReady = false
+                            // El botón elegido desaparece con la lista: sin
+                            // esto el foco se quedaba huérfano y el D-pad
+                            // muerto. Se vuelve al vídeo y OK restaura los
+                            // controles.
+                            overlayVisible = false
+                            overlayHasFocus = false
                         },
                     )
                 }
@@ -444,6 +514,7 @@ private fun Overlay(
     fallbackSuggested: Boolean,
     focusRequester: FocusRequester,
     firstServerFocus: FocusRequester,
+    changeServerFocus: FocusRequester,
     positionMs: Long,
     durationMs: Long,
     isPlaying: Boolean,
@@ -492,27 +563,43 @@ private fun Overlay(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 24.dp, top = 20.dp),
+                    focusRequester = changeServerFocus,
                     onClick = onToggleServers,
                 )
             }
 
             // Pausa/play en el centro del vídeo (antes estaba en la fila de
             // abajo junto a los saltos). Al ocultarse el overlay desaparece.
+            // El foco se marca con anillo blanco + relleno naranja + escala:
+            // antes el botón era idéntico con y sin foco, así que "perder el
+            // foco" era indistinguible de tenerlo.
+            val playInteraction = remember { MutableInteractionSource() }
+            val playFocused by playInteraction.collectIsFocusedAsState()
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(96.dp)
+                    .scale(if (playFocused) 1.06f else 1f)
                     .clip(CircleShape)
-                     .background(Color.Black.copy(alpha = 0.45f))
-                     .focusRequester(focusRequester)
-                     .onFocusChanged { overlayFocused ->
-                         // Mantener la bandera sincronizada también cuando el
-                         // foco llega por D-pad, no solo por el clic.
-                         // `onKeyEvent` del Box raíz depende de este estado.
-                         if (overlayFocused.isFocused) onOverlayFocused()
-                     }
-                     .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                    .background(if (playFocused) JkOrange else Color.Black.copy(alpha = 0.45f))
+                    .border(
+                        width = if (playFocused) 3.dp else 1.dp,
+                        color = if (playFocused) {
+                            JkTextPrimary
+                        } else {
+                            Color.White.copy(alpha = 0.25f)
+                        },
+                        shape = CircleShape,
+                    )
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { overlayFocused ->
+                        // Mantener la bandera sincronizada también cuando el
+                        // foco llega por D-pad, no solo por el clic.
+                        // `onKeyEvent` del Box raíz depende de este estado.
+                        if (overlayFocused.isFocused) onOverlayFocused()
+                    }
+                    .clickable(
+                        interactionSource = playInteraction,
                         indication = null,
                         onClick = onTogglePlay,
                     ),
@@ -525,7 +612,7 @@ private fun Overlay(
                     } else {
                         stringResource(R.string.player_play_cd)
                     },
-                    tint = JkTextPrimary,
+                    tint = if (playFocused) Color(0xFF141414) else JkTextPrimary,
                     modifier = Modifier.size(52.dp),
                 )
             }
@@ -539,11 +626,29 @@ private fun Overlay(
                         .padding(horizontal = 18.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        stringResource(R.string.player_servers),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = JkTextPrimary,
-                    )
+                    // Cabecera con botón de cierre: con la lista abierta no
+                    // había forma de volver al vídeo salvo eligiendo una
+                    // fuente (el botón que la abre solo se pinta con la lista
+                    // cerrada). Arriba desde el primer servidor llega aquí.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            stringResource(R.string.player_servers),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = JkTextPrimary,
+                        )
+                        TvIconButton(
+                            icon = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.player_close_servers_cd),
+                            active = true,
+                            size = 40.dp,
+                            iconSize = 18.dp,
+                            onClick = onToggleServers,
+                        )
+                    }
                     servers
                         .filter { it.kind != ServerKind.DOWNLOAD }
                         .sortedBy { if (it.kind == ServerKind.JKPLAYER) 0 else 1 }
@@ -586,6 +691,7 @@ private fun Overlay(
                 positionMs = positionMs,
                 durationMs = durationMs,
                 onSeek = onSeek,
+                onFocused = onOverlayFocused,
             )
 
             // Sin botones de adelantar/retroceder ni de salir: el D-pad
@@ -604,14 +710,23 @@ private fun SeekBar(
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
+    onFocused: () -> Unit = {},
 ) {
     val safeDuration = durationMs.coerceAtLeast(1L)
     val fraction = (positionMs.toFloat() / safeDuration).coerceIn(0f, 1f)
+    var focused by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(34.dp)
             .focusable()
+            .onFocusChanged {
+                focused = it.isFocused
+                // La barra también forma parte del overlay: el Box raíz no
+                // debe buscar con ◀ ▶ (lo haría dos veces) mientras está
+                // enfocada.
+                if (it.isFocused) onFocused()
+            }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 val step = 10_000L
@@ -632,13 +747,19 @@ private fun SeekBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(5.dp)
-                .background(JkTextSecondary.copy(alpha = 0.45f)),
+                .height(if (focused) 7.dp else 5.dp)
+                .background(
+                    if (focused) {
+                        JkTextPrimary.copy(alpha = 0.55f)
+                    } else {
+                        JkTextSecondary.copy(alpha = 0.45f)
+                    },
+                ),
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth(fraction)
-                .height(5.dp)
+                .height(if (focused) 7.dp else 5.dp)
                 .background(JkOrange),
         )
         Box(
@@ -650,8 +771,15 @@ private fun SeekBar(
             Box(
                 modifier = Modifier
                     .padding(end = 1.dp)
-                    .background(JkOrange, androidx.compose.foundation.shape.CircleShape)
-                    .padding(6.dp),
+                    // Punto de la barra: crece y se rodea de blanco al enfocar
+                    // para que el D-pad tenga una referencia visible.
+                    .size(if (focused) 18.dp else 12.dp)
+                    .background(JkOrange, CircleShape)
+                    .border(
+                        width = if (focused) 2.dp else 0.dp,
+                        color = JkTextPrimary,
+                        shape = CircleShape,
+                    ),
             )
         }
         Text(

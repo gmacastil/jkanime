@@ -127,6 +127,7 @@
     <string name="player_servers">Servidores</string>
     <string name="player_server_failed">%1$s no cargó</string>
     <string name="player_change_server_cd">Cambiar servidor</string>
+    <string name="player_close_servers_cd">Cerrar la lista de servidores</string>
     <string name="player_pause_cd">Pausar</string>
     <string name="player_play_cd">Reproducir</string>
     <string name="player_seek_position">%1$s / %2$s   ◀ ▶ 10 s</string>

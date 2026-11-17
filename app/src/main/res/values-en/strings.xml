@@ -123,6 +123,7 @@
     <string name="player_servers">Servers</string>
     <string name="player_server_failed">%1$s didn\'t load</string>
     <string name="player_change_server_cd">Change server</string>
+    <string name="player_close_servers_cd">Close the server list</string>
     <string name="player_pause_cd">Pause</string>
     <string name="player_play_cd">Play</string>
     <string name="player_seek_position">%1$s / %2$s   ◀ ▶ 10 s</string>

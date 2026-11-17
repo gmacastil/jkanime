@@ -2009,3 +2009,82 @@ emulador es vertical aunque el contenido esté en apaisado.
   `:app-mobile:lintDebug` pasan; Lint conserva únicamente advertencias
   informativas de dependencias, orientación, recursos de iconos y APIs
   recomendadas.
+
+## F21 — foco del D-pad en el reproductor de TV (2026-11-17)
+
+**Síntoma.** Con el vídeo reproduciendo y los controles ya ocultos, OK abría
+el overlay; al pausar y volver a dar play los controles seguían en pantalla
+pero el siguiente OK ya **no pausaba**: solo los ocultaba. Había que pulsar
+Arriba para "recuperar" el botón. En el mando era indistinguible de "se perdió
+el foco", porque el botón central se veía igual con y sin foco.
+
+**Causa raíz** (confirmada con `logcat`, tag `JkFocus`):
+
+```text
+ROOT key=DPAD_CENTER type=KeyDown overlay=false focused=false playing=true
+ROOT key=DPAD_CENTER type=KeyUp   overlay=true  focused=false playing=true
+PLAY_BTN focus=false
+VISIBILITY_CHANGED overlay=true
+...
+TOGGLE_PLAY overlay=true focused=true playing=true   <- play
+PLAY_BTN focus=false
+VISIBILITY_CHANGED overlay=false                     <- overlay destruido
+```
+
+El callback del botón hacía `overlayVisible = !playing`. Al reanudar, el
+overlay se **destruía** y con él su nodo enfocable; `overlayHasFocus` seguía
+en `true` (nadie lo reseteaba) y el `Box` raíz ignoraba el OK. Al volver a
+mostrar los controles nadie pedía el foco, así que el siguiente OK caía en el
+`Box` raíz sin foco y solo alternaba visibilidad.
+
+**Solución** (`app/.../feature/player/PlayerScreen.kt`):
+
+1. `overlayFocusRequest` (contador) + `LaunchedEffect` que enfoca play/pausa
+   con reintento multi-frame (12 frames). Solo se dispara cuando el usuario lo
+   pide (`showControls(true)`), no cuando los controles aparecen solos por un
+   seek o por el aviso de servidor caído.
+2. `showControls(focusControls: Boolean)` centraliza "mostrar + reiniciar el
+   temporizador + (opcional) llevar el foco".
+3. **OK con el overlay sin foco muestra y enfoca**; con foco en un control
+   devuelve `false` para que el botón reciba su click.
+4. Se eliminó `overlayVisible = !playing`: al reanudar los controles se quedan
+   y se auto-ocultan a los 6 s, así el foco nunca queda en el aire.
+5. El auto-ocultado ya **no** exige `!overlayHasFocus` (si no, con el botón
+   enfocado los controles no se iban nunca).
+6. Arriba desde los controles y desde la barra oculta el overlay (ver
+   `tv-51-up`); el foco vuelve al vídeo con reintento multi-frame.
+7. **Indicador de foco visible**: el play/pausa central pasa a naranja con
+   anillo blanco de 3 dp y escala 1.06; el `SeekBar` engorda a 7 dp y el punto
+   crece a 18 dp con borde blanco al enfocarse.
+8. Con `fallbackSuggested` el foco va al botón **cambiar servidor**
+   (`changeServerFocus`), que es lo útil cuando la fuente no arrancó.
+9. Al elegir servidor o cerrar la lista el botón desaparece: el foco se
+   devuelve al play/pausa (antes quedaba huérfano y el D-pad muerto).
+10. El foco inicial del reproductor también reintenta multi-frame: el
+    `PlayerView` nativo tarda un frame en colocarse.
+
+**Flujo verificado en `jktv`** (APK debug `VERSION_CODE=200…202`):
+
+| Paso | Tecla | Resultado |
+|---|---|---|
+| 1 | OK (overlay oculto) | aparecen los controles y el play/pausa queda enfocado (naranja + anillo) |
+| 2 | OK | pausa; los controles siguen y el foco no se mueve |
+| 3 | OK | play; los controles siguen y se auto-ocultan a los 6 s |
+| 4 | OK | aparecen de nuevo enfocados |
+| 5 | OK | **pausa** (antes fallaba) |
+| 6 | DOWN | el foco baja al `SeekBar` (barra de 7 dp + punto blanco) |
+| 7 | LEFT / RIGHT | seek de ±10 s **una sola vez** (el `Box` raíz no lo repite) |
+| 8 | UP | oculta los controles y devuelve el foco al vídeo |
+
+**Trampas aprendidas**
+
+- Un overlay compuesto condicionalmente (`if (overlayVisible) { Overlay(...) }`)
+  se lleva el foco del sistema al destruirse, y volver a componerlo **no**
+  devuelve el foco: hay que pedirlo explícitamente.
+- Cualquier bandera tipo `overlayHasFocus` que dependa de la existencia del
+  nodo hay que resetearla cuando ese nodo desaparece.
+- El foco no se puede pedir durante la misma composición: `requestFocus()`
+  devuelve `false` en silencio (o lanza) hasta que el nodo está colocado.
+  Reintentar con `withFrameNanos { }` es el patrón que funciona en TV.
+- Un botón sin estado de foco visual hace que el bug sea invisible en
+  capturas: conviene marcar el foco con color + borde + escala.

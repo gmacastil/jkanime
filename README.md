@@ -44,7 +44,7 @@ locales en la misma TV (estilo Netflix) y reproducción nativa HLS.
 | 1.5.3 | Fix del vídeo negro en móvil (documento colapsado a 0 px) + vídeo 16:9 en horizontal | ✅ |
 | 1.5.4 | Sync unificado TV/móvil (clave de 6 hex en el gate) + reproductor móvil a pantalla completa con una sola barra | ✅ |
 | 1.5.5 | Detalle móvil con ordenar/Todo visto, clasificación real de favoritos y controles de player con auto-ocultado | ✅ |
-| 1.5.6 | Actualización manual TV/móvil, foco robusto del diálogo y limpieza de opciones obsoletas | En desarrollo |
+| 1.5.6 | Actualización manual TV/móvil, foco robusto del diálogo y del reproductor TV, limpieza de opciones obsoletas | En desarrollo |
 
 No hay fases abiertas en el roadmap original; ver [Pendientes](#pendientes) para
 tareas sueltas (requieren acceso humano a un dashboard o un segundo dispositivo
@@ -121,7 +121,11 @@ físico).
 - Reproducción de fuentes directas HLS mediante Media3/ExoPlayer para evitar la
   pantalla negra observada en algunos televisores con WebView.
 - Fallback entre servidores Desu y Magi cuando una fuente falla o no inicia.
-- Controles TV de reproducción, pausa, avance/retroceso y cambio de servidor.
+- Controles TV: OK sobre el vídeo muestra los controles y deja el foco en
+  play/pausa (naranja con anillo blanco), OK pausa/reanuda, Arriba vuelve al
+  vídeo y Abajo baja a la barra de progreso, donde ◀ ▶ busca ±10 s. Los
+  controles se auto-ocultan a los 6 s y el foco se repone siempre que se
+  muestran, así que pausar y reanudar repetidamente nunca lo pierde.
 - En el móvil el vídeo ocupa la pantalla en apaisado; play/pausa y ±10 s están
   sobre el vídeo, con doble toque a izquierda/derecha para buscar. La barra
   inferior conserva únicamente slider, tiempo y salir.
