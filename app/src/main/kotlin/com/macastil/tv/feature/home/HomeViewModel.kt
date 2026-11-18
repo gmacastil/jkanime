@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.macastil.tv.catalog.JkanimeRepository
+import com.macastil.tv.catalog.episodeCountsFallback
 import com.macastil.tv.data.local.FavoriteEntity
 import com.macastil.tv.data.local.LibraryRepository
 import com.macastil.tv.model.AnimeCard
@@ -95,10 +96,18 @@ class HomeViewModel(
                 // Una ficha caída no debe dejar sin datos a las demás.
                 runCatching { repository.detail(favorite.slug) }
                     .onSuccess { detail ->
+                        // Fichas sin "Episodios" ni `a#uep` (p. ej.
+                        // bukiyou-na-senpai): el total solo está en el AJAX de
+                        // episodios. Se pide una vez, dentro de este refresco.
+                        val fallback = runCatching { repository.episodeCountsFallback(detail) }
+                            .getOrNull()
                         library.updateAired(
                             slug = favorite.slug,
-                            lastAiredEpisode = detail.lastEpisodeNumber,
-                            totalEpisodes = detail.totalEpisodes?.takeIf { it > 0 },
+                            lastAiredEpisode = detail.lastEpisodeNumber?.takeIf { it > 0 }
+                                ?: fallback?.lastAiredEpisode,
+                            totalEpisodes = (detail.totalEpisodes?.takeIf { it > 0 }
+                                ?: fallback?.totalEpisodes
+                                ?: favorite.totalEpisodes)?.takeIf { it > 0 },
                             statusLabel = detail.statusLabel ?: detail.status.label,
                         )
                     }

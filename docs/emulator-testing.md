@@ -2214,3 +2214,56 @@ menos, en emisión con total 0, sin datos, total 0 sin aired (`bukiyou`), huecos
   arrancar: el pull del arranque (`JkGraph.syncEngine.syncInBackground`) trae
   la foto remota con `updatedAt` más nuevo y pisa el valor inyectado por LWW,
   así que el refresco de Favoritos parecía haberlo modificado.
+
+### F23.1 — favoritos "sin datos": completar desde el AJAX de episodios (2026-11-18)
+
+Con F23 quedaba **1 favorito sin datos** (`bukiyou-na-senpai`): el sitio publica
+`Episodios: 0` y **no** trae `a#uep`, así que `totalEpisodes=0` y
+`lastAiredEpisode=null` → "Pendientes" sin badge para siempre.
+
+**Diagnóstico**
+
+- `GET /bukiyou-na-senpai/` → `Episodios:</span> 0`, sin `a#uep`,
+  `data-status="finished"`, `#episodes-content` **vacío** (se llena por JS).
+- `POST /ajax/episodes/4368/1` (con `X-CSRF-TOKEN` y cookie de la ficha) →
+  `{"total":12,"last_page":1,"data":[1..12]}`. El dato **sí** existe: solo que
+  en el AJAX, no en la ficha.
+- Ojo con el parser: `Episodios: 0` llega como **0**, no como `null`. La guarda
+  `if (totalEpisodes != null ...)` no disparaba el fallback y la primera prueba
+  parecía "no funciona". Lo correcto es `<= 0`.
+
+**Fix (1.5.16, TV + móvil)**
+
+`data/catalog/EpisodeCounts.kt`:
+
+- `needsEpisodeCounts(total, aired)` → `(total ?: 0) <= 0 && (aired ?: 0) <= 0`.
+- `episodeCountsOf(page, lastPageMaxNumber, status)`: `total` = `page.total` (o el
+  número más alto listado); `aired` solo para `AiringStatus.CURRENTLY` (en
+  concluidos manda el total, igual que antes).
+- `JkanimeRepository.episodeCountsFallback(detail)`: si el detalle no trae nada,
+  pide `page 1` del AJAX y, **solo** en emisión con más de una página, la última
+  página para el número real del último capítulo. Se ejecuta dentro del refresco
+  que ya existe (guarda de 30 min) y solo para fichas sin datos.
+- TV (`HomeViewModel.refreshFavoritesIfStale`) y móvil (`FavoritesScreen`)
+  consumen el fallback; ambos tratan `0` como ausente con `takeIf { it > 0 }` y
+  conservan el total previo si todo falla.
+
+**Verificado en los dos emuladores (space real `51514708`)**
+
+- Móvil: `bukiyou-na-senpai` pasó de `total=0` a `total=12` y se movió de
+  *Pending* a *Up to date* (badge verde). De paso quedaron completados
+  `made-in-abyss` (13), `samurai-champloo` (26), `made-in-abyss: retsujitsu`
+  (12), `isekai-meikyuu-de-harem-wo` (12): **0 favoritos sin datos** de 60.
+- TV (`jktv`, favorito inyectado en Room con `aired=NULL, total=NULL, visto=12`):
+  tras abrir Favoritos, Room quedó con `total_episodes=12` y la tarjeta pasó de
+  "Pending (Ep 12)" a "Up to date" verde.
+- Contraste con el sitio: `made-in-abyss` 13, `samurai-champloo` 26,
+  `kusuriya-...-3rd-season` (`a#uep /7/`, `Episodios: 0`) → `aired=7` correcto.
+- `./gradlew test` → **121 tests, 0 fallos, 1 skipped** (`EpisodeCountsTest`, 7
+  casos, incluido el fixture real `episodes_no_episode_count.json`).
+
+**Trampa**
+
+- El refresh de Favoritos puede tardar 1-2 s por ficha con fallback (detalle +
+  AJAX, con rate limit de 700 ms). Solo afecta a las que no tienen datos, y
+  normalmente contrae el grupo *Pending* en la primera pasada.

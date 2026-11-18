@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.macastil.mobile.JkGraph
 import com.macastil.mobile.R
+import com.macastil.tv.catalog.episodeCountsFallback
 import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.theme.JkTextSecondary
 import kotlinx.coroutines.launch
@@ -79,10 +80,18 @@ fun FavoritesScreen(
             .forEach { favorite ->
                 runCatching { JkGraph.repository.detail(favorite.slug) }
                     .onSuccess { detail ->
+                        // Fichas sin "Episodios" ni `a#uep`: el total solo está
+                        // en el AJAX de episodios (ver [episodeCountsFallback]).
+                        val fallback = runCatching {
+                            JkGraph.repository.episodeCountsFallback(detail)
+                        }.getOrNull()
                         JkGraph.library.updateFavoriteCounters(
                             slug = favorite.slug,
-                            lastAiredEpisode = detail.lastEpisodeNumber,
-                            totalEpisodes = detail.totalEpisodes,
+                            lastAiredEpisode = detail.lastEpisodeNumber?.takeIf { it > 0 }
+                                ?: fallback?.lastAiredEpisode,
+                            totalEpisodes = detail.totalEpisodes?.takeIf { it > 0 }
+                                ?: fallback?.totalEpisodes
+                                ?: favorite.totalEpisodes,
                             statusLabel = detail.statusLabel,
                         )
                     }
