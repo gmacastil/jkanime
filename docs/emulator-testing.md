@@ -2267,3 +2267,81 @@ Con F23 quedaba **1 favorito sin datos** (`bukiyou-na-senpai`): el sitio publica
 - El refresh de Favoritos puede tardar 1-2 s por ficha con fallback (detalle +
   AJAX, con rate limit de 700 ms). Solo afecta a las que no tienen datos, y
   normalmente contrae el grupo *Pending* en la primera pasada.
+
+### F24 — el botón "Actualizar" no instalaba nada (2026-11-18)
+
+Síntoma reportado por el usuario: en el móvil se pulsa *Actualizar*, se ve el
+diálogo, se pulsa *Update* —parece que descarga— y no pasa nada. En la TV el
+instalador sí abría, pero moría en un aviso sin salida.
+
+**Tres causas independientes**
+
+1. **Móvil: `FileProvider` sin el directorio del APK.** El APK se descarga en
+   `cache/updates/`, pero `app-mobile/src/main/res/xml/file_paths.xml` solo
+   declaraba `<external-path>`. `FileProvider.getUriForFile()` lanzaba
+   `IllegalArgumentException: Failed to find configured root that contains …`,
+   la excepción se tragaba el flujo y el diálogo quedaba igual (además el
+   mensaje de error solo se pintaba cuando **no** había actualización, así que
+   ni se veía). Comprobación en logcat: no había ni rastro de
+   `PackageInstallerActivity`.
+2. **Móvil: falta `REQUEST_INSTALL_PACKAGES` en el manifest** (la TV sí lo
+   tenía). Sin ese permiso el sistema no deja instalar el APK aunque el intent
+   llegue.
+3. **Ambas: sin gestionar el app-op "instalar apps desconocidas"** (Android 8+).
+   Con el permiso declarado pero **no concedido**, el instalador abre un aviso
+   muerto: *"For your security, your TV currently isn't allowed to install
+   unknown apps from this source… You can change this in Settings."* El botón
+   *Settings* de ese aviso deja al usuario en Ajustes sin saber qué activar y
+   al volver ya no se reintenta nada.
+
+**Fix (1.5.17, TV + móvil)**
+
+- Nuevo `ApkInstaller` en cada app (TV: `feature/update/`, móvil: `update/`):
+  - `canInstall()` → `PackageManager.canRequestPackageInstalls()` (API 26+).
+  - `launch()` devuelve `STARTED` / `NEEDS_PERMISSION` / `NO_INSTALLER`,
+    comprueba que el APK existe y pesa > 0, captura el
+    `IllegalArgumentException` del FileProvider y verifica que el intent
+    resuelve a un instalador.
+  - `openPermissionSettings()`: `ACTION_MANAGE_UNKNOWN_APP_SOURCES` con el
+    paquete, degradando a `ACTION_MANAGE_APPLICATIONS_SETTINGS`,
+    `ACTION_APPLICATION_DETAILS_SETTINGS` y `ACTION_SETTINGS` (en TV el camino
+    corto abre el panel de "Install unknown apps" con jkanimetv ya listado).
+- El diálogo tiene ahora un tercer estado: **"Permitir e instalar"** con el
+  texto explicativo. Al pulsarlo se descarga y se abre Ajustes; el APK queda en
+  caché.
+- **El reintento va en `onResume` de la Activity** (`resumeTick` observado por
+  Compose), no en un bucle. Con un bucle desde segundo plano Android aborta el
+  lanzamiento (`Background activity launch blocked!` → `Abort background
+  activity starts`): el instalador nunca salía y, encima, el estado se perdía
+  porque `startActivity` no lanza excepción.
+- `UpdateManager` expone `apkFile()` / `installDownloaded()` para reintentar sin
+  volver a descargar, y `downloadAndInstall()` devuelve `InstallLaunch`.
+- Móvil: `file_paths.xml` declara `<cache-path name="updates" path="updates/"/>`
+  y el manifest añade `REQUEST_INSTALL_PACKAGES`. El mensaje de error se pinta
+  también cuando hay actualización (antes era invisible).
+
+**Verificación**
+
+- Móvil (`jkphone`), con el app-op en `default` (denegado): *Update* → abre
+  `Settings → Install unknown apps → jkanime`; al activar el interruptor y
+  volver con BACK, la app reintenta sola y abre el instalador
+  (`PackageInstallerActivity`), sin `Background activity launch blocked`.
+- Instalación real de punta a punta: APK servido por HTTP local con la **misma
+  firma debug** y versión 1.5.99 → el instalador quedó en `InstallSuccess` y
+  `dumpsys package` mostró `versionCode=300 / versionName=1.5.99` (el fallo
+  previo con `INSTALL_FAILED_UPDATE_INCOMPATIBLE` era solo firmar debug vs el
+  APK release del CI, no un bug de la app).
+- TV (`jktv`): *Update* → "One permission is missing…" → panel
+  *Install unknown apps* con jkanimetv → al volver, el instalador abre solo y
+  tras *Update* queda `InstallSuccess` (`1.5.99`).
+- `./gradlew test` → **121 tests, 0 fallos, 1 skipped**.
+
+**Trampas**
+
+- `canRequestPackageInstalls()` y el listado de Ajustes pueden discrepar: tras
+  una **reinstalación** (`adb install` de otra firma) el app-op de la TV volvió
+  a `deny` mientras el panel mostraba el toggle; hay que concederlo de nuevo.
+- No basta con comprobar el permiso y lanzar: si el lanzamiento ocurre con la
+  app en segundo plano, Android lo aborta en silencio.
+- Un `startActivity` bloqueado **no lanza excepción**, así que no se puede
+  detectar con `runCatching`: por eso el reintento va en `onResume`.

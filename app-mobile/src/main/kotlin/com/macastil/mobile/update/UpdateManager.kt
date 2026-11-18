@@ -1,8 +1,6 @@
 package com.macastil.mobile.update
 
 import android.content.Context
-import android.content.Intent
-import androidx.core.content.FileProvider
 import com.macastil.mobile.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -69,24 +67,29 @@ object UpdateManager {
             }
         }
 
-    suspend fun downloadAndInstall(context: Context, update: AppUpdate) =
+    /** ¿El sistema permitirá a esta app lanzar el instalador? */
+    fun canInstall(context: Context): Boolean = ApkInstaller.canInstall(context)
+
+    /** Ruta local del APK de una versión ya descargada. */
+    fun apkFile(context: Context, versionName: String): File =
+        File(File(context.cacheDir, "updates"), "jkanime-mobile-$versionName.apk")
+
+    suspend fun downloadAndInstall(context: Context, update: AppUpdate): InstallLaunch =
         withContext(Dispatchers.IO) {
-            val apk = File(context.cacheDir, "updates/jkanime-mobile-${update.versionName}.apk")
-                .apply { parentFile?.mkdirs() }
+            val apk = apkFile(context, update.versionName)
+            apk.parentFile?.mkdirs()
             URL(update.downloadUrl).openStream().use { input ->
                 apk.outputStream().use { output -> input.copyTo(output) }
             }
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${BuildConfig.APPLICATION_ID}.fileprovider",
-                apk,
-            )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            withContext(Dispatchers.Main) { context.startActivity(intent) }
+            // Si el permiso faltaba, el APK queda en caché y este reintento no
+            // vuelve a descargar nada.
+            ApkInstaller.launch(context, apk)
+        }
+
+    /** Reintenta instalar un APK ya descargado (p. ej. al volver de Ajustes). */
+    suspend fun installDownloaded(context: Context, update: AppUpdate): InstallLaunch =
+        withContext(Dispatchers.IO) {
+            ApkInstaller.launch(context, apkFile(context, update.versionName))
         }
 
     private fun baseVersion(tag: String): String? {

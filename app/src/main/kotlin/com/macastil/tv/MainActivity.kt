@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
 import com.macastil.tv.Graph
 import com.macastil.tv.nav.JkNavHost
 import com.macastil.tv.feature.update.AppUpdate
+import com.macastil.tv.feature.update.InstallLaunch
 import com.macastil.tv.feature.update.UpdateManager
 import com.macastil.tv.ui.component.TvActionButton
 import com.macastil.tv.ui.theme.JkBackground
@@ -55,6 +57,18 @@ import androidx.tv.material3.Text
 class MainActivity : ComponentActivity() {
 
     /**
+     * Contador de `onResume` observado por Compose: es el único momento en que
+     * se puede lanzar el instalador tras volver de Ajustes, porque con la app
+     * en segundo plano Android bloquea los inicios de actividad.
+     */
+    private var resumeTick by mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        resumeTick++
+    }
+
+    /**
      * Idioma elegido en el perfil (AppLocale): hay que envolver el Context
      * ANTES de que el Activity cree recursos, o `stringResource` seguiría
      * resolviendo con el locale del sistema.
@@ -71,9 +85,62 @@ class MainActivity : ComponentActivity() {
                 var update by remember { mutableStateOf<AppUpdate?>(null) }
                 var checking by remember { mutableStateOf(true) }
                  var installing by remember { mutableStateOf(false) }
+                 var needsPermission by remember { mutableStateOf(false) }
                  var updateError by remember { mutableStateOf<String?>(null) }
                  var updateMessage by remember { mutableStateOf<String?>(null) }
                  val scope = rememberCoroutineScope()
+
+                 // Descarga el APK y lanza el instalador. Si el sistema aún no
+                 // permite instalar apps desconocidas, se abre Ajustes y el
+                 // diálogo queda en modo "Permitir" (ver el reintento de abajo).
+                 val startInstall: (AppUpdate, Boolean) -> Unit = { candidate, retry ->
+                     installing = true
+                     updateError = null
+                     scope.launch {
+                         try {
+                             val result = if (retry) {
+                                 UpdateManager.installDownloaded(this@MainActivity, candidate)
+                             } else {
+                                 UpdateManager.downloadAndInstall(this@MainActivity, candidate)
+                             }
+                             when (result) {
+                                 InstallLaunch.STARTED -> {
+                                     installing = false
+                                     needsPermission = false
+                                     update = null
+                                 }
+                                 InstallLaunch.NEEDS_PERMISSION -> {
+                                     installing = false
+                                     needsPermission = true
+                                 }
+                                 InstallLaunch.NO_INSTALLER -> {
+                                     installing = false
+                                     updateError = getString(R.string.update_no_installer)
+                                 }
+                             }
+                         } catch (cancel: CancellationException) {
+                             throw cancel
+                         } catch (error: Exception) {
+                             installing = false
+                             updateError = error.message
+                                 ?: getString(R.string.update_start_error)
+                         }
+                     }
+                 }
+
+                 // Reintento al volver de Ajustes: el APK ya está descargado,
+                 // así que en cuanto el permiso aparece se instala solo. Tiene
+                 // que dispararse en onResume y no desde un bucle: lanzar el
+                 // instalador con la app en segundo plano lo bloquea Android
+                 // ("Background activity launch blocked") y la actualización se
+                 // perdería.
+                 LaunchedEffect(resumeTick) {
+                     if (resumeTick == 0) return@LaunchedEffect
+                     if (needsPermission && UpdateManager.canInstall(this@MainActivity)) {
+                         needsPermission = false
+                         update?.let { startInstall(it, true) }
+                     }
+                 }
 
                  val checkForUpdate: () -> Unit = {
                      if (!checking) {
@@ -143,24 +210,17 @@ class MainActivity : ComponentActivity() {
                             UpdatePrompt(
                                 update = update!!,
                                 installing = installing,
+                                needsPermission = needsPermission,
                                 error = updateError,
                                 onInstall = {
-                                    val candidate = update ?: return@UpdatePrompt
-                                    installing = true
-                                    updateError = null
-                                    scope.launch {
-                                        runCatching {
-                                            UpdateManager.downloadAndInstall(this@MainActivity, candidate)
-                                        }.onFailure {
-                                            installing = false
-                                            updateError = it.message
-                                                ?: getString(R.string.update_start_error)
-                                        }
-                                    }
+                                    update?.let { startInstall(it, false) }
                                 },
-                                 onDismiss = { update = null },
-                             )
-                         }
+                                onDismiss = {
+                                    update = null
+                                    needsPermission = false
+                                },
+                            )
+                        }
                          if (!checking && updateMessage != null) {
                              UpdateStatusPrompt(
                                  message = updateMessage!!,
@@ -204,6 +264,7 @@ private fun VersionLabel(modifier: Modifier = Modifier) {
 private fun UpdatePrompt(
     update: AppUpdate,
     installing: Boolean,
+    needsPermission: Boolean,
     error: String?,
     onInstall: () -> Unit,
     onDismiss: () -> Unit,
@@ -236,10 +297,10 @@ private fun UpdatePrompt(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    text = if (installing) {
-                        stringResource(R.string.update_downloading_body)
-                    } else {
-                        stringResource(R.string.update_body)
+                    text = when {
+                        installing -> stringResource(R.string.update_downloading_body)
+                        needsPermission -> stringResource(R.string.update_permission_needed)
+                        else -> stringResource(R.string.update_body)
                     },
                     color = JkTextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
@@ -258,10 +319,10 @@ private fun UpdatePrompt(
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
                 ) {
                     TvActionButton(
-                        text = if (installing) {
-                            stringResource(R.string.update_downloading)
-                        } else {
-                            stringResource(R.string.update_action)
+                        text = when {
+                            installing -> stringResource(R.string.update_downloading)
+                            needsPermission -> stringResource(R.string.update_permission_action)
+                            else -> stringResource(R.string.update_action)
                         },
                         primary = true,
                         enabled = !installing,

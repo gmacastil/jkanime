@@ -97,6 +97,9 @@
     <string name="update_none_available">Ya tienes la última versión</string>
     <string name="update_check_error">No se pudo comprobar si hay actualizaciones</string>
     <string name="update_start_error">No se pudo iniciar la actualización</string>
+    <string name="update_permission_needed">Falta un permiso: permite a esta app instalar aplicaciones desconocidas. Te llevamos a Ajustes y la instalación continúa sola al volver.</string>
+    <string name="update_permission_action">Permitir e instalar</string>
+    <string name="update_no_installer">No se encontró el instalador de paquetes del sistema</string>
 
     <!-- Reproductor -->
     <string name="player_episode_title">Ep %1$d · %2$s</string>

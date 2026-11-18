@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Actualizador: sin este permiso el instalador del sistema rechaza el
+         APK descargado (y en Android 8+ el usuario debe concederlo a mano). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Requisitos de móvil: touchscreen obligatorio, no es Leanback. -->
     <uses-feature
