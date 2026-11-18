@@ -169,6 +169,7 @@ el `Box` raíz sin foco y solo alternaba visibilidad.
 
 | Version | Contenido | Fecha |
 |---|---|---|
+| **1.5.12** | Nueva versión con fixes de stability y UI menor | 2026-11-17 |
 | **1.5.11** | Fix null safety en cálculo de pending/Al día: si totalEpisodes=0 pero lastAiredEpisode>0 usa lastAiredEpisode; si ambos son 0 muestra "Pendientes" por seguridad | 2026-11-17 |
 | **1.5.9** | Directorio y búsqueda móvil, foco robusto TV, limpieza de opciones | 2026-11-17 |
 | 1.5.8 | Fix de 'no se pudo comprobar si hay actualizaciones' | 2026-11-17 |
@@ -179,6 +180,8 @@ el `Box` raíz sin foco y solo alternaba visibilidad.
 
 | Release | APK | Tamaño |
 |---|---|---|
+| `v1.5.12-tv` | `jkanime-tv-1.5.12.apk` | 11,9 MB |
+| `v1.5.12-mobile` | `jkanime-mobile-1.5.12.apk` | 12,3 MB |
 | `v1.5.11-tv` | `jkanime-tv-1.5.11.apk` | 11,8 MB |
 | `v1.5.11-mobile` | `jkanime-mobile-1.5.11.apk` | 12,2 MB |
 | `v1.5.9-tv` | `jkanime-tv-1.5.9.apk` | 11,7 MB |
