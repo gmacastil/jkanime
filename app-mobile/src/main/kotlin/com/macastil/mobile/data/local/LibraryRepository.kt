@@ -218,8 +218,11 @@ class LibraryRepository(
                 lastAiredEpisode = lastAiredEpisode,
                 totalEpisodes = totalEpisodes,
                 statusLabel = statusLabel ?: favorite.statusLabel,
+                // Solo `syncedAt`: los contadores vienen del sitio, no son una
+                // edición del usuario. Tocar `updatedAt` re-marcaba los 60
+                // favoritos como modificados en cada refresco y los re-subía
+                // en el push (last-write-wins). La TV ya lo hace así.
                 syncedAt = now,
-                updatedAt = now,
             )
         }
         persistFavorites()

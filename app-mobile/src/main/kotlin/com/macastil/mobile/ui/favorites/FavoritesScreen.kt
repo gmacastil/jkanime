@@ -36,6 +36,13 @@ import com.macastil.tv.ui.component.PosterCard
 import com.macastil.tv.ui.theme.JkTextSecondary
 import kotlinx.coroutines.launch
 
+/**
+ * Antigüedad a partir de la cual se vuelve a pedir el detalle de un favorito al
+ * abrir Favoritos. Igual que la TV: sin esta guarda se pedían las 60 fichas en
+ * cada entrada a la pantalla.
+ */
+private const val STALE_AFTER_MS = 30 * 60 * 1000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FavoritesScreen(
@@ -49,34 +56,10 @@ fun FavoritesScreen(
         .distinctBy { it.slug }
         .sortedBy { it.title.lowercase() }
 
-    // No usamos lastWatchedEpisode para decidir si está al día: ese valor solo
-    // representa el capítulo más alto visto y puede ocultar huecos (por ejemplo,
-    // vistos 1 y 3, pero falta el 2). Se comprueba cada capítulo publicado.
+    // Ver [favoriteStatus]: cuenta cada capítulo publicado (detecta huecos) y
+    // usa el mayor entre total y último emitido. Sin datos → Pendientes.
     val statuses = remember(visible, progress) {
-        visible.map { favorite ->
-            // Primero obtenemos el total: el mayor de totalEpisodes y lastAiredEpisode
-            val totalByAired = favorite.lastAiredEpisode ?: 0
-            val totalByDB = favorite.totalEpisodes ?: 0
-            val total = totalByDB.coerceAtLeast(totalByAired)  // Si DB tiene más, usamos DB; si aired tiene más, usamos aired
-            val released = total.coerceAtLeast(0) // Asegurar que no sea negativo
-            // Contar watched (episodios completados)
-            val watchedSet = progress.asSequence()
-                .filter { it.slug == favorite.slug && it.completed && it.episode > 0 }
-                .map { it.episode }
-                .toSet()
-            // Calcular pending: cuántos del 1..total NO están en watched
-            val pendingInt: Int = if (released != null && released > 0) {
-                (1..released).count { it !in watchedSet }
-            } else {
-                -1  // Indicador de "desconocido"
-            }
-            // FavoriteStatus espera pending como Int?, así que lo convertimos
-            val pending: Int? = if (pendingInt >= 0) pendingInt else null
-            // Lógica de "Al día": si released fue forzado y pending es 0, es "Al día"
-            // Si released es null o 0, es "Pendientes" por seguridad
-            val isSafePending = released == null || released == 0 || (released > 0 && pending == null)
-            FavoriteStatus(favorite, pending, released != null && pending == 0 && !isSafePending)
-        }
+        visible.map { favoriteStatus(it, progress) }
     }
     val pending = statuses.filterNot { it.upToDate }
     val upToDate = statuses.filter { it.upToDate }
@@ -85,9 +68,14 @@ fun FavoritesScreen(
     // La única actualización de contadores ocurre al entrar a esta pantalla.
     // No se ejecuta desde Home ni desde cada tarjeta: así evitamos peticiones
     // repetidas y los grupos se recalculan con los datos actuales del sitio.
+    //
+    // Solo se piden los que llevan más de [STALE_AFTER_MS] sin sincronizar: con
+    // el rate limit del cliente (1 petición / 700 ms) refrescar los 60 favoritos
+    // en cada entrada costaba casi un minuto de red para nada.
     LaunchedEffect(Unit) {
+        val now = System.currentTimeMillis()
         JkGraph.library.getAllFavorites()
-            .filter { it.deletedAt == null }
+            .filter { it.deletedAt == null && now - it.syncedAt > STALE_AFTER_MS }
             .forEach { favorite ->
                 runCatching { JkGraph.repository.detail(favorite.slug) }
                     .onSuccess { detail ->
@@ -177,12 +165,6 @@ fun FavoritesScreen(
     }
 }
 
-private data class FavoriteStatus(
-    val favorite: com.macastil.mobile.data.local.FavoriteEntity,
-    val pendingCount: Int?,
-    val upToDate: Boolean,
-)
-
 @Composable
 private fun FavoriteCard(
     status: FavoriteStatus,
@@ -190,11 +172,18 @@ private fun FavoriteCard(
     scope: kotlinx.coroutines.CoroutineScope,
 ) {
     val favorite = status.favorite
+    // Sin datos de emisión no hay badge de pendientes; la TV muestra en su
+    // lugar el último capítulo visto ("Ep N"), así que replicamos ese criterio.
+    val badge = when {
+        status.pendingCount == null ->
+            favorite.lastWatchedEpisode?.let { stringResource(R.string.favorites_badge_episode, it) }
+        status.pendingCount > 0 -> "+${status.pendingCount}"
+        else -> stringResource(R.string.favorites_badge_up_to_date)
+    }
     PosterCard(
         title = favorite.title,
         posterUrl = favorite.posterUrl,
-        badge = status.pendingCount?.takeIf { it > 0 }?.let { "+$it" }
-            ?: if (status.upToDate) stringResource(R.string.favorites_badge_up_to_date) else null,
+        badge = badge,
         badgeColor = if (status.upToDate) Color(0xFF3DDC84) else Color(0xFFFF6B35),
         subtitle = favorite.statusLabel,
         subtitleColor = when {

@@ -2162,3 +2162,55 @@ emisión podía seguir mostrando "+0" con capítulos nuevos ya publicados.
 - El WAL engaña al verificar: extraer `jk-tv.db` **sin** `-wal` muestra los
   datos viejos. Hay que copiar las tres piezas y abrir el `.db` con el `-wal`
   en el mismo directorio.
+
+## F23 — móvil: guarda de refresco, `updatedAt` y badge sin datos (2026-11-18)
+
+Verificación de la clasificación del móvil con el space real `51514708`
+(60 favoritos vivos, 499 progresos) y tres alineaciones con la TV.
+
+**Lo verificado (sin cambios de lógica)**
+
+- 17 Pendientes / 42 Al día / 1 sin datos = 60.
+- La lógica del móvil (`max(totalEpisodes, lastAiredEpisode)` + huecos en
+  `ProgressEntity.completed`) y la de la TV (`lastAiredEpisode ?:
+  totalEpisodes` − `lastWatchedEpisode`) coinciden en **60/60** favoritos.
+- Spot-check con `curl` contra el sitio: `cyberpunk-edgerunners-2` (10),
+  `chi-chikyuu-no-undou-ni-tsuite` (25), `hotaru-no-yomeiri` (`a#uep /6/`,
+  `Episodios: 0`), `one-punch-man-3` (12), `seihantai-na-kimi-to-boku` (12) →
+  los cinco coinciden con lo almacenado.
+- `bukiyou-na-senpai` es el caso raro real: el sitio publica `Episodios: 0` y
+  **no** trae `a#uep` aunque hay 12 capítulos vistos → Pendientes sin badge,
+  igual que la TV.
+
+**Cambios (1.5.15)**
+
+1. `FavoritesScreen` solo refresca favoritos con `syncedAt` de más de
+   `STALE_AFTER_MS` (30 min), igual que la TV. Antes pedía las 60 fichas en
+   **cada** entrada: ~45-60 s de red por el rate limit de 700 ms.
+   Verificado: primera entrada refrescó 2 fichas (las que tenían `syncedAt=0`)
+   y la segunda entrada **0**.
+2. `LibraryRepository.updateFavoriteCounters` ya **no** toca `updatedAt`, solo
+   `syncedAt`: los contadores vienen del sitio, no son una edición del usuario.
+   Antes cada refresco re-marcaba los favoritos como modificados y el push los
+   re-subía por last-write-wins. Verificado con `syncedAt=0` y
+   `updatedAt=123456789` inyectados: tras el refresco `syncedAt` avanzó y
+   `updatedAt` quedó intacto.
+3. Badge de favorito sin datos: ahora muestra `Ep N` (último visto) en naranja
+   en vez de nada, como la TV. Nuevo string `favorites_badge_episode`
+   (`values`/`values-en`).
+
+**Refactor con test**
+
+La clasificación salió del composable a
+`ui/favorites/FavoriteStatus.kt` (`favoriteStatus(favorite, progress)`), con
+`FavoriteStatusTest` (8 casos): concluido sin `a#uep` al día, un capítulo
+menos, en emisión con total 0, sin datos, total 0 sin aired (`bukiyou`), huecos
+(vistos 1 y 3 de 5), progreso de otro slug y progreso sin `completed`.
+`./gradlew test` → 114 tests, 0 fallos, 1 skipped.
+
+**Trampa**
+
+- Al verificar `updatedAt` hay que **quitar las credenciales de sync** antes de
+  arrancar: el pull del arranque (`JkGraph.syncEngine.syncInBackground`) trae
+  la foto remota con `updatedAt` más nuevo y pisa el valor inyectado por LWW,
+  así que el refresco de Favoritos parecía haberlo modificado.

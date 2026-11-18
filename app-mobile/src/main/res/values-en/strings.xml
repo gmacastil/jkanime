@@ -58,6 +58,7 @@
     <string name="favorites_section_pending">Pending</string>
     <string name="favorites_section_up_to_date">Up to date</string>
     <string name="favorites_badge_up_to_date">Up to date</string>
+    <string name="favorites_badge_episode">Ep %1$d</string>
     <string name="favorites_title">Favorites (%1$d)</string>
     <string name="favorites_empty_title">No favorites yet</string>
     <string name="favorites_empty_hint">Long-press a card on Home to add it.</string>
