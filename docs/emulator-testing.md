@@ -2338,6 +2338,13 @@ instalador sí abría, pero moría en un aviso sin salida.
 
 **Trampas**
 
+- **`canRequestPackageInstalls()` no es fiable en Android TV**: con el app-op en
+  `default` contesta `true` y el instalador rechaza igualmente el APK con el
+  aviso "your TV currently isn't allowed…". La comprobación buena es leer el
+  modo real del app-op (`AppOpsManager`, op `android:request_install_packages`,
+  sin constante pública en el SDK) y exigir `MODE_ALLOWED`; `default` se trata
+  como denegado. En el móvil pasa lo mismo conceptualmente, pero ahí
+  `canRequestPackageInstalls()` sí devolvía `false`.
 - `canRequestPackageInstalls()` y el listado de Ajustes pueden discrepar: tras
   una **reinstalación** (`adb install` de otra firma) el app-op de la TV volvió
   a `deny` mientras el panel mostraba el toggle; hay que concederlo de nuevo.
