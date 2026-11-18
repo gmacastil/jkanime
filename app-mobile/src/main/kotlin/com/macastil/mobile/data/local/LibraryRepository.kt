@@ -316,9 +316,11 @@ data class FavoriteEntity(
 ) {
     val pendingEpisodes: Int?
         get() {
-            val aired = lastAiredEpisode ?: return null
+            // Mismo criterio que la TV: el sitio no publica el último episodio
+            // emitido en las fichas de animes concluidos, solo el total.
+            val released = lastAiredEpisode ?: totalEpisodes ?: return null
             val seen = lastWatchedEpisode ?: 0
-            return (aired - seen).coerceAtLeast(0)
+            return (released - seen).coerceAtLeast(0)
         }
 }
 

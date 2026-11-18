@@ -139,7 +139,10 @@ class LibraryRepository(
             ),
         )
         if (completed) {
-            db.favorites().setLastWatched(owner, slug, episode, now)
+            // `bumpLastWatched` (MAX) y no `setLastWatched`: repasar un
+            // capítulo viejo no debe bajar el último visto y disparar los
+            // pendientes de un anime que ya estaba al día.
+            db.favorites().bumpLastWatched(owner, slug, episode, now)
         }
     }
 
@@ -230,7 +233,23 @@ class LibraryRepository(
         if (local != null && local.updatedAt > remote.updatedAt) return
         // El remoto viene del espacio del perfil activo: se adopta con el
         // owner actual, nunca con el que traiga el JSON.
-        db.favorites().upsert(remote.copy(owner = owner))
+        //
+        // Los datos de emisión (`last_aired_episode`, `total_episodes`) son
+        // derivados del sitio, no una acción del usuario, y solo crecen. Se
+        // conserva el mayor de los dos porque `updateAired` no toca
+        // `updated_at` (no debe falsear el last-write-wins del progreso): un
+        // dispositivo que sincroniza después con una copia vieja borraría lo
+        // refrescado aquí y el anime volvería a "Pendientes" sin motivo.
+        db.favorites().upsert(
+            remote.copy(
+                owner = owner,
+                lastAiredEpisode = maxOf(remote.lastAiredEpisode ?: 0, local?.lastAiredEpisode ?: 0)
+                    .takeIf { it > 0 },
+                totalEpisodes = maxOf(remote.totalEpisodes ?: 0, local?.totalEpisodes ?: 0)
+                    .takeIf { it > 0 },
+                statusLabel = remote.statusLabel ?: local?.statusLabel,
+            ),
+        )
     }
 
     suspend fun mergeProgress(remote: ProgressEntity) {

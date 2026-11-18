@@ -56,6 +56,9 @@ class HomeViewModel(
     private val _section = MutableStateFlow(ProgramacionSection.ANIMES)
     val section: StateFlow<ProgramacionSection> = _section.asStateFlow()
 
+    /** Refresco de datos de emisión en curso (evita duplicarlo al reentrar). */
+    private var refreshJob: Job? = null
+
     /** Requerimiento 4: fila de favoritos, reactiva desde Room. */
     val favorites: StateFlow<List<FavoriteEntity>> = library.favorites
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -68,6 +71,39 @@ class HomeViewModel(
         _showFavorites.value = true
         clearQuery()
         _drawerOpen.value = false
+        refreshFavoritesIfStale()
+    }
+
+    /**
+     * Refresca el dato de emisión de los favoritos al abrir la pantalla.
+     *
+     * El cálculo de pendientes sale de `last_aired_episode`/`total_episodes`,
+     * que hasta ahora solo se refrescaban con el worker de 6 h o con el sync
+     * en la nube (que no consulta el sitio). Sin esto, un anime en emisión
+     * podía seguir mostrando "+0" con capítulos nuevos ya publicados.
+     *
+     * Solo se piden los que llevan más de [STALE_AFTER_MS] sin sincronizar,
+     * para no golpear el sitio cada vez que se entra a la pantalla.
+     */
+    private fun refreshFavoritesIfStale() {
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val stale = runCatching { library.favoritesSnapshot() }.getOrDefault(emptyList())
+                .filter { it.deletedAt == null && now - it.syncedAt > STALE_AFTER_MS }
+            for (favorite in stale) {
+                // Una ficha caída no debe dejar sin datos a las demás.
+                runCatching { repository.detail(favorite.slug) }
+                    .onSuccess { detail ->
+                        library.updateAired(
+                            slug = favorite.slug,
+                            lastAiredEpisode = detail.lastEpisodeNumber,
+                            totalEpisodes = detail.totalEpisodes?.takeIf { it > 0 },
+                            statusLabel = detail.statusLabel ?: detail.status.label,
+                        )
+                    }
+            }
+        }
     }
 
     /**
@@ -239,6 +275,12 @@ class HomeViewModel(
 
         /** El sitio devuelve 30 fichas ya con una sola letra; no vale la pena. */
         const val MIN_QUERY_LENGTH = 2
+
+        /**
+         * Antigüedad a partir de la cual se vuelve a pedir el detalle de un
+         * favorito al abrir la pantalla de Favoritos.
+         */
+        const val STALE_AFTER_MS = 30 * 60 * 1000L
 
         fun factory(
             repository: JkanimeRepository,

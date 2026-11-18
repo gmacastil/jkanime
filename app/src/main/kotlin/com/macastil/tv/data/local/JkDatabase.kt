@@ -75,12 +75,18 @@ data class FavoriteEntity(
     /**
      * Episodios que el usuario tiene pendientes. `null` cuando todavía no hay
      * datos suficientes (anime sin total conocido o sin sync hecho).
+     *
+     * El contador de emitidos cae a `total_episodes` cuando el sitio no
+     * publica el bloque "Último episodio" (`a#uep`). Eso pasa en TODAS las
+     * fichas de animes concluidos, que solo traen "Episodios: N": sin este
+     * fallback quedaban sin datos y por tanto siempre en "Pendientes",
+     * aunque el usuario los hubiera visto enteros.
      */
     val pendingEpisodes: Int?
         get() {
-            val aired = lastAiredEpisode ?: return null
+            val released = lastAiredEpisode ?: totalEpisodes ?: return null
             val seen = lastWatchedEpisode ?: 0
-            return (aired - seen).coerceAtLeast(0)
+            return (released - seen).coerceAtLeast(0)
         }
 }
 

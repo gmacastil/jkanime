@@ -169,6 +169,8 @@ el `Box` raíz sin foco y solo alternaba visibilidad.
 
 | Version | Contenido | Fecha |
 |---|---|---|
+| **1.5.14** | Fix de clasificación de favoritos en TV: un anime **concluido** ya no cae siempre en "Pendientes" (el sitio no publica el último episodio emitido en esas fichas, solo "Episodios: N"); repasar un capítulo viejo ya no baja el último visto; el sync entre dispositivos no borra el dato de emisión refrescado | 2026-11-18 |
+| **1.5.13** | Fix null safety del cálculo de pendientes en la app móvil (`totalEpisodes ?: 0`) | 2026-11-18 |
 | **1.5.12** | Nueva versión con fixes de stability y UI menor | 2026-11-17 |
 | **1.5.11** | Fix null safety en cálculo de pending/Al día: si totalEpisodes=0 pero lastAiredEpisode>0 usa lastAiredEpisode; si ambos son 0 muestra "Pendientes" por seguridad | 2026-11-17 |
 | **1.5.9** | Directorio y búsqueda móvil, foco robusto TV, limpieza de opciones | 2026-11-17 |

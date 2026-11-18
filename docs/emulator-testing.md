@@ -2088,3 +2088,77 @@ mostrar los controles nadie pedía el foco, así que el siguiente OK caía en el
   Reintentar con `withFrameNanos { }` es el patrón que funciona en TV.
 - Un botón sin estado de foco visual hace que el bug sea invisible en
   capturas: conviene marcar el foco con color + borde + escala.
+
+## F22 — favoritos concluidos siempre en "Pendientes" (TV, 2026-11-18)
+
+**Síntoma:** en la pantalla de Favoritos de la TV, animes ya terminados y
+vistos completos aparecían en el grupo **Pending** con el badge "Ep N" en vez
+de "Up to date" (verde). Los que estaban en emisión sí se clasificaban bien.
+
+**Causa raíz:** el sitio **no publica el bloque "Último episodio"** (`a#uep`)
+en las fichas de animes concluidos: solo traen "Episodios: N". Comprobado con
+curl:
+
+| slug | `a#uep` | Episodios | estado |
+|---|---|---|---|
+| `tensei-shitara-ken-deshita-ii` (en emisión) | sí (8) | 0 | currently |
+| `shingeki-no-kyojin` | **no** | 25 | finished |
+| `tantei-wa-mou-shindeiru` | **no** | 12 | finished |
+| `kimetsu-no-yaiba` | **no** | 26 | finished |
+
+`AnimeDetailParser` devuelve `lastEpisodeNumber = null` en esos casos, y
+`FavoriteEntity.pendingEpisodes` solo miraba `last_aired_episode` → `null` →
+la partición `(pendingEpisodes ?: 1) > 0` la mandaba a **Pendientes** para
+siempre. La app móvil no lo sufría porque calcula con
+`max(totalEpisodes, lastAiredEpisode)`.
+
+**Fix (`JkDatabase.kt`):** el contador de emitidos cae al total:
+`val released = lastAiredEpisode ?: totalEpisodes ?: return null`. El último
+emitido sigue mandando cuando existe, así que una serie en emisión cuyo total
+planificado sea mayor no infla los pendientes (`aired=8, total=24` → 0 si se
+vio el 8).
+
+Otros dos arreglos del mismo flujo:
+
+- `LibraryRepository.saveProgress` usaba `setLastWatched` (sobrescribe): al
+  **repasar un capítulo viejo**, `last_watched_episode` bajaba y el anime
+  saltaba a "+9 pendientes" aunque estuviera al día. Ahora usa
+  `bumpLastWatched` (`MAX`), igual que el marcado manual.
+- `mergeFavorite` adoptaba el remoto tal cual. Como `updateAired` no toca
+  `updated_at` (no debe falsear el last-write-wins del progreso), un
+  dispositivo que sincronizaba después con una copia vieja **borraba** el
+  `last_aired_episode`/`total_episodes` ya refrescado y el anime volvía a
+  Pendientes. Ahora se conserva el mayor de ambos para esos dos campos
+  derivados (monótonos) y el `statusLabel` si el remoto no lo trae.
+
+Además, `HomeViewModel.openFavorites` refresca el detalle de los favoritos con
+más de 30 min sin sincronizar (fail-open, secuencial): antes el dato de
+emisión solo se actualizaba con el worker de 6 h, así que una serie en
+emisión podía seguir mostrando "+0" con capítulos nuevos ya publicados.
+
+**Verificación (emulador `jktv`, API 36, build debug 1.5.14):**
+
+1. Datos inyectados en Room (`owner=1`, checkpoint del WAL, `run-as` + `cp`):
+
+   | fila | aired | total | visto | antes | después |
+   |---|---|---|---|---|---|
+   | TEST A | 12 | 12 | 12 | Up to date | Up to date |
+   | TEST B | 12 | 12 | 9 | +3 | +3 |
+   | TEST C | **null** | 12 | 12 | **Pending (Ep 12)** | **Up to date** |
+   | TEST E | 8 | 12 | 8 | Up to date | Up to date |
+   | TEST F | null | null | 5 | Pending (Ep 5) | Pending (Ep 5) |
+2. End-to-end con el sitio real: favorito `shingeki-no-kyojin` inyectado con
+   `aired=null`, `total=null`, `visto=25`, `synced_at` de hace 2 h → al abrir
+   Favoritos el refresh lo completó (`total_episodes=25`,
+   `status_label='Concluido'`) y la tarjeta pasó a "Up to date" con subtítulo
+   verde.
+3. `./gradlew test` → 0 fallos (`PendingEpisodesTest` cubre los 6 casos).
+
+**Trampas**
+
+- `Episodios: 0` es lo normal en las fichas de series en emisión: el parser lo
+  convierte a `null` (`takeIf { it > 0 }`), así que el fallback al total no
+  infla los pendientes de una serie que aún no termina.
+- El WAL engaña al verificar: extraer `jk-tv.db` **sin** `-wal` muestra los
+  datos viejos. Hay que copiar las tres piezas y abrir el `.db` con el `-wal`
+  en el mismo directorio.
