@@ -28,6 +28,9 @@ class LibraryRepository(
     val favorites: Flow<List<FavoriteEntity>> =
         profiles.activeId.flatMapLatest { owner -> db.favorites().observeAll(owner) }
 
+    val progress: Flow<List<ProgressEntity>> =
+        profiles.activeId.flatMapLatest { owner -> db.progress().observeAll(owner) }
+
     fun isFavorite(slug: String): Flow<Boolean> =
         profiles.activeId.flatMapLatest { owner -> db.favorites().observeIsFavorite(owner, slug) }
 

@@ -63,6 +63,21 @@ fun FavoritesScreen(
         visible.map { favoriteStatus(it, progress) }
     }
     val pending = statuses.filterNot { it.upToDate }
+    val latestProgress = progress
+        .asSequence()
+        .filter { it.updatedAt > 0L && (it.positionMs > 0L || it.completed) }
+        .groupBy { it.slug }
+        .mapValues { (_, entries) -> entries.maxOf { it.updatedAt } }
+    val continueWatching = pending
+        .filter { latestProgress.containsKey(it.favorite.slug) }
+        .sortedWith(
+            compareByDescending<FavoriteStatus> {
+                latestProgress[it.favorite.slug] ?: 0L
+            }.thenBy { it.favorite.title.lowercase() },
+        )
+    val pendingWithoutProgress = pending
+        .filterNot { latestProgress.containsKey(it.favorite.slug) }
+        .sortedBy { it.favorite.title.lowercase() }
     val upToDate = statuses.filter { it.upToDate }
     val scope = rememberCoroutineScope()
 
@@ -140,7 +155,22 @@ fun FavoritesScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (pending.isNotEmpty()) {
+                if (continueWatching.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            stringResource(R.string.favorites_section_continue_watching),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = JkTextSecondary,
+                        )
+                    }
+                    items(
+                        continueWatching,
+                        key = { status -> "continue-${status.favorite.slug}" },
+                    ) { status ->
+                        FavoriteCard(status, onOpenDetail, scope)
+                    }
+                }
+                if (pendingWithoutProgress.isNotEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
                             stringResource(R.string.favorites_section_pending),
@@ -148,7 +178,10 @@ fun FavoritesScreen(
                             color = JkTextSecondary,
                         )
                     }
-                    items(pending, key = { status -> "pending-${status.favorite.slug}" }) { status ->
+                    items(
+                        pendingWithoutProgress,
+                        key = { status -> "pending-${status.favorite.slug}" },
+                    ) { status ->
                         FavoriteCard(status, onOpenDetail, scope)
                     }
                 }

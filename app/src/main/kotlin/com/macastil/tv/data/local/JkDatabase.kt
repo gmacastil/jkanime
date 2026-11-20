@@ -210,6 +210,9 @@ interface ProgressDao {
     @Query("SELECT * FROM progress WHERE owner = :owner")
     suspend fun all(owner: Int): List<ProgressEntity>
 
+    @Query("SELECT * FROM progress WHERE owner = :owner")
+    fun observeAll(owner: Int): Flow<List<ProgressEntity>>
+
     @Upsert
     suspend fun upsert(progress: ProgressEntity)
 

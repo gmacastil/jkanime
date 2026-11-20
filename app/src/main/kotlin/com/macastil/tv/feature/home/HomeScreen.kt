@@ -96,6 +96,7 @@ import com.macastil.tv.Graph
 import com.macastil.tv.R
 import com.macastil.tv.BuildConfig
 import com.macastil.tv.data.local.FavoriteEntity
+import com.macastil.tv.data.local.ProgressEntity
 import com.macastil.tv.data.sync.SyncResult
 import com.macastil.tv.model.AnimeCard
 import com.macastil.tv.model.AnimeSearchHit
@@ -157,6 +158,7 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val section by viewModel.section.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val progress by library.progress.collectAsStateWithLifecycle(initialValue = emptyList())
     val showFavorites by viewModel.showFavorites.collectAsStateWithLifecycle()
     val drawerOpen by viewModel.drawerOpen.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -295,6 +297,7 @@ fun HomeScreen(
 
                 showFavorites -> FavoritesGrid(
                     favorites = favorites,
+                    progress = progress,
                     focusNonce = focusNonce,
                     onOpenAnime = onOpenAnime,
                     onToggleFavorite = { fav ->
@@ -1838,6 +1841,7 @@ private fun CardsGrid(
 @Composable
 private fun FavoritesGrid(
     favorites: List<FavoriteEntity>,
+    progress: List<ProgressEntity>,
     focusNonce: Int = 0,
     onOpenAnime: (String) -> Unit,
     onToggleFavorite: (FavoriteEntity) -> Unit,
@@ -1854,14 +1858,27 @@ private fun FavoritesGrid(
     // badge verde. Antes caía en "Al día" y cualquier favorito recién añadido
     // desde el buscador aparecía ahí por error.
     val (pendientes, alDia) = favorites.partition { (it.pendingEpisodes ?: 1) > 0 }
+    val latestProgress = progress
+        .asSequence()
+        .filter { it.updatedAt > 0L && (it.positionMs > 0L || it.completed) }
+        .groupBy { it.slug }
+        .mapValues { (_, entries) -> entries.maxOf { it.updatedAt } }
 
-    val sortedPendientes = pendientes.sortedBy { it.title.lowercase() }
+    val (continuarViendo, pendientesSinProgreso) = pendientes.partition {
+        latestProgress.containsKey(it.slug)
+    }
+
+    val sortedContinuarViendo = continuarViendo.sortedWith(
+        compareByDescending<FavoriteEntity> { latestProgress[it.slug] ?: 0L }
+            .thenBy { it.title.lowercase() },
+    )
+    val sortedPendientes = pendientesSinProgreso.sortedBy { it.title.lowercase() }
     val sortedAlDia = alDia.sortedWith(
         compareByDescending<FavoriteEntity> { it.pendingEpisodes ?: -1 }
             .thenBy { it.title.lowercase() },
     )
 
-    val all = sortedPendientes + sortedAlDia
+    val all = sortedContinuarViendo + sortedPendientes + sortedAlDia
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(all.firstOrNull()?.slug, focusNonce) {
         repeat(10) {
@@ -1877,6 +1894,20 @@ private fun FavoritesGrid(
         verticalArrangement = Arrangement.spacedBy(22.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (sortedContinuarViendo.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeader(stringResource(R.string.favorites_section_continue_watching))
+            }
+            items(sortedContinuarViendo, key = { it.slug }) { fav ->
+                FavoriteCard(
+                    favorite = fav,
+                    focusRequester = if (fav === all.first()) firstFocus else null,
+                    onOpenAnime = onOpenAnime,
+                    onToggleFavorite = onToggleFavorite,
+                )
+            }
+        }
+
         if (sortedPendientes.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 SectionHeader(stringResource(R.string.favorites_section_pending))
@@ -1891,7 +1922,9 @@ private fun FavoritesGrid(
             }
         }
 
-        if (sortedPendientes.isNotEmpty() && sortedAlDia.isNotEmpty()) {
+        if ((sortedContinuarViendo.isNotEmpty() || sortedPendientes.isNotEmpty()) &&
+            sortedAlDia.isNotEmpty()
+        ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Box(
                     modifier = Modifier

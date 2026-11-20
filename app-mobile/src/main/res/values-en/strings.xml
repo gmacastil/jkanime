@@ -55,6 +55,7 @@
     <string name="detail_episode_watched">Ep %1$s · Watched</string>
 
     <!-- Favorites -->
+    <string name="favorites_section_continue_watching">Continue watching</string>
     <string name="favorites_section_pending">Pending</string>
     <string name="favorites_section_up_to_date">Up to date</string>
     <string name="favorites_badge_up_to_date">Up to date</string>

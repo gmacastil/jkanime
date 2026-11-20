@@ -60,6 +60,7 @@
     <string name="detail_episode_watched">Ep %1$s · Visto</string>
 
     <!-- Favoritos -->
+    <string name="favorites_section_continue_watching">Continuar viendo</string>
     <string name="favorites_section_pending">Pendientes</string>
     <string name="favorites_section_up_to_date">Al día</string>
     <string name="favorites_badge_up_to_date">Al día</string>
