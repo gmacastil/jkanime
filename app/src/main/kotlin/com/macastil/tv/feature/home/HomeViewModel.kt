@@ -94,7 +94,7 @@ class HomeViewModel(
                 .filter { it.deletedAt == null && now - it.syncedAt > STALE_AFTER_MS }
             for (favorite in stale) {
                 // Una ficha caída no debe dejar sin datos a las demás.
-                runCatching { repository.detail(favorite.slug) }
+                runCatching { repository.detail(favorite.slug, force = true) }
                     .onSuccess { detail ->
                         // Fichas sin "Episodios" ni `a#uep` (p. ej.
                         // bukiyou-na-senpai): el total solo está en el AJAX de
@@ -289,7 +289,7 @@ class HomeViewModel(
          * Antigüedad a partir de la cual se vuelve a pedir el detalle de un
          * favorito al abrir la pantalla de Favoritos.
          */
-        const val STALE_AFTER_MS = 30 * 60 * 1000L
+        const val STALE_AFTER_MS = 10 * 60 * 1000L
 
         fun factory(
             repository: JkanimeRepository,

@@ -23,9 +23,9 @@ internal data class FavoriteStatus(
  * representa el capítulo más alto visto y puede ocultar huecos (por ejemplo,
  * vistos 1 y 3, pero falta el 2). Se comprueba cada capítulo publicado.
  *
- * El total es el mayor entre `totalEpisodes` y `lastAiredEpisode`: el sitio no
- * publica `a#uep` en fichas de animes concluidos (solo "Episodios: N") y en los
- * que siguen en emisión el total suele venir a 0, con el emitido en `a#uep`.
+ * Para una serie en emisión manda `lastAiredEpisode`: `totalEpisodes` puede
+ * ser el total planificado de la serie, no capítulos ya disponibles. Para una
+ * serie concluida, cuando no hay `lastAiredEpisode`, se usa `totalEpisodes`.
  *
  * Sin datos (`released <= 0`) el favorito va a "Pendientes" sin badge: es más
  * seguro que decir "Al día" cuando no se sabe cuántos capítulos existen.
@@ -34,7 +34,9 @@ internal fun favoriteStatus(
     favorite: FavoriteEntity,
     progress: List<ProgressEntity>,
 ): FavoriteStatus {
-    val released = maxOf(favorite.totalEpisodes ?: 0, favorite.lastAiredEpisode ?: 0)
+    val released = favorite.lastAiredEpisode?.takeIf { it > 0 }
+        ?: favorite.totalEpisodes?.takeIf { it > 0 }
+        ?: 0
     if (released <= 0) {
         return FavoriteStatus(favorite, pendingCount = null, upToDate = false)
     }

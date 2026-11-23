@@ -53,6 +53,16 @@ class FavoriteStatusTest {
     }
 
     @Test
+    fun `en emision ignora el total planificado futuro`() {
+        val result = favoriteStatus(
+            favorite(aired = 8, total = 24),
+            watched("anime", *(1..8).toList().toIntArray()),
+        )
+        assertEquals(0, result.pendingCount)
+        assertTrue(result.upToDate)
+    }
+
+    @Test
     fun `sin datos ni aired ni total va a pendientes sin badge`() {
         val result = favoriteStatus(favorite(), watched("anime", 1, 2, 3))
         assertNull(result.pendingCount)

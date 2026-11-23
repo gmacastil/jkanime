@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
  * abrir Favoritos. Igual que la TV: sin esta guarda se pedían las 60 fichas en
  * cada entrada a la pantalla.
  */
-private const val STALE_AFTER_MS = 30 * 60 * 1000L
+private const val STALE_AFTER_MS = 10 * 60 * 1000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,7 +93,7 @@ fun FavoritesScreen(
         JkGraph.library.getAllFavorites()
             .filter { it.deletedAt == null && now - it.syncedAt > STALE_AFTER_MS }
             .forEach { favorite ->
-                runCatching { JkGraph.repository.detail(favorite.slug) }
+                    runCatching { JkGraph.repository.detail(favorite.slug, force = true) }
                     .onSuccess { detail ->
                         // Fichas sin "Episodios" ni `a#uep`: el total solo está
                         // en el AJAX de episodios (ver [episodeCountsFallback]).

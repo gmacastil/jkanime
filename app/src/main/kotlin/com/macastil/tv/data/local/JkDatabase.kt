@@ -84,7 +84,11 @@ data class FavoriteEntity(
      */
     val pendingEpisodes: Int?
         get() {
-            val released = lastAiredEpisode ?: totalEpisodes ?: return null
+            // En emisión, total_episodes puede ser el total planificado de la
+            // serie. Solo cuentan como disponibles los capítulos emitidos.
+            val released = lastAiredEpisode?.takeIf { it > 0 }
+                ?: totalEpisodes?.takeIf { it > 0 }
+                ?: return null
             val seen = lastWatchedEpisode ?: 0
             return (released - seen).coerceAtLeast(0)
         }

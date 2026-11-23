@@ -1851,13 +1851,20 @@ private fun FavoritesGrid(
         return
     }
 
-    // Partición: pendientes | al día.
+    // Partición: pendientes | al día. El estado se calcula con los episodios
+    // realmente completados, no solo con lastWatchedEpisode: ese campo solo
+    // guarda el número más alto y puede ocultar huecos.
     //
     // Sin datos de emisión (`pendingEpisodes == null`) NO se puede afirmar que
     // el anime esté al día: se trata como pendiente y la tarjeta no muestra el
     // badge verde. Antes caía en "Al día" y cualquier favorito recién añadido
     // desde el buscador aparecía ahí por error.
-    val (pendientes, alDia) = favorites.partition { (it.pendingEpisodes ?: 1) > 0 }
+    val pendingBySlug = favorites.associate { favorite ->
+        favorite.slug to favoritePendingEpisodes(favorite, progress)
+    }
+    val (pendientes, alDia) = favorites.partition {
+        (pendingBySlug[it.slug] ?: 1) > 0
+    }
     val latestProgress = progress
         .asSequence()
         .filter { it.updatedAt > 0L && (it.positionMs > 0L || it.completed) }
@@ -1874,7 +1881,7 @@ private fun FavoritesGrid(
     )
     val sortedPendientes = pendientesSinProgreso.sortedBy { it.title.lowercase() }
     val sortedAlDia = alDia.sortedWith(
-        compareByDescending<FavoriteEntity> { it.pendingEpisodes ?: -1 }
+        compareByDescending<FavoriteEntity> { pendingBySlug[it.slug] ?: -1 }
             .thenBy { it.title.lowercase() },
     )
 
@@ -1901,6 +1908,7 @@ private fun FavoritesGrid(
             items(sortedContinuarViendo, key = { it.slug }) { fav ->
                 FavoriteCard(
                     favorite = fav,
+                    pending = pendingBySlug[fav.slug],
                     focusRequester = if (fav === all.first()) firstFocus else null,
                     onOpenAnime = onOpenAnime,
                     onToggleFavorite = onToggleFavorite,
@@ -1915,6 +1923,7 @@ private fun FavoritesGrid(
             items(sortedPendientes, key = { it.slug }) { fav ->
                 FavoriteCard(
                     favorite = fav,
+                    pending = pendingBySlug[fav.slug],
                     focusRequester = if (fav === all.first()) firstFocus else null,
                     onOpenAnime = onOpenAnime,
                     onToggleFavorite = onToggleFavorite,
@@ -1943,6 +1952,7 @@ private fun FavoritesGrid(
             items(sortedAlDia, key = { it.slug }) { fav ->
                 FavoriteCard(
                     favorite = fav,
+                    pending = pendingBySlug[fav.slug],
                     focusRequester = if (fav === all.first()) firstFocus else null,
                     onOpenAnime = onOpenAnime,
                     onToggleFavorite = onToggleFavorite,
@@ -1950,6 +1960,26 @@ private fun FavoritesGrid(
             }
         }
     }
+}
+
+/**
+ * Cuenta los capítulos publicados que no están completados.
+ *
+ * `lastAiredEpisode` es la fuente de verdad para series en emisión; el total
+ * puede incluir capítulos planificados todavía no disponibles.
+ */
+private fun favoritePendingEpisodes(
+    favorite: FavoriteEntity,
+    progress: List<ProgressEntity>,
+): Int? {
+    val released = favorite.lastAiredEpisode?.takeIf { it > 0 }
+        ?: favorite.totalEpisodes?.takeIf { it > 0 }
+        ?: return null
+    val watched = progress.asSequence()
+        .filter { it.slug == favorite.slug && it.completed && it.episode > 0 }
+        .map { it.episode }
+        .toSet()
+    return (1..released).count { it !in watched }
 }
 
 @Composable
@@ -1965,11 +1995,11 @@ private fun SectionHeader(text: String) {
 @Composable
 private fun FavoriteCard(
     favorite: FavoriteEntity,
+    pending: Int?,
     focusRequester: FocusRequester?,
     onOpenAnime: (String) -> Unit,
     onToggleFavorite: (FavoriteEntity) -> Unit,
 ) {
-    val pending = favorite.pendingEpisodes
     // Verde solo con la certeza de que no hay nada pendiente.
     val badge = when {
         pending == null -> favorite.lastWatchedEpisode?.let {
