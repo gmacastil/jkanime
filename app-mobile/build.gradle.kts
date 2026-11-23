@@ -15,7 +15,12 @@ android {
 
     defaultConfig {
         applicationId = "com.macastil.mobile"
-        minSdk = 24
+        // La variante normal usa API 24. En la rama android6-api23 se
+        // compila con -PMIN_SDK=23 para tablets Android 6.
+        minSdk = providers.gradleProperty("MIN_SDK")
+            .orElse("24")
+            .get()
+            .toInt()
         targetSdk = 36
         versionCode = providers.gradleProperty("VERSION_CODE")
             .orElse("1")
